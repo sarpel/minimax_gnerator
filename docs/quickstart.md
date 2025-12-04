@@ -2,9 +2,11 @@
 
 This guide will get you up and running with **WakeGen** in under 5 minutes. We will generate a small dataset for the wake word "Hey Computer".
 
+**Current Status**: Phase 1A - Basic generation is working. Interactive wizard and augmentation features are planned but not yet fully implemented.
+
 ## 1. The Interactive Wizard
 
-The easiest way to start is using the interactive wizard. It guides you through every step.
+The interactive wizard is available but currently has limited functionality.
 
 Run this command:
 
@@ -12,27 +14,34 @@ Run this command:
 wakegen generate --interactive
 ```
 
+**Current Status**: The wizard will guide you through basic options but currently defaults to Edge TTS provider and basic generation.
+
 ### Step-by-Step Walkthrough
 
 1.  **Wake Word**: Enter `hey computer` (or your preferred phrase).
 2.  **Sample Count**: Enter `10` for a quick test.
-3.  **Provider**: Select `1` for Edge TTS (easiest to start with).
+3.  **Provider**: Currently defaults to Edge TTS (only available provider).
 4.  **Output Directory**: Press Enter to accept the default (`./output`).
-5.  **Augmentation**: Press Enter to enable it (adds realism).
+5.  **Augmentation**: Augmentation is not yet implemented.
 
 Once you confirm, WakeGen will start generating audio files!
 
 ## 2. Using Command Line Arguments
 
-If you prefer to skip the wizard, you can provide all options in one command:
+The simplest way to generate audio is using direct command line arguments:
 
 ```bash
-wakegen generate --text "hey computer" --count 10 --preset quick_test
+wakegen generate --text "hey computer" --count 10
 ```
 
 *   `--text`: The phrase to generate.
 *   `--count`: How many samples to create.
-*   `--preset`: Uses a pre-defined configuration (optimized for speed).
+
+**Note**: Preset functionality is available but limited to basic configuration:
+
+```bash
+wakegen generate --text "hey computer" --count 10 --preset quick_test
+```
 
 ## 3. Check Your Results
 
@@ -53,5 +62,15 @@ Play a few to make sure they sound correct!
 
 Now that you have a basic dataset, you can:
 
-1.  **Augment it**: Add more noise and variations (see [Augmentation Guide](augmentation.md)).
-2.  **Train a Model**: Use these files to train OpenWakeWord (see [Training Guide](training.md)).
+1.  **Wait for Augmentation**: Augmentation features are planned for future phases (see [Augmentation Guide](augmentation.md) for planned features).
+2.  **Explore Training**: Training functionality is planned but not yet implemented (see [Training Guide](training.md) for future plans).
+
+## Current Limitations
+
+As of Phase 1A:
+- Only Edge TTS provider is available
+- Augmentation pipeline is not yet implemented
+- Export, validation, and training features are planned but not working
+- Interactive wizard has limited functionality
+
+These features will be added in future phases as development progresses.

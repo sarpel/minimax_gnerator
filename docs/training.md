@@ -1,56 +1,57 @@
 # Training Guide
 
-Once you have generated and augmented your dataset, the next step is to train a wake word model. WakeGen is designed to work seamlessly with **OpenWakeWord**.
+**Current Status**: Training functionality is planned but not yet implemented in Phase 1A.
 
-## 1. Exporting the Dataset
+Once you have generated and augmented your dataset, the next step will be to train a wake word model. WakeGen is designed to work seamlessly with **OpenWakeWord** in future phases.
 
-First, we need to organize the data into a format OpenWakeWord understands.
+## Current Status
+
+As of Phase 1A, training-related features are not yet implemented:
+
+- ✅ **Dataset Generation**: Working (basic generation with Edge TTS)
+- 🚧 **Augmentation**: Planned but not implemented
+- 🚧 **Export**: Planned but not implemented
+- 🚧 **Training Scripts**: Planned but not implemented
+- 🚧 **Validation**: Planned but not implemented
+
+## Planned Features (Future Phases)
+
+### 1. Exporting the Dataset
+
+**Planned**: Export functionality will organize data into formats that training frameworks understand.
 
 ```bash
+# This command is planned but not yet working
 wakegen export --data-dir ./output --format openwakeword --output-path ./training_data
 ```
 
-This will create a folder structure with:
-*   Positive samples (your wake word)
-*   Negative samples (background noise, other speech)
-*   A JSON manifest file describing the data.
+### 2. Generating a Training Script
 
-## 2. Generating a Training Script
-
-OpenWakeWord training can be complex. WakeGen simplifies this by generating a training script for you.
+**Planned**: WakeGen will simplify OpenWakeWord training by generating scripts.
 
 ```bash
+# This command is planned but not yet working
 wakegen train-script --model-type openwakeword --output-script train.sh
 ```
 
-This creates a `train.sh` file with all the necessary commands and hyperparameters.
+### 3. Running the Training
 
-## 3. Running the Training
+**Planned**: Integration with OpenWakeWord library.
 
-You will need to install the `openwakeword` library separately (it's not a direct dependency of WakeGen to keep things light).
+### 4. Testing the Model
 
-```bash
-pip install openwakeword
-```
+**Planned**: Validation tools for trained models.
 
-Then, run the generated script:
+## What You Can Do Now
 
-```bash
-bash train.sh
-```
+While training features are not yet available, you can:
 
-## 4. Testing the Model
+1. **Generate Basic Datasets**: Use the working generation functionality to create WAV files
+2. **Prepare for Future Features**: Familiarize yourself with the planned workflow
+3. **Explore OpenWakeWord**: Research the target training framework independently
 
-After training, you will get a `.tflite` or `.onnx` model file. You can test it using WakeGen's validation tool:
+## Development Roadmap
 
-```bash
-wakegen validate --model path/to/model.tflite --test-dir ./test_data
-```
+Training functionality is part of the planned roadmap and will be implemented in future phases. The current focus is on completing the core generation and augmentation features first.
 
-This will report the False Accept Rate (FAR) and False Reject Rate (FRR).
-
-## Tips for Better Training
-
-*   **More Data**: 100 samples is a minimum. 1000+ is better.
-*   **Diverse Voices**: Use multiple TTS providers (Edge, Piper, Minimax) to get different voices.
-*   **Heavy Augmentation**: Don't be afraid to add lots of noise. Real life is noisy!
+For now, you can use the generated WAV files as a starting point and manually prepare them for training using other tools.
