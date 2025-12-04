@@ -169,3 +169,5 @@ output/
 # IDE Settings
 .vscode/
 .idea/
+.gemini/
+gha-creds-*.json
