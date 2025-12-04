@@ -1,0 +1,67 @@
+[build-system]
+# These are the tools required to build our project
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wakegen"
+version = "0.1.0"
+description = "A wake word dataset generator using various TTS providers"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Kilo Code", email = "kilo@example.com"}
+]
+keywords = ["wake-word", "tts", "dataset", "audio", "generation"]
+
+# These are the libraries our project depends on to run.
+# We are using specific versions to ensure stability.
+dependencies = [
+    "httpx>=0.27.0",            # For making HTTP requests (web calls)
+    "soundfile>=0.12.0",        # For saving audio files
+    "librosa>=0.10.0",          # For audio processing (resampling, etc.)
+    "pydantic>=2.5.0",          # For data validation and settings
+    "pydantic-settings>=2.1.0", # For managing configuration from .env files
+    "python-dotenv>=1.0.0",     # For loading environment variables from .env
+    "pyyaml>=6.0.0",            # For reading YAML configuration files
+    "click>=8.1.0",             # For creating the Command Line Interface (CLI)
+    "rich>=13.7.0",             # For beautiful terminal output (colors, tables)
+    "edge-tts>=6.1.0",          # The free Text-to-Speech engine we use in Phase 1A
+    "scipy>=1.11.0",            # For scientific computing and signal processing
+    "pyroomacoustics>=0.7.0",   # For room impulse response simulation and reverb
+    "piper-tts>=1.2.0",         # Piper TTS for CPU-friendly, fast inference with Turkish support
+    "TTS>=0.22.0",              # Coqui TTS library for XTTS and other models
+    "onnxruntime>=1.16.0",      # ONNX runtime for efficient model inference
+]
+
+[project.optional-dependencies]
+# Tools for development (testing, formatting, checking types)
+dev = [
+    "pytest>=7.0.0",    # For running tests
+    "pytest-asyncio",   # For testing async code
+    "black",            # For code formatting
+    "isort",            # For sorting imports
+    "mypy",             # For static type checking
+]
+
+[project.scripts]
+# This allows us to run the tool using 'wakegen' in the terminal
+wakegen = "wakegen.main:cli"
+
+[tool.setuptools.packages.find]
+# Automatically find all packages inside the project directory
+where = ["."]
+include = ["wakegen*"]
+
+[tool.pytest.ini_options]
+# Configuration for the pytest testing tool
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.mypy]
+# Configuration for the mypy type checker
+python_version = "3.10"
+strict = true
+ignore_missing_imports = true

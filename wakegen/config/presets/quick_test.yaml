@@ -1,0 +1,9 @@
+# Quick Test Preset
+# This configuration is designed for a fast verification of the system.
+# It uses Edge TTS (free) and generates a small number of samples.
+
+generation:
+  output_dir: "output/quick_test"
+  audio_format: "wav"
+  quality: "low"
+  sample_rate: 16000

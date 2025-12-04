@@ -1,0 +1,15 @@
+Collecting pyroomacoustics
+  Downloading pyroomacoustics-0.8.6-cp311-cp311-win_amd64.whl.metadata (14 kB)
+Collecting Cython (from pyroomacoustics)
+  Using cached cython-3.2.2-cp311-cp311-win_amd64.whl.metadata (5.1 kB)
+Requirement already satisfied: numpy>=1.13.0 in c:\users\sarpel\appdata\local\programs\python\python311\lib\site-packages (from pyroomacoustics) (1.26.2)
+Requirement already satisfied: scipy>=0.18.0 in c:\users\sarpel\appdata\local\programs\python\python311\lib\site-packages (from pyroomacoustics) (1.11.4)
+Collecting pybind11>=2.2 (from pyroomacoustics)
+  Downloading pybind11-3.0.1-py3-none-any.whl.metadata (10.0 kB)
+Downloading pyroomacoustics-0.8.6-cp311-cp311-win_amd64.whl (34.4 MB)
+   ---------------------------------------- 34.4/34.4 MB 14.7 MB/s  0:00:02
+Downloading pybind11-3.0.1-py3-none-any.whl (293 kB)
+Using cached cython-3.2.2-cp311-cp311-win_amd64.whl (2.8 MB)
+Installing collected packages: pybind11, Cython, pyroomacoustics
+
+Successfully installed Cython-3.2.2 pybind11-3.0.1 pyroomacoustics-0.8.6
