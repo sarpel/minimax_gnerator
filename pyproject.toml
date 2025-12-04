@@ -33,6 +33,9 @@ dependencies = [
     "piper-tts>=1.2.0",         # Piper TTS for CPU-friendly, fast inference with Turkish support
     "TTS>=0.22.0",              # Coqui TTS library for XTTS and other models
     "onnxruntime>=1.16.0",      # ONNX runtime for efficient model inference
+    "pandas>=2.1.0",            # For data manipulation and CSV export
+    "scikit-learn>=1.3.0",      # For stratified dataset splitting
+    "jinja2>=3.1.0",            # For generating training scripts from templates
 ]
 
 [project.optional-dependencies]
