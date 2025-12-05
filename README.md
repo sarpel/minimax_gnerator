@@ -12,7 +12,7 @@ First, make sure you have Python 3.10 or higher installed.
 
 ```bash
 # Clone the repository (if you haven't already)
-# git clone https://github.com/yourusername/wakegen.git
+# git clone https://github.com/sarpel/wakegen.git
 # cd wakegen
 
 # Create a virtual environment (recommended)
