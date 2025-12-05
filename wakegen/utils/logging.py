@@ -1,8 +1,25 @@
 import logging
+from typing import Optional
 from rich.logging import RichHandler
 
 # We use 'rich' to make our logs look nice in the terminal (colors, timestamps).
 # This makes it much easier to spot errors and warnings.
+
+
+def get_logger(name: Optional[str] = None) -> logging.Logger:
+    """
+    Get a logger instance with the given name.
+    
+    Args:
+        name: The name of the logger. If None, returns the root wakegen logger.
+        
+    Returns:
+        A configured logger instance.
+    """
+    if name is None:
+        return logging.getLogger("wakegen")
+    return logging.getLogger(f"wakegen.{name}")
+
 
 def setup_logging(level: str = "INFO") -> None:
     """

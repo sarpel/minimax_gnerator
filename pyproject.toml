@@ -5,8 +5,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wakegen"
-version = "0.1.0"
-description = "A wake word dataset generator using various TTS providers"
+version = "1.0.0"
+description = "A comprehensive wake word dataset generator using multiple TTS providers"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}

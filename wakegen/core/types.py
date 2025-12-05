@@ -17,6 +17,11 @@ class ProviderType(str, Enum):
     COQUI_XTTS = "coqui_xtts"  # Coqui XTTS - Zero-shot voice cloning
     KOKORO = "kokoro"      # Kokoro TTS - Lightweight (82M), high quality, CPU-friendly
     MIMIC3 = "mimic3"      # Mimic3 TTS - Privacy-friendly, offline, Raspberry Pi compatible
+    F5_TTS = "f5_tts"      # F5-TTS - High quality voice synthesis with cloning
+    STYLETTS2 = "styletts2"  # StyleTTS 2 - State-of-the-art expressive TTS
+    ORPHEUS = "orpheus"    # Orpheus TTS - Scalable (150M-3B), Apache 2.0
+    BARK = "bark"          # Bark - Expressive TTS from Suno with non-speech sounds
+    CHATTTS = "chattts"    # ChatTTS - Conversational speech optimized
 
 class AudioFormat(str, Enum):
     """

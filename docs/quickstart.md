@@ -1,76 +1,204 @@
 # Quick Start Guide
 
-This guide will get you up and running with **WakeGen** in under 5 minutes. We will generate a small dataset for the wake word "Hey Computer".
+This guide will get you up and running with **WakeGen** in under 5 minutes.
 
-**Current Status**: Phase 1A - Basic generation is working. Interactive wizard and augmentation features are planned but not yet fully implemented.
+## Prerequisites
 
-## 1. The Interactive Wizard
+- Python 3.10+
+- pip or uv package manager
 
-The interactive wizard is available but currently has limited functionality.
+## 1. Installation
 
-Run this command:
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/wakegen.git
+cd wakegen
+
+# Create virtual environment
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+# source .venv/bin/activate  # Linux/Mac
+
+# Install wakegen
+pip install -e .
+```
+
+## 2. Generate Your First Samples
+
+### Using the CLI
+
+```bash
+# Generate 10 samples with Edge TTS (no setup required)
+wakegen generate --text "hey computer" --count 10
+
+# List available voices
+wakegen list-voices --provider edge_tts
+
+# Use a specific voice
+wakegen generate --text "hey computer" --count 10 --voice en-US-AriaNeural
+```
+
+### Using the Interactive Wizard
 
 ```bash
 wakegen generate --interactive
 ```
 
-**Current Status**: The wizard will guide you through basic options but currently defaults to Edge TTS provider and basic generation.
+The wizard guides you through:
+1. Wake word selection
+2. Sample count
+3. Provider selection
+4. Voice preferences
+5. Output directory
 
-### Step-by-Step Walkthrough
+## 3. Use Multiple Providers
 
-1.  **Wake Word**: Enter `hey computer` (or your preferred phrase).
-2.  **Sample Count**: Enter `10` for a quick test.
-3.  **Provider**: Currently defaults to Edge TTS (only available provider).
-4.  **Output Directory**: Press Enter to accept the default (`./output`).
-5.  **Augmentation**: Augmentation is not yet implemented.
-
-Once you confirm, WakeGen will start generating audio files!
-
-## 2. Using Command Line Arguments
-
-The simplest way to generate audio is using direct command line arguments:
+WakeGen supports 11+ TTS providers for diverse voice samples:
 
 ```bash
-wakegen generate --text "hey computer" --count 10
+# List all available providers
+wakegen list-providers
+
+# Generate with a specific provider
+wakegen generate --text "hey assistant" --provider piper --count 20
+
+# Use Kokoro (lightweight, fast)
+wakegen generate --text "hey assistant" --provider kokoro --count 20
 ```
 
-*   `--text`: The phrase to generate.
-*   `--count`: How many samples to create.
+## 4. Batch Generation with Config File
 
-**Note**: Preset functionality is available but limited to basic configuration:
+For production datasets, use a YAML configuration:
+
+```yaml
+# wakegen.yaml
+project:
+  name: "hey_assistant"
+  version: "1.0.0"
+
+generation:
+  wake_words:
+    - "hey assistant"
+  count: 1000
+  output_dir: "./output/hey_assistant"
+
+providers:
+  - type: edge_tts
+    weight: 0.3
+  - type: kokoro
+    weight: 0.4
+  - type: piper
+    weight: 0.3
+
+augmentation:
+  enabled: true
+  profiles:
+    - morning_kitchen
+    - car_interior
+  augmented_per_original: 3
+```
+
+Run with:
+```bash
+wakegen generate --config wakegen.yaml
+```
+
+## 5. Apply Augmentation
+
+Make your samples robust with augmentation:
 
 ```bash
-wakegen generate --text "hey computer" --count 10 --preset quick_test
+# Augment existing samples
+wakegen augment --input ./output --output ./augmented
+
+# Use a specific profile
+wakegen augment --input ./output --output ./augmented --profile morning_kitchen
+
+# Target specific device
+wakegen augment --input ./output --output ./augmented --device esp32_i2s
 ```
 
-## 3. Check Your Results
+## 6. Export for Training
 
-Navigate to the `output` directory:
+Export your dataset for different training frameworks:
 
+```bash
+# Export for OpenWakeWord
+wakegen export --input ./augmented --output ./dataset --format openwakeword
+
+# Export for PyTorch
+wakegen export --input ./augmented --output ./dataset --format pytorch
+
+# Export for HuggingFace
+wakegen export --input ./augmented --output ./dataset --format huggingface
+```
+
+## 7. Check Your Results
+
+```bash
+# View generation statistics
+wakegen stats --dir ./output
+
+# Check quality scores
+wakegen validate --dir ./output
+```
+
+Navigate to your output directory:
 ```bash
 ls output/
 ```
 
-You should see files like:
-*   `hey_computer_1.wav`
-*   `hey_computer_2.wav`
-*   ...
+You'll see files like:
+- `hey_computer_edge_tts_001.wav`
+- `hey_computer_kokoro_002.wav`
+- `hey_computer_piper_003.wav`
 
-Play a few to make sure they sound correct!
+## Quick Provider Reference
+
+| Provider | Type | GPU Required | Best For |
+|----------|------|--------------|----------|
+| Edge TTS | Cloud | No | Quick start, many languages |
+| Kokoro | Local | No | Fast CPU generation |
+| Piper | Local | No | Offline, embedded devices |
+| Mimic 3 | Local | No | Privacy-focused |
+| F5-TTS | Local | Recommended | High quality |
+| StyleTTS 2 | Local | Recommended | Expressive speech |
+| Bark | Local | Yes | Expressive, non-speech sounds |
+| ChatTTS | Local | Recommended | Conversational |
+| Coqui XTTS | Local | Yes | Voice cloning |
+| Orpheus | Local | Varies | Scalable quality |
+| MiniMax | Cloud | No | Commercial quality |
 
 ## Next Steps
 
-Now that you have a basic dataset, you can:
+- **[Providers Guide](providers.md)** - Learn about all TTS providers
+- **[Augmentation Guide](augmentation.md)** - Make samples robust
+- **[Configuration Guide](configuration.md)** - Advanced configuration
+- **[Training Guide](training.md)** - Train wake word models
 
-1.  **Wait for Augmentation**: Augmentation features are planned for future phases (see [Augmentation Guide](augmentation.md) for planned features).
-2.  **Explore Training**: Training functionality is planned but not yet implemented (see [Training Guide](training.md) for future plans).
+## Common Issues
 
-## Current Limitations
+### "No module named 'kokoro'"
 
-As of Phase 1A:
-- Only Edge TTS provider is available
-- Augmentation pipeline is not yet implemented
-- Export, validation, and training features are planned but not working
-- Interactive wizard has limited functionality
+Install the provider's dependencies:
+```bash
+pip install kokoro-onnx
+```
 
-These features will be added in future phases as development progresses.
+### "Provider not available"
+
+Check if provider is installed:
+```bash
+wakegen list-providers --available
+```
+
+### Audio driver issues
+
+Install system dependencies:
+```bash
+# Ubuntu/Debian
+sudo apt-get install libsndfile1 portaudio19-dev
+
+# macOS
+brew install portaudio libsndfile
+```
