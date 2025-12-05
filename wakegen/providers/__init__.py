@@ -5,7 +5,7 @@
 from wakegen.providers.free.edge_tts import EdgeTTSProvider
 
 # Import opensource providers
-from wakegen.providers.opensource import PiperTTSProvider, CoquiXTTSProvider
+from wakegen.providers.opensource import PiperTTSProvider, CoquiXTTSProvider, KokoroTTSProvider, Mimic3Provider
 
 # Import commercial providers
 try:

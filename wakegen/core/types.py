@@ -15,6 +15,8 @@ class ProviderType(str, Enum):
     # OPENAI = "openai"
     PIPER = "piper"        # Piper TTS - CPU-friendly, fast inference
     COQUI_XTTS = "coqui_xtts"  # Coqui XTTS - Zero-shot voice cloning
+    KOKORO = "kokoro"      # Kokoro TTS - Lightweight (82M), high quality, CPU-friendly
+    MIMIC3 = "mimic3"      # Mimic3 TTS - Privacy-friendly, offline, Raspberry Pi compatible
 
 class AudioFormat(str, Enum):
     """

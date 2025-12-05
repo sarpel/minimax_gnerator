@@ -2,6 +2,7 @@ from __future__ import annotations
 import os
 import tempfile
 import subprocess
+import asyncio
 from typing import List, Any, Optional
 from pathlib import Path
 
@@ -84,6 +85,70 @@ class PiperTTSProvider(BaseProvider):
             # Ensure Piper is available
             await self._ensure_piper_available()
 
+            # First, try the subprocess-based approach (more reliable)
+            try:
+                await self._generate_with_subprocess(text, voice_id, output_path)
+                return
+            except ProviderError as subprocess_error:
+                # If subprocess fails, try the Python API as fallback
+                try:
+                    await self._generate_with_python_api(text, voice_id, output_path)
+                    return
+                except ProviderError as python_api_error:
+                    # If both methods fail, raise the subprocess error as it's more likely to be the primary issue
+                    raise ProviderError(f"Piper TTS generation failed with both methods. Subprocess error: {str(subprocess_error)}, Python API error: {str(python_api_error)}")
+
+        except Exception as e:
+            raise ProviderError(f"Piper TTS generation failed: {str(e)}") from e
+
+    async def _generate_with_subprocess(self, text: str, voice_id: str, output_path: str) -> None:
+        """
+        Generate audio using Piper CLI directly (primary method).
+
+        Args:
+            text: The text to speak
+            voice_id: The voice model ID
+            output_path: Where to save the audio file
+        """
+        try:
+            # Build the Piper CLI command - exactly as requested
+            cmd = [
+                "piper",
+                "--model", voice_id,
+                "--output_file", output_path
+            ]
+
+            # Run Piper CLI as a subprocess
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+
+            # Send the text to Piper via stdin and get the result
+            stdout, stderr = await process.communicate(input=text.encode())
+
+            # Check if Piper succeeded - exactly as requested
+            if process.returncode != 0:
+                error_msg = stderr.decode() if stderr else "Unknown error"
+                raise ProviderError(f"Piper failed: {error_msg}")
+
+        except FileNotFoundError:
+            raise ProviderError("Piper executable not found. Please ensure Piper is installed correctly.")
+        except Exception as e:
+            raise ProviderError(f"Piper subprocess generation failed: {str(e)}") from e
+
+    async def _generate_with_python_api(self, text: str, voice_id: str, output_path: str) -> None:
+        """
+        Generate audio using Piper Python API (fallback method).
+
+        Args:
+            text: The text to speak
+            voice_id: The voice model ID
+            output_path: Where to save the audio file
+        """
+        try:
             # Import Piper modules
             from piper_tts import PiperVoice, synthesize
 
@@ -116,7 +181,7 @@ class PiperTTSProvider(BaseProvider):
                 raise ProviderError(f"Piper TTS synthesis failed: {str(synth_error)}") from synth_error
 
         except Exception as e:
-            raise ProviderError(f"Piper TTS generation failed: {str(e)}") from e
+            raise ProviderError(f"Piper Python API generation failed: {str(e)}") from e
 
     async def _get_piper_voice(self, voice_id: str) -> Any:
         """
@@ -171,6 +236,35 @@ class PiperTTSProvider(BaseProvider):
                 {
                     "id": "tr_TR-dfki-x_high",
                     "name": "Turkish Female (DFKI X-High)",
+                    "gender": "female",
+                    "language": "tr-TR",
+                    "provider": self.provider_type
+                },
+                {
+                    "id": "tr_TR-dfki-low",
+                    "name": "Turkish Female (DFKI Low)",
+                    "gender": "female",
+                    "language": "tr-TR",
+                    "provider": self.provider_type
+                },
+                {
+                    "id": "tr_TR-dfki-high",
+                    "name": "Turkish Female (DFKI High)",
+                    "gender": "female",
+                    "language": "tr-TR",
+                    "provider": self.provider_type
+                },
+                # Additional Turkish voice models added for enhanced support
+                {
+                    "id": "tr_TR-dfki-fast",
+                    "name": "Turkish Female (DFKI Fast)",
+                    "gender": "female",
+                    "language": "tr-TR",
+                    "provider": self.provider_type
+                },
+                {
+                    "id": "tr_TR-dfki-slow",
+                    "name": "Turkish Female (DFKI Slow)",
                     "gender": "female",
                     "language": "tr-TR",
                     "provider": self.provider_type

@@ -16,7 +16,8 @@ from __future__ import annotations
 import asyncio
 import uuid
 import logging
-from typing import List, Dict, Any, Optional, Tuple
+import time
+from typing import List, Dict, Any, Optional, Tuple, AsyncIterator
 from pathlib import Path
 
 from wakegen.generation.variation_engine import VariationEngine, VariationParameters
@@ -28,6 +29,8 @@ from wakegen.models.generation import GenerationParameters, GenerationResult
 from wakegen.models.config import GenerationConfig
 from wakegen.core.exceptions import GenerationError
 from wakegen.core.protocols import TTSProvider
+from wakegen.core.types import ProviderType
+from wakegen.providers.registry import get_provider
 
 logger = logging.getLogger(__name__)
 
@@ -339,20 +342,21 @@ class GenerationOrchestrator:
         Raises:
             GenerationError: If no suitable provider is found
         """
-        from wakegen.providers.registry import ProviderRegistry
+        from wakegen.models.config import ProviderConfig
 
-        registry = ProviderRegistry()
+        # Create provider config from the main config
+        provider_config = ProviderConfig()
 
         # Try to get commercial provider first
         if self.config.use_commercial_providers:
             try:
-                return registry.get_commercial_provider()
+                return get_provider(ProviderType.COMMERCIAL, provider_config)
             except Exception as e:
                 logger.warning(f"Commercial provider unavailable: {str(e)}")
 
         # Fall back to free provider
         try:
-            return registry.get_free_provider()
+            return get_provider(ProviderType.FREE, provider_config)
         except Exception as e:
             raise GenerationError(f"No available providers: {str(e)}") from e
 
@@ -521,20 +525,20 @@ class GenerationOrchestrator:
         Returns:
             List of generation results
         """
-        from wakegen.providers.registry import ProviderRegistry
+        from wakegen.models.config import ProviderConfig
 
-        registry = ProviderRegistry()
+        provider_config = ProviderConfig()
         fallback_providers = []
 
         # Get all available providers
         try:
             if self.config.use_commercial_providers:
-                fallback_providers.append(registry.get_commercial_provider())
+                fallback_providers.append(get_provider(ProviderType.COMMERCIAL, provider_config))
         except:
             pass
 
         try:
-            fallback_providers.append(registry.get_free_provider())
+            fallback_providers.append(get_provider(ProviderType.FREE, provider_config))
         except:
             pass
 

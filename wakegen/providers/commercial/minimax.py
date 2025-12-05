@@ -2,6 +2,7 @@ from __future__ import annotations
 import os
 import asyncio
 import logging
+import time  # Added import for time module
 from typing import List, Dict, Any, Optional
 from typing import TYPE_CHECKING
 
@@ -154,13 +155,13 @@ class MiniMaxProvider(BaseProvider):
         # Set up HTTP client for async requests
         self.api_key = self.config.minimax_api_key
         self.group_id = self.config.minimax_group_id
-        self.base_url = "https://api.minimax.ai"
+        self.base_url = "https://api.minimaxi.chat"  # Fixed: Changed from https://api.minimax.ai to official endpoint
         self.endpoint = "/v1/t2a_v2"
 
-        # Rate limiting configuration
-        self.max_requests_per_minute = 60  # API limit
+        # Rate limiting configuration - using official MiniMax rate limits
+        self.max_requests_per_minute = 60  # Official MiniMax API limit
         self.current_requests = 0
-        self.last_reset_time = asyncio.get_event_loop().time()
+        self.last_reset_time = time.time()
 
         # Turkish voices configuration
         self.turkish_voices = {
@@ -202,7 +203,7 @@ class MiniMaxProvider(BaseProvider):
         Check and enforce rate limiting to avoid hitting API limits.
         This uses a simple token bucket algorithm.
         """
-        current_time = asyncio.get_event_loop().time()
+        current_time = time.time()
         time_since_reset = current_time - self.last_reset_time
 
         # Reset counter if more than 1 minute has passed
@@ -216,7 +217,7 @@ class MiniMaxProvider(BaseProvider):
             logger.warning(f"Rate limit reached. Waiting {wait_time:.1f} seconds...")
             await asyncio.sleep(wait_time)
             self.current_requests = 0
-            self.last_reset_time = asyncio.get_event_loop().time()
+            self.last_reset_time = time.time()
 
         self.current_requests += 1
 

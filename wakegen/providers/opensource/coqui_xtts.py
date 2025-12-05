@@ -18,6 +18,15 @@ class CoquiXTTSProvider(BaseProvider):
     """
     Provider implementation for Coqui XTTS (Open Source).
     XTTS is a zero-shot voice cloning TTS system that supports multiple languages including Turkish.
+
+    WARNING: HARDWARE REQUIREMENTS
+    ------------------------------
+    XTTS is a large model and requires significant resources:
+    - RAM: Minimum 4GB (8GB+ recommended)
+    - GPU: Highly recommended (NVIDIA CUDA). CPU generation is very slow.
+    - Storage: ~2GB for model weights.
+    
+    This provider is NOT recommended for Raspberry Pi Zero or older hardware.
     """
 
     def __init__(self, config: Any):
@@ -71,7 +80,8 @@ class CoquiXTTSProvider(BaseProvider):
 
         Args:
             text: The text to speak (e.g., "Hey Katya").
-            voice_id: The ID of the voice to use or path to reference audio for cloning.
+            voice_id: The path to the reference audio file for cloning.
+                      XTTS REQUIRES a reference audio file to clone the voice.
             output_path: The full path where the audio file should be saved.
         """
         try:
@@ -81,13 +91,17 @@ class CoquiXTTSProvider(BaseProvider):
             # Load the model
             model = await self._load_xtts_model()
 
-            # Check if voice_id is a path to a reference audio file (voice cloning)
-            if os.path.isfile(voice_id):
-                # Voice cloning mode - use the reference audio
-                await self._generate_with_voice_cloning(model, text, voice_id, output_path)
-            else:
-                # Use a predefined voice
-                await self._generate_with_preset_voice(model, text, voice_id, output_path)
+            # VALIDATION: Check if voice_id is a valid file path
+            # XTTS is a voice cloning model. It MUST have a reference audio file.
+            # It does not support "preset" names like "tr_female_1".
+            if not os.path.isfile(voice_id):
+                raise ProviderError(
+                    f"Coqui XTTS requires a reference audio file for voice cloning. "
+                    f"The provided voice_id '{voice_id}' is not a valid file path."
+                )
+
+            # Voice cloning mode - use the reference audio
+            await self._generate_with_voice_cloning(model, text, voice_id, output_path)
 
         except Exception as e:
             raise ProviderError(f"Coqui XTTS generation failed: {str(e)}") from e
@@ -104,24 +118,27 @@ class CoquiXTTSProvider(BaseProvider):
         """
         try:
             # Create a temporary file for the audio
+            # We use a temp file first to ensure the generation completes before writing to the final path
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
                 temp_path = temp_audio.name
 
             try:
                 # Use XTTS voice cloning
                 # The reference audio provides the voice characteristics to clone
+                # We explicitly set language to Turkish ('tr') as per requirements
                 model.tts_to_file(
                     text=text,
                     speaker_wav=reference_audio_path,
-                    language="tr",  # Turkish
+                    language="tr",
                     file_path=temp_path
                 )
 
                 # Move the temporary file to the final location
+                # os.replace is atomic on POSIX systems
                 os.replace(temp_path, output_path)
 
             except Exception as synth_error:
-                # Clean up temp file if synthesis failed
+                # Clean up temp file if synthesis failed to avoid disk clutter
                 if os.path.exists(temp_path):
                     os.unlink(temp_path)
                 raise ProviderError(f"XTTS voice cloning failed: {str(synth_error)}") from synth_error
@@ -129,119 +146,29 @@ class CoquiXTTSProvider(BaseProvider):
         except Exception as e:
             raise ProviderError(f"Voice cloning generation failed: {str(e)}") from e
 
-    async def _generate_with_preset_voice(self, model: Any, text: str, voice_id: str, output_path: str) -> None:
-        """
-        Generate audio using a preset voice.
-
-        Args:
-            model: The loaded XTTS model
-            text: The text to speak
-            voice_id: The voice ID to use
-            output_path: Where to save the generated audio
-        """
-        try:
-            # For preset voices, we use a generic speaker or try to find the voice
-            # XTTS doesn't have traditional voice IDs, so we use language and generic speaker
-            speaker = self._get_preset_speaker(voice_id)
-
-            # Create a temporary file for the audio
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
-                temp_path = temp_audio.name
-
-            try:
-                # Generate with the preset speaker
-                model.tts_to_file(
-                    text=text,
-                    speaker=speaker,
-                    language="tr",  # Turkish
-                    file_path=temp_path
-                )
-
-                # Move the temporary file to the final location
-                os.replace(temp_path, output_path)
-
-            except Exception as synth_error:
-                # Clean up temp file if synthesis failed
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
-                raise ProviderError(f"XTTS preset voice generation failed: {str(synth_error)}") from synth_error
-
-        except Exception as e:
-            raise ProviderError(f"Preset voice generation failed: {str(e)}") from e
-
-    def _get_preset_speaker(self, voice_id: str) -> str:
-        """
-        Map voice IDs to XTTS speaker configurations.
-        XTTS uses speaker embeddings rather than traditional voice IDs.
-        """
-        # For XTTS, we use generic speakers or try to map known configurations
-        # The speaker parameter can be a path to a speaker embedding or a preset
-        speaker_mapping = {
-            "tr_female_1": "tr_female",
-            "tr_male_1": "tr_male",
-            "tr_neutral_1": "tr_neutral",
-            # Default fallback
-            "default": "tr_female"
-        }
-
-        return speaker_mapping.get(voice_id, speaker_mapping["default"])
-
     async def list_voices(self) -> List[Voice]:
         """
         Lists available voices from Coqui XTTS.
-        Returns a list of voices with Turkish support.
+        
+        Since XTTS is a voice cloning model, it does not have fixed preset voices.
+        It requires a reference audio file to clone any voice.
+        
+        Returns:
+            A placeholder voice object indicating that reference audio is required.
         """
         try:
-            # XTTS supports voice cloning, so we provide some preset options
-            # plus the ability to clone from any reference audio
-            voices = [
-                {
-                    "id": "tr_female_1",
-                    "name": "Turkish Female 1",
-                    "gender": "female",
-                    "language": "tr-TR",
-                    "provider": self.provider_type,
-                    "supports_cloning": False
-                },
-                {
-                    "id": "tr_male_1",
-                    "name": "Turkish Male 1",
-                    "gender": "male",
-                    "language": "tr-TR",
-                    "provider": self.provider_type,
-                    "supports_cloning": False
-                },
-                {
-                    "id": "tr_neutral_1",
-                    "name": "Turkish Neutral 1",
-                    "gender": "neutral",
-                    "language": "tr-TR",
-                    "provider": self.provider_type,
-                    "supports_cloning": False
-                },
-                {
-                    "id": "voice_cloning",
-                    "name": "Voice Cloning (Reference Audio)",
-                    "gender": "neutral",
-                    "language": "tr-TR",
-                    "provider": self.provider_type,
-                    "supports_cloning": True
-                }
+            # Return a single placeholder to inform the UI/User that this provider
+            # works by cloning, not by selecting a preset.
+            return [
+                Voice(
+                    id="reference_audio_required",
+                    name="Voice Cloning (Requires Reference Audio Path)",
+                    gender=Gender.NEUTRAL,
+                    language="tr-TR",
+                    provider=self.provider_type,
+                    supports_cloning=True
+                )
             ]
-
-            # Convert to our Voice model
-            voice_list = []
-            for v in voices:
-                gender = Gender[v["gender"].upper()]  # Convert string to Gender enum
-                voice_list.append(Voice(
-                    id=v["id"],
-                    name=v["name"],
-                    gender=gender,
-                    language=v["language"],
-                    provider=self.provider_type
-                ))
-
-            return voice_list
 
         except Exception as e:
             raise ProviderError(f"Failed to list XTTS voices: {str(e)}") from e
