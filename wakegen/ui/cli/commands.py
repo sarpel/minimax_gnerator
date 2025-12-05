@@ -110,114 +110,133 @@ def list_providers(available_only: bool, verbose: bool):
     if not verbose and available_count < total_count:
         console.print("[dim]Use --verbose to see installation instructions for missing providers.[/dim]")
 
+
 @cli.command(name="list-voices")
 @click.option("--provider", default="all", help="Provider to list voices for (default: all)")
-def list_voices(provider: str):
+@click.option("--language", "-l", multiple=True, help="Filter voices by language code (e.g., tr-TR)")
+def list_voices(provider: str, language: tuple):
     """
-    Lists available voices for a specific provider or all providers.
+    Lists available voices for the specified provider(s).
     
-    Example: wakegen list-voices --provider piper
+    You can see which voices are available for generation.
+    Some providers have hundreds of voices!
+    
+    Examples:
+        wakegen list-voices                 # List all voices from all providers
+        wakegen list-voices --provider edge_tts  # List only Edge TTS voices
+        wakegen list-voices --language tr-TR     # List only Turkish voices
     """
-    asyncio.run(run_list_voices(provider))
+    asyncio.run(run_list_voices(provider, language))
 
-async def run_list_voices(provider_name: str):
+
+async def run_list_voices(provider_name: str, languages: tuple):
     """
-    Async implementation of list-voices command.
+    Async implementation of list-voices.
     """
-    provider_config = get_provider_config()
-    
-    # Determine which providers to query
+    # 1. Get providers to check
+    providers_to_check = []
     if provider_name.lower() == "all":
-        providers_to_check = list_available_providers()
+        providers_to_check = [p.name for p in list_available_providers()]
     else:
+        providers_to_check = [provider_name]
+    
+    provider_config = get_provider_config()
+    total_voices = 0
+    
+    for p_name in providers_to_check:
         try:
-            # Convert string input to ProviderType enum
-            providers_to_check = [ProviderType(provider_name.lower())]
-        except ValueError:
-            console.print(f"[bold red]Error:[/bold red] Unknown provider '{provider_name}'")
-            console.print("Use 'wakegen list-providers' to see available options.")
-            return
-
-    for p_type in providers_to_check:
-        try:
-            console.print(f"\n[bold cyan]Fetching voices for {p_type.value}...[/bold cyan]")
-            # Instantiate the provider
+            # Get the provider instance
+            p_type = ProviderType(p_name.lower())
             provider = get_provider(p_type, provider_config)
-            # Fetch voices asynchronously
+            
+            # Fetch voices
+            console.print(f"[dim]Fetching voices for {p_name}...[/dim]")
             voices = await provider.list_voices()
             
+            # Filter by language if requested
+            if languages:
+                voices = [v for v in voices if any(l.lower() in v.language.lower() for l in languages)]
+            
             if not voices:
-                console.print(f"  [yellow]No voices found for {p_type.value}[/yellow]")
+                if languages:
+                    console.print(f"[yellow]No voices found for {p_name} matching languages: {', '.join(languages)}[/yellow]")
+                else:
+                    console.print(f"[yellow]No voices found for {p_name}[/yellow]")
                 continue
-
-            # Display voices in a table-like format
-            console.print(f"  Found {len(voices)} voices:")
-            for voice in voices:
-                console.print(f"  - [green]{voice.name}[/green] (ID: {voice.id}) - {voice.language}")
-                
+            
+            total_voices += len(voices)
+            
+            # Display table
+            table = Table(title=f"Voices for {p_name} ({len(voices)})", show_header=True, header_style="bold cyan")
+            table.add_column("ID", style="cyan")
+            table.add_column("Name", style="bold")
+            table.add_column("Language")
+            table.add_column("Gender")
+            
+            # Show top 50 to avoid spamming
+            for v in voices[:50]:
+                table.add_row(v.id, v.name, v.language, v.gender.value)
+            
+            console.print(table)
+            if len(voices) > 50:
+                console.print(f"[dim]... and {len(voices) - 50} more[/dim]")
+            console.print("")
+            
         except Exception as e:
-            console.print(f"  [red]Failed to fetch voices for {p_type.value}: {str(e)}[/red]")
+            console.print(f"[red]Error listing voices for {p_name}: {e}[/red]")
+
 
 @cli.command()
-@click.option("--text", help="The wake word text to generate (e.g., 'Hey Katya')")
-@click.option("--count", default=1, help="Number of samples to generate")
-@click.option("--preset", help="Name of a configuration preset to use (e.g., 'quick_test')")
-@click.option("--output-dir", help="Directory to save the output")
-@click.option("--provider", default="edge_tts", help="TTS provider to use (default: edge_tts)")
-@click.option("--voice", help="Specific voice ID to use")
-@click.option("--interactive", is_flag=True, help="Run in interactive wizard mode")
-@click.option(
-    "--config",
-    "-c",
-    "config_file",  # Use different name to avoid shadowing the config command group
-    type=click.Path(exists=True),
-    help="Path to wakegen.yaml configuration file"
-)
-@click.option(
-    "--cache/--no-cache",
-    "use_cache",
-    default=True,
-    help="Enable/disable caching of generated audio (default: enabled)"
-)
+@click.option("--text", "-t", help="The wake word or phrase to generate")
+@click.option("--count", "-n", default=10, help="Number of samples to generate")
+@click.option("--output-dir", "-o", default="./output", help="Directory to save generated files")
+@click.option("--provider", "-p", default="edge_tts", help="TTS provider to use (default: edge_tts)")
+@click.option("--voice", "-v", help="Specific voice ID to use (optional)")
+@click.option("--config", "-c", type=click.Path(exists=True), help="Path to a wakegen.yaml config file")
+@click.option("--language", "-l", multiple=True, help="Filter voices by language code (e.g., tr-TR)")
 def generate(
     text: Optional[str],
     count: int,
-    preset: Optional[str],
-    output_dir: Optional[str],
+    output_dir: str,
     provider: str,
     voice: Optional[str],
-    interactive: bool,
-    config_file: Optional[str],
-    use_cache: bool
+    config: Optional[str],
+    language: tuple
 ):
     """
-    Generates audio samples for a given wake word.
+    Generates audio samples for a wake word.
     
-    You can provide arguments directly, use --interactive for a guided wizard,
-    or use --config to load settings from a YAML file.
-    
-    Configuration file takes precedence, but CLI flags can override specific values.
-    
-    Caching is enabled by default. When enabled, identical generation requests
-    (same text + voice + provider) will reuse previously generated audio files,
-    saving time and API costs. Use --no-cache to always regenerate fresh samples.
+    This is the main command! You can use it in three ways:
+    1. Interactive Wizard: Run 'wakegen generate' without arguments
+    2. Command Line: Provide arguments like --text "hey computer"
+    3. Config File: Use --config wakegen.yaml for reproducible runs
     
     Examples:
-        wakegen generate --text "hey assistant" --count 10
-        wakegen generate --config wakegen.yaml
-        wakegen generate --config wakegen.yaml --count 50  # Override count
-        wakegen generate --interactive
-        wakegen generate --text "hey jarvis" --no-cache  # Force regeneration
+        wakegen generate  # Starts wizard
+        wakegen generate --text "hello world" --count 5
+        wakegen generate --config my_project.yaml
+        wakegen generate --text "merhaba" --language tr-TR
     """
-    # If config file is provided, use config-based generation
-    if config_file:
-        asyncio.run(run_generation_from_config(config_file, text, count, output_dir, provider, voice, use_cache))
-    # If interactive flag is set OR no text is provided (and no config), run the wizard
-    elif interactive or not text:
-        asyncio.run(run_interactive_generation())
-    else:
-        # Run the async function in the event loop
-        asyncio.run(run_generation(text, count, preset, output_dir, provider, voice, use_cache))
+    # Mode 1: Config file
+    if config:
+        asyncio.run(run_generation_from_config(config, language))
+        return
+
+    # Mode 2: Command line arguments
+    if text:
+        asyncio.run(run_generation(
+            text=text,
+            count=count,
+            output_dir=output_dir,
+            provider_name=provider,
+            voice_id=voice,
+            languages=list(language) if language else None
+        ))
+        return
+
+    # Mode 3: Interactive Wizard
+    asyncio.run(run_interactive_generation())
+
 
 async def run_interactive_generation():
     """
@@ -241,320 +260,158 @@ async def run_interactive_generation():
 
 async def run_generation_from_config(
     config_path: str,
-    text_override: Optional[str] = None,
-    count_override: Optional[int] = None,
-    output_dir_override: Optional[str] = None,
-    provider_override: Optional[str] = None,
-    voice_override: Optional[str] = None,
-    use_cache: bool = True
+    language_override: Optional[tuple] = None
 ):
     """
-    Run generation using a YAML configuration file.
-    
-    This is the main config-driven generation flow. It reads the config file,
-    applies any CLI overrides, and generates samples for each wake word using
-    each configured provider based on their weights.
-    
-    Think of it like a recipe executor:
-    1. Read the recipe (config file)
-    2. Apply any last-minute changes (CLI overrides)
-    3. For each ingredient (wake word), use the right tools (providers) in the right proportions (weights)
-    
-    Args:
-        config_path: Path to wakegen.yaml configuration file.
-        text_override: Override wake words from config (generates only this word).
-        count_override: Override sample count from config.
-        output_dir_override: Override output directory from config.
-        provider_override: Override to use only this provider (ignores config providers).
-        voice_override: Override to use only this voice ID.
-        use_cache: Whether to use caching for generated audio.
+    Runs generation based on a YAML configuration file.
     """
-    # Initialize cache if enabled
-    from wakegen.utils.caching import GenerationCache
-    cache = GenerationCache(enabled=use_cache)
-    
-    if use_cache:
-        console.print("[dim]Caching enabled (use --no-cache to disable)[/dim]")
-    
     try:
-        # 1. Load and validate configuration
-        console.print(f"[dim]Loading configuration from:[/dim] {config_path}")
-        config = load_config(config_path)
+        # Load configuration
+        config = load_config(Path(config_path))
         
-        # 2. Apply CLI overrides
-        # Wake words: use override or config value
-        wake_words = [text_override] if text_override else config.generation.wake_words
-        
-        # Count: use override, fall back to config, default 1
-        count = count_override if count_override and count_override > 1 else config.generation.count
-        
-        # Output directory: use override or config value
-        output_dir = output_dir_override if output_dir_override else config.generation.output_dir
-        
-        # 3. Display generation plan
         console.print(Panel(
             f"[bold]Project:[/bold] {config.project.name} v{config.project.version}\n"
-            f"[bold]Wake Words:[/bold] {', '.join(wake_words)}\n"
-            f"[bold]Count per word:[/bold] {count}\n"
-            f"[bold]Output:[/bold] {output_dir}\n"
-            f"[bold]Audio:[/bold] {config.generation.audio_format} @ {config.generation.sample_rate}Hz",
-            title="Generation Plan",
-            border_style="cyan"
-        ))
-        
-        # 4. Determine which providers to use
-        if provider_override:
-            # CLI override: use only the specified provider
-            try:
-                provider_type = ProviderType(provider_override.lower())
-                providers_to_use = [(provider_type, 1.0, voice_override)]
-            except ValueError:
-                console.print(f"[bold red]Error:[/bold red] Unknown provider '{provider_override}'")
-                console.print("Use 'wakegen list-providers' to see available options.")
-                return
-        else:
-            # Use providers from config with their weights
-            providers_to_use = []
-            for p_config in config.providers:
-                try:
-                    provider_type = ProviderType(p_config.type.lower())
-                    # If voice override provided, use it; otherwise use first voice from config or None
-                    voice = voice_override or (p_config.voices[0] if p_config.voices else None)
-                    providers_to_use.append((provider_type, p_config.weight, voice))
-                except ValueError:
-                    console.print(f"[yellow]Warning:[/yellow] Skipping unknown provider '{p_config.type}'")
-        
-        if not providers_to_use:
-            console.print("[bold red]Error:[/bold red] No valid providers configured.")
-            return
-        
-        # 5. Show provider breakdown
-        console.print("\n[bold]Provider Distribution:[/bold]")
-        table = Table(show_header=True, header_style="bold")
-        table.add_column("Provider")
-        table.add_column("Weight")
-        table.add_column("Samples/Word")
-        table.add_column("Voice")
-        
-        for p_type, weight, voice_id in providers_to_use:
-            samples = int(count * weight)
-            voice_str = voice_id if voice_id else "[auto]"
-            table.add_row(p_type.value, f"{weight:.0%}", str(samples), voice_str)
-        
-        console.print(table)
-        console.print("")
-        
-        # 6. Create output directory
-        os.makedirs(output_dir, exist_ok=True)
-        
-        # 7. Generate samples for each wake word
-        provider_config = get_provider_config()
-        total_generated = 0
-        total_failed = 0
-        
-        for wake_word in wake_words:
-            console.print(f"\n[bold cyan]Generating samples for:[/bold cyan] '{wake_word}'")
-            
-            # Create subdirectory for this wake word
-            word_dir = os.path.join(output_dir, wake_word.replace(" ", "_").lower())
-            os.makedirs(word_dir, exist_ok=True)
-            
-            sample_index = 0
-            
-            for p_type, weight, preferred_voice in providers_to_use:
-                # Calculate how many samples this provider should generate
-                provider_count = int(count * weight)
-                if provider_count == 0:
-                    continue
-                
-                try:
-                    # Get provider instance
-                    provider = get_provider(p_type, provider_config)
-                    
-                    # Get voice to use
-                    selected_voice = None
-                    if preferred_voice:
-                        # User specified a voice
-                        from wakegen.core.protocols import Voice
-                        from wakegen.core.types import Gender
-                        selected_voice = Voice(
-                            id=preferred_voice,
-                            name=preferred_voice,
-                            language="unknown",
-                            gender=Gender.NEUTRAL
-                        )
-                    else:
-                        # Auto-select a voice
-                        voices = await provider.list_voices()
-                        if voices:
-                            # Prefer English neural voice, fallback to first available
-                            selected_voice = next(
-                                (v for v in voices if v.language.startswith("en-")),
-                                voices[0]
-                            )
-                    
-                    if not selected_voice:
-                        console.print(f"  [yellow]No voice available for {p_type.value}, skipping[/yellow]")
-                        continue
-                    
-                    console.print(f"  Using [cyan]{p_type.value}[/cyan] with voice '{selected_voice.name}'")
-                    
-                    # Generate samples with progress
-                    cache_hits = 0
-                    for i in track(range(provider_count), description=f"  {p_type.value}"):
-                        sample_index += 1
-                        filename = f"{wake_word.replace(' ', '_').lower()}_{sample_index:04d}_{p_type.value}.{config.generation.audio_format}"
-                        file_path = os.path.join(word_dir, filename)
-                        
-                        try:
-                            # Check cache first
-                            cached_path = cache.get(wake_word, selected_voice.id, p_type.value)
-                            if cached_path:
-                                # Copy from cache to target location
-                                import shutil
-                                shutil.copy2(cached_path, file_path)
-                                cache_hits += 1
-                            else:
-                                # Generate new audio
-                                await provider.generate(wake_word, selected_voice.id, file_path)
-                                # Add to cache
-                                cache.put(wake_word, selected_voice.id, p_type.value, file_path, copy=True)
-                            
-                            # Resample if needed
-                            if config.generation.sample_rate:
-                                resample_audio(file_path, config.generation.sample_rate)
-                            
-                            total_generated += 1
-                            
-                        except Exception as e:
-                            console.print(f"    [red]Failed sample {sample_index}: {e}[/red]")
-                            total_failed += 1
-                    
-                    # Report cache hits for this provider
-                    if cache_hits > 0:
-                        console.print(f"    [dim]({cache_hits} from cache)[/dim]")
-                            
-                except Exception as e:
-                    console.print(f"  [red]Provider {p_type.value} failed: {e}[/red]")
-                    total_failed += provider_count
-        
-        # Save cache metadata
-        cache.save_metadata()
-        cache_stats = cache.get_stats()
-        
-        # 8. Show summary
-        cache_info = ""
-        if use_cache:
-            cache_info = f"\n[bold]Cache:[/bold] {cache_stats.hits} hits, {cache_stats.misses} new"
-        
-        console.print(Panel(
-            f"[bold green]✓ Generation complete![/bold green]\n\n"
-            f"[bold]Total generated:[/bold] {total_generated}\n"
-            f"[bold]Failed:[/bold] {total_failed}\n"
-            f"[bold]Output directory:[/bold] {output_dir}{cache_info}",
-            title="Summary",
+            f"[bold]Wake Words:[/bold] {config.generation.wake_words}\n"
+            f"[bold]Providers:[/bold] {len(config.providers)} configured",
+            title="Starting Generation from Config",
             border_style="green"
         ))
         
+        # Use languages from config, or override if provided
+        languages = list(language_override) if language_override else None
+        
+        # Iterate over providers in config
+        for p_config in config.providers:
+            try:
+                # Initialize provider
+                provider = get_provider(p_config.type, get_provider_config())
+                
+                # Determine voices to use
+                voices_to_use = []
+                if p_config.voices:
+                    # Use specific voices from config
+                    all_voices = await provider.list_voices()
+                    voices_to_use = [v for v in all_voices if v.id in p_config.voices or v.name in p_config.voices]
+                else:
+                    # Auto-select voices
+                    all_voices = await provider.list_voices()
+                    
+                    # Filter by language if specified in provider config or override
+                    filter_langs = languages or p_config.languages
+                    if filter_langs:
+                         all_voices = [v for v in all_voices if any(l.lower() in v.language.lower() for l in filter_langs)]
+                    
+                    if not all_voices:
+                        console.print(f"[yellow]No voices found for {p_config.type} matching criteria. Skipping.[/yellow]")
+                        continue
+                        
+                    # Default to first few voices if no specific ones selected
+                    # If languages specified, use all matching. If not, limit to avoid explosion?
+                    # Let's limit to top 5 if no specific voices and no language filter, 
+                    # but if language filter is present, maybe user wants all of them?
+                    # Let's stick to a reasonable default or just the first one if not specified.
+                    # For now, let's pick the first one to be safe, or top 3.
+                    voices_to_use = all_voices[:1] 
+                
+                if not voices_to_use:
+                    console.print(f"[yellow]No valid voices found for {p_config.type}. Skipping.[/yellow]")
+                    continue
+                
+                # Generate for each wake word and each voice
+                for wake_word in config.generation.wake_words:
+                    for voice in voices_to_use:
+                        console.print(f"[bold]Generating:[/bold] '{wake_word}' with {p_config.type} ({voice.name})")
+                        
+                        # Calculate count based on weight
+                        count = int(config.generation.count * p_config.weight)
+                        if count < 1: count = 1
+                        
+                        # Output directory
+                        word_dir = os.path.join(config.generation.output_dir, wake_word.replace(" ", "_").lower())
+                        
+                        await run_generation(
+                            text=wake_word,
+                            count=count,
+                            output_dir=word_dir,
+                            provider_name=p_config.type,
+                            voice_id=voice.id,
+                            languages=None # Already filtered
+                        )
+                        
+            except Exception as e:
+                console.print(f"[red]Error with provider {p_config.type}: {e}[/red]")
+                
     except ConfigError as e:
-        console.print(Panel(
-            f"[bold red]Configuration Error[/bold red]\n\n{e}",
-            border_style="red"
-        ))
+        console.print(f"[bold red]Configuration Error:[/bold red] {e}")
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
-        import traceback
-        console.print(traceback.format_exc())
 
-async def run_generation(text: str, count: int, preset: Optional[str], output_dir: Optional[str], provider_name: str = "edge_tts", voice_id: Optional[str] = None, use_cache: bool = True):
+
+async def run_generation(
+    text: str,
+    count: int,
+    output_dir: str,
+    provider_name: str,
+    voice_id: Optional[str] = None,
+    preset: Optional[str] = None,
+    languages: Optional[list[str]] = None
+):
     """
-    The main logic for the generation command.
-    
-    Args:
-        text: The wake word text to generate.
-        count: Number of samples to generate.
-        preset: Configuration preset name.
-        output_dir: Output directory path.
-        provider_name: TTS provider to use.
-        voice_id: Specific voice ID to use.
-        use_cache: Whether to use caching.
+    Core generation logic.
     """
-    # Initialize cache
-    from wakegen.utils.caching import GenerationCache
-    cache = GenerationCache(enabled=use_cache)
-    
-    if use_cache:
-        console.print("[dim]Caching enabled (use --no-cache to disable)[/dim]")
-    
     try:
-        # 1. Load Configuration
-        # If a preset is given, load it. Otherwise, use defaults.
-        gen_config = get_generation_config(preset) if preset else get_generation_config("quick_test")
+        # 1. Setup Provider
+        p_type = ProviderType(provider_name.lower())
         provider_config = get_provider_config()
-
-        # Override output directory if provided via CLI
-        if output_dir:
-            gen_config.output_dir = output_dir
-
-        console.print(f"[bold green]Starting generation for:[/bold green] '{text}'")
-        console.print(f"Output directory: {gen_config.output_dir}")
-
-        # 2. Get the Provider
-        try:
-            provider_type = ProviderType(provider_name.lower())
-        except ValueError:
-            console.print(f"[bold red]Error:[/bold red] Unknown provider '{provider_name}'")
-            console.print("Use 'wakegen list-providers' to see available options.")
-            return
-
-        console.print(f"Using provider: [cyan]{provider_type.value}[/cyan]")
-        provider = get_provider(provider_type, provider_config)
-
-        # 3. Get a voice to use
-        selected_voice = None
+        provider = get_provider(p_type, provider_config)
         
+        # 2. Get Voice
+        selected_voice = None
         if voice_id:
-            # If user specified a voice, try to find it to validate
-            console.print(f"Verifying voice '{voice_id}'...")
+            # Verify voice exists
             voices = await provider.list_voices()
             selected_voice = next((v for v in voices if v.id == voice_id or v.name == voice_id), None)
-            
             if not selected_voice:
-                console.print(f"[yellow]Warning:[/yellow] Voice '{voice_id}' not found in list, attempting to use anyway...")
-                # Create a dummy voice object if we can't find it but user insisted
-                # This supports providers where list_voices might be incomplete or slow
-                from wakegen.core.protocols import Voice
-                from wakegen.core.types import Gender
-                selected_voice = Voice(id=voice_id, name=voice_id, language="unknown", gender=Gender.NEUTRAL)
-        else:
-            # Auto-select a voice
-            console.print("Fetching available voices...")
-            voices = await provider.list_voices()
-            
-            # Simple filter for an English voice
-            # We prioritize English Neural voices for Edge TTS, or just the first available for others
-            selected_voice = next((v for v in voices if v.language.startswith("en-") and "Neural" in v.id), None)
-            
-            # Fallback: just take the first one
-            if not selected_voice and voices:
-                selected_voice = voices[0]
+                console.print(f"[yellow]Voice '{voice_id}' not found. Falling back to auto-selection.[/yellow]")
         
         if not selected_voice:
-            console.print("[bold red]No suitable voice found![/bold red]")
-            return
-
+            # Auto-select
+            voices = await provider.list_voices()
+            
+            # Filter by language if requested
+            if languages:
+                filtered_voices = [v for v in voices if any(l.lower() in v.language.lower() for l in languages)]
+                if not filtered_voices:
+                    console.print(f"[bold red]No voices found matching languages: {', '.join(languages)}[/bold red]")
+                    return
+                voices = filtered_voices
+            
+            # Prefer English US if no language specified, or just pick first
+            if not languages:
+                selected_voice = next((v for v in voices if "en-US" in v.language), voices[0])
+            else:
+                selected_voice = voices[0]
+        
         console.print(f"Using voice: [cyan]{selected_voice.name}[/cyan] ({selected_voice.id})")
 
-        # 4. Generate Samples
-        os.makedirs(gen_config.output_dir, exist_ok=True)
+        # 3. Generate Samples
+        gen_config = get_generation_config() # Load defaults
+        # Override with arguments
+        gen_config.output_dir = output_dir
+        
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Simple cache simulation for now (in real app, use the Cache class)
+        from wakegen.utils.caching import GenerationCache
+        cache = GenerationCache()
         
         cache_hits = 0
         for i in track(range(count), description="Generating samples..."):
             filename = f"{text.replace(' ', '_').lower()}_{i+1}.{gen_config.audio_format}"
-            file_path = os.path.join(gen_config.output_dir, filename)
+            file_path = os.path.join(output_dir, filename)
             
             # Check cache first
-            cached_path = cache.get(text, selected_voice.id, provider_type.value)
+            cached_path = cache.get(text, selected_voice.id, p_type.value)
             if cached_path:
                 # Copy from cache to target location
                 import shutil
@@ -564,7 +421,7 @@ async def run_generation(text: str, count: int, preset: Optional[str], output_di
                 # Generate the audio
                 await provider.generate(text, selected_voice.id, file_path)
                 # Add to cache
-                cache.put(text, selected_voice.id, provider_type.value, file_path, copy=True)
+                cache.put(text, selected_voice.id, p_type.value, file_path, copy=True)
             
             # Resample if needed (Edge TTS usually outputs 24kHz, we might want 16kHz)
             if gen_config.sample_rate:
@@ -583,6 +440,8 @@ async def run_generation(text: str, count: int, preset: Optional[str], output_di
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         # In a real app, we might want to print the full traceback here
         # console.print_exception()
+
+
 
 @cli.command()
 @click.option("--input-dir", required=True, help="Directory containing audio files to augment")

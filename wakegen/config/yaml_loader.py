@@ -193,6 +193,10 @@ class ProviderConfig(BaseModel):
         default_factory=dict,
         description="Provider-specific settings (e.g., API keys, model paths)"
     )
+    languages: list[str] = Field(
+        default_factory=list,
+        description="List of languages to filter voices by (e.g., 'tr-TR', 'en-US')"
+    )
     
     @field_validator("type")
     @classmethod

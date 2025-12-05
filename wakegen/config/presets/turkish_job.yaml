@@ -1,0 +1,38 @@
+# =============================================================================
+# Turkish Job Preset
+# =============================================================================
+# This preset is configured for generating Turkish wake words.
+# It uses Edge TTS with Turkish and English voices.
+
+project:
+  name: "turkish_wake_word"
+  version: "1.0.0"
+  description: "Turkish wake word generation job"
+
+generation:
+  wake_words:
+    - "hey katya"
+  count: 10
+  output_dir: "./output/turkish_job"
+  sample_rate: 16000
+  audio_format: "wav"
+
+providers:
+  - type: edge_tts
+    weight: 1.0
+    languages:
+      - "tr-TR"
+      - "en-US"
+
+augmentation:
+  enabled: true
+  profiles:
+    - morning_kitchen
+    - car_interior
+  augmented_per_original: 2
+  variation_strength: 0.3
+
+export:
+  format: openwakeword
+  split_ratio: [0.8, 0.1, 0.1]
+  include_manifest: true
