@@ -1,16 +1,19 @@
 import click
 import asyncio
 import os
+from pathlib import Path
 from typing import Optional
 from rich.console import Console
 from rich.progress import track
+from rich.panel import Panel
 from wakegen.config.settings import get_generation_config, get_provider_config
+from wakegen.config.yaml_loader import load_config, get_template_config, WakegenConfig
 from wakegen.providers.registry import get_provider, list_available_providers
 from wakegen.core.types import ProviderType
+from wakegen.core.exceptions import ConfigError
 from wakegen.utils.logging import setup_logging
 from wakegen.utils.audio import resample_audio
 from wakegen.ui.cli.wizard import run_wizard
-from wakegen.config.yaml_loader import load_config
 # Import providers to ensure they are registered
 import wakegen.providers
 
@@ -262,92 +265,214 @@ def train_script(model_type: str, output_script: str):
     console.print(f"Would generate {model_type} training script at {output_script}")
     # TODO: Connect to wakegen.training.script_generator
 
+
+# =============================================================================
+# CONFIG COMMAND GROUP
+# =============================================================================
+# These commands help you manage wakegen.yaml configuration files.
+# Think of it like a setup wizard - init creates a starter config,
+# validate checks if your config is correct before running.
+
+
 @cli.group()
 def config():
     """
-    Manage configuration files.
+    Manage wakegen configuration files.
+    
+    Use these commands to create and validate wakegen.yaml configuration files.
+    A config file lets you define all generation settings in one place instead
+    of passing many command-line arguments.
+    
+    Examples:
+        wakegen config init              # Create a starter config file
+        wakegen config validate my.yaml  # Check if a config file is valid
     """
     pass
 
+
 @config.command(name="init")
-def config_init():
+@click.option(
+    "--output",
+    "-o",
+    default="wakegen.yaml",
+    help="Output file path (default: wakegen.yaml in current directory)"
+)
+@click.option(
+    "--force",
+    "-f",
+    is_flag=True,
+    help="Overwrite existing file without asking"
+)
+def config_init(output: str, force: bool):
     """
-    Generates a template wakegen.yaml configuration file in the current directory.
-    """
-    # This template matches the structure defined in wakegen/config/yaml_loader.py
-    template = """# wakegen.yaml
-project:
-  name: "hey_katya"
-  version: "1.0.0"
-
-generation:
-  wake_words:
-    - "hey katya"
-    - "katya"
-  count: 1000
-  output_dir: "./output/hey_katya"
-
-providers:
-  - type: kokoro
-    voices: [af_bella, am_adam]
-    weight: 0.4
-  - type: piper
-    voices: [tr_TR-dfki-medium]
-    weight: 0.3
-  - type: edge_tts
-    voices: [tr-TR-PinarNeural, tr-TR-AhmetNeural]
-    weight: 0.3
-
-augmentation:
-  enabled: true
-  profiles:
-    - morning_kitchen
-    - car_interior
-  augmented_per_original: 3
-
-export:
-  format: openwakeword
-  split_ratio: [0.8, 0.1, 0.1]
-"""
-    output_path = "wakegen.yaml"
+    Generate a template wakegen.yaml configuration file.
     
-    if os.path.exists(output_path):
-        console.print(f"[bold red]Error:[/bold red] '{output_path}' already exists in the current directory.")
-        return
-
+    Creates a well-commented starter configuration with sensible defaults.
+    Edit the generated file to customize your wake word generation settings.
+    
+    The template includes:
+    - Project metadata (name, version)
+    - Generation settings (wake words, count, output)
+    - Provider configuration (TTS services)
+    - Augmentation profiles (noise, reverb)
+    - Export settings (train/val/test splits)
+    
+    Examples:
+        wakegen config init                    # Create wakegen.yaml
+        wakegen config init -o my_project.yaml # Custom filename
+        wakegen config init --force            # Overwrite existing
+    """
+    output_path = Path(output)
+    
+    # Check if file already exists
+    if output_path.exists() and not force:
+        console.print(f"[yellow]File already exists:[/yellow] {output_path}")
+        console.print("Use [cyan]--force[/cyan] to overwrite or choose a different name with [cyan]--output[/cyan].")
+        raise SystemExit(1)
+    
+    # Get the template content
+    template = get_template_config()
+    
     try:
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(template)
-        console.print(f"[bold green]Success:[/bold green] Created '{output_path}'")
-        console.print("You can now edit this file to configure your project.")
+        # Create parent directories if needed
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Write the template
+        output_path.write_text(template, encoding="utf-8")
+        
+        # Success message with next steps
+        console.print(Panel(
+            f"[bold green]✓ Created configuration file:[/bold green] {output_path}\n\n"
+            "[dim]Next steps:[/dim]\n"
+            f"  1. Edit [cyan]{output_path}[/cyan] to customize your settings\n"
+            f"  2. Run [cyan]wakegen config validate {output_path}[/cyan] to check for errors\n"
+            f"  3. Run [cyan]wakegen generate --config {output_path}[/cyan] to start generating",
+            title="Configuration Created",
+            border_style="green"
+        ))
+        
+    except PermissionError:
+        console.print(f"[bold red]Error:[/bold red] Permission denied writing to: {output_path}")
+        console.print("Try a different location or check your permissions.")
+        raise SystemExit(1)
     except Exception as e:
-        console.print(f"[bold red]Error creating file:[/bold red] {str(e)}")
+        console.print(f"[bold red]Error:[/bold red] Failed to create configuration file: {e}")
+        raise SystemExit(1)
+
 
 @config.command(name="validate")
-@click.argument("path", type=click.Path(exists=True))
-def config_validate(path: str):
+@click.argument("path", type=click.Path(exists=False))
+@click.option(
+    "--verbose",
+    "-v",
+    is_flag=True,
+    help="Show detailed configuration values"
+)
+def config_validate(path: str, verbose: bool):
     """
-    Validates a configuration file.
+    Validate a wakegen configuration file.
     
-    PATH is the path to the YAML configuration file to validate.
+    Checks your YAML configuration for:
+    - Syntax errors (missing colons, bad indentation)
+    - Missing required fields (project name, wake words)
+    - Invalid values (negative counts, bad ratios)
+    - Unknown fields (catches typos)
+    - Environment variable resolution
+    
+    Exit code:
+    - 0: Configuration is valid
+    - 1: Configuration has errors
+    
+    Examples:
+        wakegen config validate wakegen.yaml
+        wakegen config validate wakegen.yaml --verbose
     """
-    console.print(f"Validating configuration file: [cyan]{path}[/cyan]...")
+    config_path = Path(path)
     
+    # Check file exists first (more helpful error message)
+    if not config_path.exists():
+        console.print(f"[bold red]Error:[/bold red] File not found: {config_path}")
+        console.print("\nTo create a new configuration file, run:")
+        console.print(f"  [cyan]wakegen config init --output {config_path}[/cyan]")
+        raise SystemExit(1)
+    
+    # Try to load and validate the configuration
     try:
-        # Attempt to load and validate the config
-        config = load_config(path)
+        config_obj = load_config(config_path)
         
-        console.print("[bold green]Configuration is valid![/bold green]")
+        # Success! Show validation passed
+        console.print(Panel(
+            f"[bold green]✓ Configuration is valid![/bold green]\n\n"
+            f"[dim]File:[/dim] {config_path}",
+            title="Validation Passed",
+            border_style="green"
+        ))
         
-        # Display a brief summary of the loaded configuration
-        console.print("\n[bold]Project Summary:[/bold]")
-        console.print(f"  Name: [green]{config.project.name}[/green]")
-        console.print(f"  Wake Words: [cyan]{', '.join(config.generation.wake_words)}[/cyan]")
-        console.print(f"  Output Directory: {config.generation.output_dir}")
-        console.print(f"  Providers: {len(config.providers)}")
-        console.print(f"  Augmentation: {'[green]Enabled[/green]' if config.augmentation.enabled else '[red]Disabled[/red]'}")
+        # If verbose, show the parsed configuration
+        if verbose:
+            _print_config_summary(config_obj)
         
+    except ConfigError as e:
+        # Show validation error with helpful message
+        console.print(Panel(
+            f"[bold red]✗ Configuration validation failed[/bold red]\n\n"
+            f"[dim]File:[/dim] {config_path}\n\n"
+            f"{e}",
+            title="Validation Error",
+            border_style="red"
+        ))
+        raise SystemExit(1)
     except Exception as e:
-        console.print(f"[bold red]Validation Failed:[/bold red]")
-        # We print the error message directly, which might contain Pydantic validation details
-        console.print(f"{str(e)}")
+        # Unexpected error
+        console.print(f"[bold red]Unexpected error:[/bold red] {e}")
+        raise SystemExit(1)
+
+
+def _print_config_summary(config: WakegenConfig) -> None:
+    """
+    Print a human-readable summary of the configuration.
+    
+    This helper function displays the validated configuration in a nice format,
+    useful for debugging and verification.
+    
+    Args:
+        config: Validated WakegenConfig object to display.
+    """
+    console.print("\n[bold cyan]Configuration Summary:[/bold cyan]\n")
+    
+    # Project section
+    console.print("[bold]Project:[/bold]")
+    console.print(f"  Name: [green]{config.project.name}[/green]")
+    console.print(f"  Version: {config.project.version}")
+    if config.project.description:
+        console.print(f"  Description: {config.project.description}")
+    
+    # Generation section
+    console.print("\n[bold]Generation:[/bold]")
+    console.print(f"  Wake Words: {config.generation.wake_words}")
+    console.print(f"  Count per word: {config.generation.count}")
+    console.print(f"  Output: {config.generation.output_dir}")
+    console.print(f"  Format: {config.generation.audio_format} @ {config.generation.sample_rate}Hz")
+    
+    # Providers section
+    console.print("\n[bold]Providers:[/bold]")
+    for p in config.providers:
+        voices_str = ", ".join(p.voices[:3]) if p.voices else "default"
+        if len(p.voices) > 3:
+            voices_str += f" (+{len(p.voices) - 3} more)"
+        console.print(f"  • [cyan]{p.type}[/cyan] (weight: {p.weight:.1%}) - {voices_str}")
+    
+    # Augmentation section
+    console.print("\n[bold]Augmentation:[/bold]")
+    console.print(f"  Enabled: {'[green]yes[/green]' if config.augmentation.enabled else '[red]no[/red]'}")
+    if config.augmentation.enabled:
+        console.print(f"  Profiles: {config.augmentation.profiles}")
+        console.print(f"  Copies per original: {config.augmentation.augmented_per_original}")
+    
+    # Export section
+    console.print("\n[bold]Export:[/bold]")
+    console.print(f"  Format: {config.export.format}")
+    train, val, test = config.export.split_ratio
+    console.print(f"  Split: train {train:.0%} / val {val:.0%} / test {test:.0%}")
+    
+    console.print("")  # Final newline
