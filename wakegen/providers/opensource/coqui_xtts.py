@@ -78,11 +78,39 @@ class CoquiXTTSProvider(BaseProvider):
         """
         Generates audio using Coqui XTTS with voice cloning.
 
+        XTTS VOICE CLONING WORKFLOW:
+        =============================
+        Coqui XTTS is a zero-shot voice cloning system. The 'voice_id' parameter
+        must be a PATH to a reference audio file, not a preset name.
+
         Args:
             text: The text to speak (e.g., "Hey Katya").
-            voice_id: The path to the reference audio file for cloning.
-                      XTTS REQUIRES a reference audio file to clone the voice.
-            output_path: The full path where the audio file should be saved.
+            voice_id: REQUIRED - File path to reference audio for voice cloning.
+                      Example: "/path/to/reference_voice.wav"
+                      
+                      The reference audio should be:
+                      - Clear speech (minimal background noise)
+                      - 5-30 seconds long (optimal)
+                      - The language/accent will be preserved in output
+                      
+                      NOTE: This is NOT a preset name like "tr_female_1".
+                      You provide an actual audio file to clone.
+                      
+            output_path: The full path where the generated audio file should be saved.
+                        Will be created as WAV format by XTTS internally.
+
+        Raises:
+            ProviderError: If voice_id is not a valid file path or generation fails.
+
+        Example:
+            provider = CoquiXTTSProvider(config)
+            
+            # Clone a Turkish voice
+            await provider.generate(
+                text="Merhaba, hoşgeldiniz",
+                voice_id="/samples/turkish_speaker.wav",
+                output_path="/output/generated_tr.wav"
+            )
         """
         try:
             # Ensure XTTS is available
@@ -96,8 +124,9 @@ class CoquiXTTSProvider(BaseProvider):
             # It does not support "preset" names like "tr_female_1".
             if not os.path.isfile(voice_id):
                 raise ProviderError(
-                    f"Coqui XTTS requires a reference audio file for voice cloning. "
-                    f"The provided voice_id '{voice_id}' is not a valid file path."
+                    f"Coqui XTTS requires a reference audio file for voice cloning.\n"
+                    f"The provided voice_id '{voice_id}' is not a valid file path.\n"
+                    f"Please provide the full path to an audio file (e.g., '/path/to/voice.wav')."
                 )
 
             # Voice cloning mode - use the reference audio
@@ -150,11 +179,28 @@ class CoquiXTTSProvider(BaseProvider):
         """
         Lists available voices from Coqui XTTS.
         
-        Since XTTS is a voice cloning model, it does not have fixed preset voices.
-        It requires a reference audio file to clone any voice.
+        IMPORTANT: Coqui XTTS is a VOICE CLONING model, NOT a preset-based model.
+        
+        Unlike other TTS providers (e.g., Edge TTS, Piper), XTTS does NOT have:
+        - Predefined speaker presets (e.g., "tr_female", "tr_male")
+        - Named voice profiles
+        - Built-in voice selection
+        
+        Instead, XTTS works by:
+        1. Taking a reference audio file (any voice sample)
+        2. Analyzing the speaker characteristics
+        3. Cloning that voice for new text
+        
+        This means you can generate ANY voice you have an audio sample for.
+        It's like "voice morphing" - provide a reference, get that voice speaking new text.
+        
+        Usage:
+            # First, provide a reference audio file
+            voice_id = "/path/to/turkish_speaker.wav"
+            await provider.generate("Hey Katya", voice_id, "output.wav")
         
         Returns:
-            A placeholder voice object indicating that reference audio is required.
+            A placeholder voice object indicating voice cloning mode.
         """
         try:
             # Return a single placeholder to inform the UI/User that this provider
@@ -162,7 +208,7 @@ class CoquiXTTSProvider(BaseProvider):
             return [
                 Voice(
                     id="reference_audio_required",
-                    name="Voice Cloning (Requires Reference Audio Path)",
+                    name="Voice Cloning (Provide Reference Audio Path)",
                     gender=Gender.NEUTRAL,
                     language="tr-TR",
                     provider=self.provider_type,
