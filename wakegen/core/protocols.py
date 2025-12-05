@@ -1,6 +1,9 @@
 from __future__ import annotations
-from typing import Protocol, List, Any
+from typing import Protocol, List, TYPE_CHECKING
 from wakegen.core.types import ProviderType
+
+if TYPE_CHECKING:
+    from wakegen.models.audio import Voice
 
 # We use 'Protocol' to define an interface.
 # Think of this as a contract. Any class that claims to be a 'TTSProvider'
@@ -30,10 +33,9 @@ class TTSProvider(Protocol):
         """
         ...
 
-    async def list_voices(self) -> List[Any]:
+    async def list_voices(self) -> List["Voice"]:
         """
         Returns a list of available voices for this provider.
-        The return type is List[Any] for now, but will be refined later.
         """
         ...
 
