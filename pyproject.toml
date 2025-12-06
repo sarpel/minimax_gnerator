@@ -47,6 +47,14 @@ dev = [
     "isort",            # For sorting imports
     "mypy",             # For static type checking
 ]
+# Dependencies for the Web UI (optional, install with: pip install wakegen[web])
+web = [
+    "fastapi>=0.109.0",        # Modern async web framework for building APIs
+    "uvicorn[standard]>=0.27.0",  # ASGI server to run FastAPI with WebSocket support
+    "python-multipart>=0.0.6", # For handling file uploads in FastAPI
+    "websockets>=12.0",        # WebSocket protocol for real-time updates
+    "aiofiles>=23.0.0",        # Async file operations for serving audio files
+]
 
 [project.scripts]
 # This allows us to run the tool using 'wakegen' in the terminal

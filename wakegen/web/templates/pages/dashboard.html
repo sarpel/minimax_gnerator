@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<!--
+    DASHBOARD PAGE
+    ==============
+    The main landing page showing an overview of the system:
+    - Welcome message and quick actions
+    - Summary cards (providers, samples, cache, GPU)
+    - Recent jobs activity feed
+
+    HTMX USAGE:
+    ===========
+    This page uses HTMX to load dynamic content:
+    - hx-get loads content from API endpoints
+    - hx-trigger="load" makes requests when the page loads
+    - hx-swap="innerHTML" replaces the target's content
+-->
+
+<!-- Welcome Section -->
+<div class="mb-8">
+    <div class="bg-gradient-to-r from-primary-600 to-accent-600 rounded-2xl p-6 lg:p-8 text-white">
+        <h1 class="text-2xl lg:text-3xl font-bold mb-2">Welcome to WakeGen 🎤</h1>
+        <p class="text-purple-100 text-sm lg:text-base max-w-2xl">
+            Generate high-quality wake word audio datasets using multiple TTS providers.
+            Get started by configuring your providers or running a quick generation.
+        </p>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <!--
+        SUMMARY CARD COMPONENT
+        Each card shows a key metric with an icon.
+        The cards use HTMX to load real-time data from the API.
+    -->
+
+    <!-- Providers Card -->
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 card-hover"
+        hx-get="/api/providers/summary" hx-trigger="load" hx-swap="innerHTML" hx-target="#providers-summary">
+        <div class="flex items-center justify-between mb-3">
+            <span class="text-2xl">🎙️</span>
+            <span
+                class="px-2 py-1 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full">
+                Active
+            </span>
+        </div>
+        <div id="providers-summary">
+            <div class="text-2xl font-bold text-gray-900 dark:text-white">--</div>
+            <div class="text-sm text-gray-500 dark:text-gray-400">Providers Available</div>
+        </div>
+    </div>
+
+    <!-- Samples Card -->
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 card-hover">
+        <div class="flex items-center justify-between mb-3">
+            <span class="text-2xl">🔊</span>
+            <span
+                class="px-2 py-1 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full">
+                Total
+            </span>
+        </div>
+        <div id="samples-summary">
+            <div class="text-2xl font-bold text-gray-900 dark:text-white">0</div>
+            <div class="text-sm text-gray-500 dark:text-gray-400">Samples Generated</div>
+        </div>
+    </div>
+
+    <!-- Cache Card -->
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 card-hover"
+        hx-get="/api/system/cache/summary" hx-trigger="load" hx-swap="innerHTML" hx-target="#cache-summary">
+        <div class="flex items-center justify-between mb-3">
+            <span class="text-2xl">💾</span>
+            <span
+                class="px-2 py-1 text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-full">
+                Cached
+            </span>
+        </div>
+        <div id="cache-summary">
+            <div class="text-2xl font-bold text-gray-900 dark:text-white">--</div>
+            <div class="text-sm text-gray-500 dark:text-gray-400">Cache Size</div>
+        </div>
+    </div>
+
+    <!-- GPU Card -->
+    <div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 card-hover"
+        hx-get="/api/system/gpu/summary" hx-trigger="load" hx-swap="innerHTML" hx-target="#gpu-summary">
+        <div class="flex items-center justify-between mb-3">
+            <span class="text-2xl">🖥️</span>
+            <span
+                class="px-2 py-1 text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full">
+                GPU
+            </span>
+        </div>
+        <div id="gpu-summary">
+            <div class="text-2xl font-bold text-gray-900 dark:text-white">--</div>
+            <div class="text-sm text-gray-500 dark:text-gray-400">GPU Status</div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions & Recent Jobs -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Quick Actions -->
+    <div class="lg:col-span-1">
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Quick Actions</h2>
+            </div>
+            <div class="p-4 space-y-3">
+                <!--
+                    QUICK ACTION BUTTONS
+                    Each button links to a common task with an icon and description.
+                -->
+
+                <a href="/generate"
+                    class="flex items-center p-3 rounded-lg bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors group">
+                    <div
+                        class="w-10 h-10 rounded-lg bg-primary-100 dark:bg-primary-800 flex items-center justify-center mr-3 group-hover:scale-105 transition-transform">
+                        <span class="text-lg">⚡</span>
+                    </div>
+                    <div>
+                        <div class="font-medium text-gray-900 dark:text-white">New Generation</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Generate wake word samples</div>
+                    </div>
+                </a>
+
+                <a href="/config"
+                    class="flex items-center p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors group">
+                    <div
+                        class="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center mr-3 group-hover:scale-105 transition-transform">
+                        <span class="text-lg">📁</span>
+                    </div>
+                    <div>
+                        <div class="font-medium text-gray-900 dark:text-white">Load Config</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Open existing configuration</div>
+                    </div>
+                </a>
+
+                <a href="/export"
+                    class="flex items-center p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors group">
+                    <div
+                        class="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center mr-3 group-hover:scale-105 transition-transform">
+                        <span class="text-lg">📦</span>
+                    </div>
+                    <div>
+                        <div class="font-medium text-gray-900 dark:text-white">Export Dataset</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Export to training format</div>
+                    </div>
+                </a>
+
+                <a href="/providers"
+                    class="flex items-center p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors group">
+                    <div
+                        class="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center mr-3 group-hover:scale-105 transition-transform">
+                        <span class="text-lg">🎙️</span>
+                    </div>
+                    <div>
+                        <div class="font-medium text-gray-900 dark:text-white">Manage Providers</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Configure TTS providers</div>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Jobs -->
+    <div class="lg:col-span-2">
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Recent Jobs</h2>
+                <a href="/generate" class="text-sm text-primary-600 dark:text-primary-400 hover:underline">View all</a>
+            </div>
+            <div class="divide-y divide-gray-200 dark:divide-gray-700" id="recent-jobs" hx-get="/api/generate/recent"
+                hx-trigger="load" hx-swap="innerHTML">
+                <!--
+                    RECENT JOBS LIST
+                    This will be populated via HTMX from /api/generate/recent
+                    For now, show a placeholder/empty state.
+                -->
+                <div class="p-8 text-center">
+                    <div class="text-4xl mb-3">📋</div>
+                    <div class="text-gray-500 dark:text-gray-400 text-sm">
+                        No recent jobs. Start by generating some samples!
+                    </div>
+                    <a href="/generate"
+                        class="inline-flex items-center mt-4 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors">
+                        Create First Job
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

@@ -1603,3 +1603,101 @@ def gpu_status(as_json: bool):
     console.print("  [green]✓[/green] piper - CPU-friendly (lightweight)")
     console.print("  [green]✓[/green] mimic3 - CPU-friendly (lightweight)")
     console.print("  [dim]○[/dim] edge_tts - Cloud-based (no local GPU)")
+
+
+# =============================================================================
+# SERVE COMMAND (Web UI)
+# =============================================================================
+# Starts the WakeGen Web UI server using FastAPI + Uvicorn.
+# This provides a beautiful browser-based interface for all functionality.
+
+
+@cli.command()
+@click.option(
+    "--host",
+    "-h",
+    default="127.0.0.1",
+    help="Host address to bind to (default: 127.0.0.1 for local only)"
+)
+@click.option(
+    "--port",
+    "-p",
+    default=8080,
+    type=int,
+    help="Port number to listen on (default: 8080)"
+)
+@click.option(
+    "--reload",
+    is_flag=True,
+    help="Enable auto-reload on code changes (development mode)"
+)
+@click.option(
+    "--debug",
+    is_flag=True,
+    help="Enable debug mode with verbose logging"
+)
+def serve(host: str, port: int, reload: bool, debug: bool):
+    """
+    Start the WakeGen Web UI server.
+    
+    This launches a beautiful web interface for all WakeGen functionality,
+    including provider management, audio generation, augmentation configuration,
+    and dataset export.
+    
+    The Web UI runs on FastAPI with real-time WebSocket updates for generation
+    progress. Open your browser to the displayed URL after starting.
+    
+    Examples:
+        wakegen serve                     # Start on localhost:8080
+        wakegen serve --port 9000         # Use custom port
+        wakegen serve --host 0.0.0.0      # Allow network access
+        wakegen serve --reload            # Auto-reload for development
+    """
+    # Try to import web dependencies (they're optional)
+    try:
+        import uvicorn
+        from wakegen.web.app import create_app
+        from wakegen.web.config import WebConfig
+    except ImportError as e:
+        console.print(
+            "[bold red]Error:[/bold red] Web UI dependencies not installed!\n\n"
+            "Install them with:\n"
+            "  [cyan]pip install wakegen[web][/cyan]\n\n"
+            f"Missing: {e}"
+        )
+        return
+    
+    # Create configuration with CLI options
+    config = WebConfig(
+        host=host,
+        port=port,
+        debug=debug,
+        reload=reload
+    )
+    
+    # Display startup banner
+    console.print(Panel(
+        f"[bold]🎤 WakeGen Web UI[/bold]\n\n"
+        f"[bold]URL:[/bold] [cyan]http://{host}:{port}[/cyan]\n"
+        f"[bold]API Docs:[/bold] [cyan]http://{host}:{port}/api/docs[/cyan]\n\n"
+        f"[dim]Press Ctrl+C to stop the server[/dim]",
+        title="Starting Server",
+        border_style="green"
+    ))
+    
+    # Create the FastAPI app
+    app = create_app(config)
+    
+    # Run with uvicorn
+    # uvicorn.run() is a blocking call that starts the server
+    uvicorn.run(
+        # When reload=True, we pass the app as a string import path
+        # When reload=False, we can pass the app object directly
+        "wakegen.web.app:create_app" if reload else app,
+        host=host,
+        port=port,
+        reload=reload,
+        log_level="debug" if debug else "info",
+        # Factory mode when using reload (function that creates app)
+        factory=reload,
+    )

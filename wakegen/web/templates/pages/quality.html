@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+
+{% block title %}Quality{% endblock %}
+
+{% block content %}
+<!--
+    QUALITY DASHBOARD PAGE
+    ======================
+    View dataset quality metrics and validation results.
+    Features:
+    - Overall health score
+    - Per-file validation results
+    - Audio quality metrics
+    - Issue detection and recommendations
+-->
+
+<div x-data="qualityDashboard()">
+    <!-- Page Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Quality Dashboard</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Analyze and validate your audio dataset
+            </p>
+        </div>
+        <div class="flex items-center space-x-3">
+            <input type="text" x-model="datasetPath" placeholder="./output"
+                class="px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm">
+            <button @click="runValidation()" :disabled="isValidating"
+                class="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 text-white font-medium rounded-lg transition-colors">
+                <span x-show="!isValidating">🔍 Validate</span>
+                <span x-show="isValidating">Validating...</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Health Overview Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <!-- Overall Score -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+            <div class="text-center">
+                <div class="inline-flex items-center justify-center w-16 h-16 rounded-full mb-3" :class="{
+                         'bg-green-100 dark:bg-green-900/30': healthScore >= 80,
+                         'bg-yellow-100 dark:bg-yellow-900/30': healthScore >= 50 && healthScore < 80,
+                         'bg-red-100 dark:bg-red-900/30': healthScore < 50
+                     }">
+                    <span class="text-2xl font-bold" :class="{
+                              'text-green-600 dark:text-green-400': healthScore >= 80,
+                              'text-yellow-600 dark:text-yellow-400': healthScore >= 50 && healthScore < 80,
+                              'text-red-600 dark:text-red-400': healthScore < 50
+                          }" x-text="`${healthScore}%`"></span>
+                </div>
+                <h3 class="font-semibold text-gray-900 dark:text-white">Health Score</h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Overall dataset quality</p>
+            </div>
+        </div>
+
+        <!-- Total Files -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+            <div class="flex items-center">
+                <div
+                    class="w-12 h-12 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-2xl">
+                    📁
+                </div>
+                <div class="ml-4">
+                    <p class="text-2xl font-bold text-gray-900 dark:text-white" x-text="stats.totalFiles"></p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Total Files</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Valid Files -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+            <div class="flex items-center">
+                <div
+                    class="w-12 h-12 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-2xl">
+                    ✓
+                </div>
+                <div class="ml-4">
+                    <p class="text-2xl font-bold text-green-600 dark:text-green-400" x-text="stats.validFiles"></p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Valid Files</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Issues Found -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+            <div class="flex items-center">
+                <div
+                    class="w-12 h-12 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-2xl">
+                    ⚠️
+                </div>
+                <div class="ml-4">
+                    <p class="text-2xl font-bold text-red-600 dark:text-red-400" x-text="stats.issues"></p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Issues Found</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Quality Metrics -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Audio Metrics -->
+            <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                <h3 class="font-semibold text-gray-900 dark:text-white mb-4">📊 Audio Metrics</h3>
+                <div class="space-y-4">
+                    <!-- Duration -->
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-sm text-gray-600 dark:text-gray-300">Duration Range</span>
+                            <span class="text-sm font-medium text-gray-900 dark:text-white"
+                                x-text="`${metrics.duration.min}s - ${metrics.duration.max}s`"></span>
+                        </div>
+                        <div class="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <div class="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full"
+                                style="width: 85%"></div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">Avg: <span x-text="`${metrics.duration.avg}s`"></span></p>
+                    </div>
+
+                    <!-- Sample Rate -->
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-sm text-gray-600 dark:text-gray-300">Sample Rate Consistency</span>
+                            <span class="text-sm font-medium"
+                                :class="metrics.sampleRate.consistent ? 'text-green-600' : 'text-yellow-600'"
+                                x-text="metrics.sampleRate.consistent ? '✓ Consistent' : '⚠ Mixed'"></span>
+                        </div>
+                        <p class="text-xs text-gray-500" x-text="`Most common: ${metrics.sampleRate.common} Hz`"></p>
+                    </div>
+
+                    <!-- SNR -->
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-sm text-gray-600 dark:text-gray-300">Signal-to-Noise Ratio</span>
+                            <span class="text-sm font-medium text-gray-900 dark:text-white"
+                                x-text="`${metrics.snr.avg} dB avg`"></span>
+                        </div>
+                        <div class="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <div class="h-full bg-gradient-to-r from-green-500 to-green-300 rounded-full"
+                                :style="`width: ${Math.min(100, metrics.snr.avg * 2)}%`"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Issues List -->
+            <div
+                class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                    <h3 class="font-semibold text-gray-900 dark:text-white">🔍 Detected Issues</h3>
+                    <span
+                        class="px-2 py-1 text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full"
+                        x-text="`${issues.length} issues`"></span>
+                </div>
+                <div class="divide-y divide-gray-200 dark:divide-gray-700 max-h-80 overflow-y-auto">
+                    <template x-if="issues.length === 0">
+                        <div class="p-8 text-center text-gray-500">
+                            <div class="text-4xl mb-2">🎉</div>
+                            <p>No issues detected!</p>
+                        </div>
+                    </template>
+                    <template x-for="issue in issues" :key="issue.file">
+                        <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <span class="text-xs px-2 py-0.5 rounded-full font-medium" :class="{
+                                              'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300': issue.severity === 'error',
+                                              'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300': issue.severity === 'warning',
+                                              'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300': issue.severity === 'info'
+                                          }" x-text="issue.severity"></span>
+                                    <p class="font-medium text-gray-900 dark:text-white mt-1" x-text="issue.message">
+                                    </p>
+                                    <p class="text-xs text-gray-500 mt-1" x-text="issue.file"></p>
+                                </div>
+                                <button class="text-xs text-primary-600 hover:underline">Fix</button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Distribution Charts -->
+        <div class="space-y-6">
+            <!-- Wake Word Distribution -->
+            <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                <h3 class="font-semibold text-gray-900 dark:text-white mb-4">📈 Wake Word Distribution</h3>
+                <div class="space-y-3">
+                    <template x-for="word in distribution" :key="word.name">
+                        <div>
+                            <div class="flex items-center justify-between text-sm mb-1">
+                                <span class="text-gray-600 dark:text-gray-300" x-text="word.name"></span>
+                                <span class="font-medium text-gray-900 dark:text-white" x-text="word.count"></span>
+                            </div>
+                            <div class="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                <div class="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full"
+                                    :style="`width: ${(word.count / maxCount) * 100}%`"></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Recommendations -->
+            <div class="bg-gradient-to-br from-primary-500 to-accent-500 rounded-xl p-6 text-white">
+                <h3 class="font-semibold mb-4">💡 Recommendations</h3>
+                <ul class="space-y-3 text-sm">
+                    <template x-for="rec in recommendations" :key="rec">
+                        <li class="flex items-start">
+                            <span class="mr-2">→</span>
+                            <span x-text="rec"></span>
+                        </li>
+                    </template>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function qualityDashboard() {
+        return {
+            datasetPath: './output',
+            isValidating: false,
+            healthScore: 87,
+
+            stats: {
+                totalFiles: 250,
+                validFiles: 235,
+                issues: 15
+            },
+
+            metrics: {
+                duration: { min: 0.3, max: 2.1, avg: 0.8 },
+                sampleRate: { consistent: true, common: 16000 },
+                snr: { avg: 35, min: 18, max: 52 }
+            },
+
+            issues: [
+                { file: 'hey_assistant/sample_042.wav', message: 'Duration too short (0.2s)', severity: 'warning' },
+                { file: 'hey_assistant/sample_089.wav', message: 'Clipping detected', severity: 'error' },
+                { file: 'hello_world/sample_015.wav', message: 'Low SNR (12dB)', severity: 'warning' }
+            ],
+
+            distribution: [
+                { name: 'hey assistant', count: 125 },
+                { name: 'hello world', count: 75 },
+                { name: 'ok computer', count: 50 }
+            ],
+
+            recommendations: [
+                'Consider adding more samples for "ok computer"',
+                'Apply noise augmentation to improve robustness',
+                'Review 3 files with clipping issues'
+            ],
+
+            get maxCount() {
+                return Math.max(...this.distribution.map(d => d.count));
+            },
+
+            async runValidation() {
+                this.isValidating = true;
+                // Simulate validation delay
+                await new Promise(r => setTimeout(r, 2000));
+                this.isValidating = false;
+                alert('Validation complete! (Connect to API for real results)');
+            }
+        };
+    }
+</script>
+{% endblock %}

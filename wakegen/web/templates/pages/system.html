@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+
+{% block title %}System{% endblock %}
+
+{% block content %}
+<!--
+    SYSTEM STATUS PAGE
+    ==================
+    View system information and GPU status.
+    Features:
+    - GPU availability and memory
+    - Provider dependency status
+    - Cache statistics
+    - Environment info
+-->
+
+<div x-data="systemStatus()" x-init="init()">
+    <!-- Page Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">System Status</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Monitor system resources and dependencies
+            </p>
+        </div>
+        <button @click="refresh()"
+            class="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors">
+            🔄 Refresh
+        </button>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <!-- Status Cards -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+            <div class="flex items-center">
+                <div
+                    class="w-12 h-12 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-2xl">
+                    💻
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Python</p>
+                    <p class="font-semibold text-gray-900 dark:text-white" x-text="system.pythonVersion"></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+            <div class="flex items-center">
+                <div class="w-12 h-12 rounded-lg flex items-center justify-center text-2xl"
+                    :class="gpu.available ? 'bg-green-100 dark:bg-green-900/30' : 'bg-yellow-100 dark:bg-yellow-900/30'">
+                    🎮
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">GPU</p>
+                    <p class="font-semibold" :class="gpu.available ? 'text-green-600' : 'text-yellow-600'"
+                        x-text="gpu.available ? gpu.name : 'Not Available'"></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+            <div class="flex items-center">
+                <div
+                    class="w-12 h-12 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-2xl">
+                    📦
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Cache</p>
+                    <p class="font-semibold text-gray-900 dark:text-white" x-text="cache.size"></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+            <div class="flex items-center">
+                <div
+                    class="w-12 h-12 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-2xl">
+                    🔌
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Providers</p>
+                    <p class="font-semibold text-gray-900 dark:text-white"
+                        x-text="`${providers.available}/${providers.total}`"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- GPU Details -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                <h3 class="font-semibold text-gray-900 dark:text-white">🎮 GPU Status</h3>
+            </div>
+            <div class="p-6">
+                <template x-if="gpu.available">
+                    <div class="space-y-4">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm text-gray-600 dark:text-gray-300">Device</span>
+                                <span class="font-medium text-gray-900 dark:text-white" x-text="gpu.name"></span>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm text-gray-600 dark:text-gray-300">Memory Usage</span>
+                                <span class="text-sm text-gray-500"
+                                    x-text="`${gpu.usedMemory} / ${gpu.totalMemory}`"></span>
+                            </div>
+                            <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                <div class="h-full bg-gradient-to-r from-green-500 to-green-400 rounded-full transition-all"
+                                    :style="`width: ${gpu.memoryPercent}%`"
+                                    :class="{'from-yellow-500 to-yellow-400': gpu.memoryPercent > 70, 'from-red-500 to-red-400': gpu.memoryPercent > 90}">
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm text-gray-600 dark:text-gray-300">Utilization</span>
+                                <span class="text-sm text-gray-500" x-text="`${gpu.utilization}%`"></span>
+                            </div>
+                            <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                <div class="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all"
+                                    :style="`width: ${gpu.utilization}%`"></div>
+                            </div>
+                        </div>
+                        <div class="pt-4 border-t border-gray-200 dark:border-gray-700">
+                            <p class="text-xs text-gray-500">
+                                CUDA Version: <span class="font-mono" x-text="gpu.cudaVersion"></span>
+                            </p>
+                        </div>
+                    </div>
+                </template>
+                <template x-if="!gpu.available">
+                    <div class="text-center py-8">
+                        <div class="text-4xl mb-4">💻</div>
+                        <p class="text-gray-600 dark:text-gray-300 font-medium">GPU Not Detected</p>
+                        <p class="text-sm text-gray-500 mt-2">
+                            Using CPU for inference. GPU providers like Coqui XTTS will be slower.
+                        </p>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Provider Dependencies -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                <h3 class="font-semibold text-gray-900 dark:text-white">🔌 Provider Status</h3>
+            </div>
+            <div class="divide-y divide-gray-200 dark:divide-gray-700 max-h-80 overflow-y-auto" hx-get="/api/providers"
+                hx-trigger="load" hx-swap="innerHTML">
+                <div class="p-4 text-center text-gray-500">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Environment Variables -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                <h3 class="font-semibold text-gray-900 dark:text-white">🔐 Environment</h3>
+            </div>
+            <div class="p-4">
+                <table class="w-full text-sm">
+                    <template x-for="env in environment" :key="env.name">
+                        <tr class="border-b border-gray-100 dark:border-gray-700 last:border-0">
+                            <td class="py-2 text-gray-600 dark:text-gray-400 font-mono" x-text="env.name"></td>
+                            <td class="py-2 text-right">
+                                <span x-show="env.set" class="text-green-600">✓ Set</span>
+                                <span x-show="!env.set" class="text-gray-400">Not set</span>
+                            </td>
+                        </tr>
+                    </template>
+                </table>
+            </div>
+        </div>
+
+        <!-- Cache Management -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                <h3 class="font-semibold text-gray-900 dark:text-white">📦 Cache Management</h3>
+            </div>
+            <div class="p-6">
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="text-center p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                        <p class="text-2xl font-bold text-gray-900 dark:text-white" x-text="cache.size"></p>
+                        <p class="text-xs text-gray-500">Cache Size</p>
+                    </div>
+                    <div class="text-center p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                        <p class="text-2xl font-bold text-gray-900 dark:text-white" x-text="cache.entries"></p>
+                        <p class="text-xs text-gray-500">Entries</p>
+                    </div>
+                </div>
+                <div class="flex space-x-2">
+                    <button @click="clearCache('old')"
+                        class="flex-1 px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors">
+                        Clear Old
+                    </button>
+                    <button @click="clearCache('all')"
+                        class="flex-1 px-4 py-2 text-sm bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-800/30 text-red-700 dark:text-red-300 rounded-lg transition-colors">
+                        Clear All
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function systemStatus() {
+        return {
+            system: {
+                pythonVersion: '3.11.0'
+            },
+
+            gpu: {
+                available: true,
+                name: 'NVIDIA RTX 3080',
+                totalMemory: '10 GB',
+                usedMemory: '2.4 GB',
+                memoryPercent: 24,
+                utilization: 15,
+                cudaVersion: '12.1'
+            },
+
+            cache: {
+                size: '156 MB',
+                entries: 423
+            },
+
+            providers: {
+                available: 3,
+                total: 11
+            },
+
+            environment: [
+                { name: 'OPENAI_API_KEY', set: true },
+                { name: 'ELEVENLABS_API_KEY', set: false },
+                { name: 'MINIMAX_API_KEY', set: true },
+                { name: 'GOOGLE_APPLICATION_CREDENTIALS', set: false }
+            ],
+
+            async init() {
+                // Try to load real GPU status from API
+                try {
+                    const response = await fetch('/api/health');
+                    const health = await response.json();
+                    // Update with real data when API provides it
+                } catch (e) {
+                    console.log('Using demo data');
+                }
+            },
+
+            async refresh() {
+                await this.init();
+            },
+
+            async clearCache(type) {
+                if (type === 'all' && !confirm('Clear all cached audio? This cannot be undone.')) {
+                    return;
+                }
+                alert(`Cache ${type === 'all' ? 'cleared' : 'cleaned'}! (Connect to API for real cache management)`);
+            }
+        };
+    }
+
+    // Custom handler for providers HTMX load
+    document.body.addEventListener('htmx:afterOnLoad', function (event) {
+        if (!event.detail.pathInfo.requestPath.includes('/api/providers')) return;
+        if (event.detail.target.closest('.lg\\:col-span-2')) return; // Skip main providers page handler
+
+        try {
+            const providers = JSON.parse(event.detail.xhr.responseText);
+            event.detail.target.innerHTML = providers.map(p => `
+                <div class="p-3 flex items-center justify-between">
+                    <div class="flex items-center">
+                        <span class="w-2 h-2 rounded-full mr-3 ${p.is_available ? 'bg-green-500' : 'bg-gray-400'}"></span>
+                        <span class="text-sm font-medium text-gray-900 dark:text-white">${p.name}</span>
+                    </div>
+                    <span class="text-xs ${p.is_available ? 'text-green-600' : 'text-gray-400'}">
+                        ${p.is_available ? 'Ready' : 'Unavailable'}
+                    </span>
+                </div>
+            `).join('');
+        } catch (e) {
+            console.error('Error parsing providers:', e);
+        }
+    });
+</script>
+{% endblock %}

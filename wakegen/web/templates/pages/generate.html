@@ -1,0 +1,415 @@
+{% extends "base.html" %}
+
+{% block title %}Generate{% endblock %}
+
+{% block content %}
+<!--
+    GENERATION PAGE
+    ===============
+    This page allows users to create new audio generation jobs.
+    Features:
+    - Quick generation form
+    - Provider/voice selection
+    - Real-time progress tracking
+    - Job history
+-->
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Generation Form -->
+    <div class="lg:col-span-2">
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">New Generation</h2>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    Generate wake word audio samples using TTS providers
+                </p>
+            </div>
+
+            <form id="generation-form" class="p-6 space-y-6" x-data="generationForm()">
+                <!-- Wake Words Input -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Wake Words
+                    </label>
+                    <div class="space-y-2">
+                        <template x-for="(word, index) in wakeWords" :key="index">
+                            <div class="flex items-center space-x-2">
+                                <input type="text" x-model="wakeWords[index]" placeholder="e.g., hey assistant"
+                                    class="flex-1 px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                                <button type="button" @click="removeWord(index)" x-show="wakeWords.length > 1"
+                                    class="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg">
+                                    ✕
+                                </button>
+                            </div>
+                        </template>
+                        <button type="button" @click="addWord()"
+                            class="text-sm text-primary-600 dark:text-primary-400 hover:underline">
+                            + Add another wake word
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Provider Selection -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        TTS Provider
+                    </label>
+                    <select x-model="provider" @change="loadVoices()"
+                        class="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500">
+                        <option value="">Loading providers...</option>
+                    </select>
+                </div>
+
+                <!-- Voice Selection -->
+                <div x-show="voices.length > 0" x-transition>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Voice
+                    </label>
+                    <select x-model="voice"
+                        class="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500">
+                        <option value="">Auto-select</option>
+                        <template x-for="v in voices" :key="v.id">
+                            <option :value="v.id" x-text="`${v.name} (${v.language})`"></option>
+                        </template>
+                    </select>
+                </div>
+
+                <!-- Sample Count -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Samples per Wake Word
+                    </label>
+                    <div class="flex items-center space-x-4">
+                        <input type="range" x-model="count" min="1" max="100"
+                            class="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                        <input type="number" x-model="count" min="1" max="1000"
+                            class="w-20 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white text-center">
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Total: <span x-text="wakeWords.filter(w => w.trim()).length * count"></span> samples
+                    </p>
+                </div>
+
+                <!-- Output Directory -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Output Directory
+                    </label>
+                    <input type="text" x-model="outputDir" placeholder="./output"
+                        class="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-primary-500">
+                </div>
+
+                <!-- Submit Button -->
+                <div class="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <div class="text-sm text-gray-500 dark:text-gray-400">
+                        <span x-show="!isGenerating">Ready to generate</span>
+                        <span x-show="isGenerating" class="flex items-center">
+                            <div
+                                class="spinner w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full mr-2">
+                            </div>
+                            Generating...
+                        </span>
+                    </div>
+                    <button type="submit" :disabled="isGenerating || !canSubmit"
+                        class="px-6 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors">
+                        <span x-show="!isGenerating">⚡ Start Generation</span>
+                        <span x-show="isGenerating">Generating...</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Active Job Progress -->
+        <div x-show="activeJob" x-transition class="mt-6">
+            <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="font-semibold text-gray-900 dark:text-white">Generation Progress</h3>
+                    <span class="px-2 py-1 text-xs font-medium rounded-full" :class="{
+                              'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300': activeJob?.status === 'pending',
+                              'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300': activeJob?.status === 'running',
+                              'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300': activeJob?.status === 'completed',
+                              'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300': activeJob?.status === 'failed'
+                          }" x-text="activeJob?.status?.toUpperCase()">
+                    </span>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="relative pt-1">
+                    <div class="flex mb-2 items-center justify-between">
+                        <div>
+                            <span class="text-xs font-semibold inline-block text-primary-600 dark:text-primary-400"
+                                x-text="`${activeJob?.progress_percentage?.toFixed(1) || 0}%`">
+                            </span>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-xs font-semibold inline-block text-gray-600 dark:text-gray-400"
+                                x-text="`${activeJob?.completed_samples || 0} / ${activeJob?.total_samples || 0}`">
+                            </span>
+                        </div>
+                    </div>
+                    <div class="overflow-hidden h-3 text-xs flex rounded-full bg-gray-200 dark:bg-gray-700">
+                        <div class="transition-all duration-500 shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-gradient-to-r from-primary-500 to-accent-500"
+                            :style="`width: ${activeJob?.progress_percentage || 0}%`">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Current Status -->
+                <div class="mt-4 text-sm text-gray-600 dark:text-gray-400">
+                    <p x-show="activeJob?.current_word">
+                        Current word: <span class="font-medium text-gray-900 dark:text-white"
+                            x-text="activeJob?.current_word"></span>
+                    </p>
+                    <p x-show="activeJob?.current_file" class="text-xs mt-1">
+                        File: <code class="text-gray-500" x-text="activeJob?.current_file"></code>
+                    </p>
+                </div>
+
+                <!-- Cancel Button -->
+                <div class="mt-4" x-show="activeJob?.status === 'running' || activeJob?.status === 'pending'">
+                    <button @click="cancelJob()" class="text-sm text-red-600 dark:text-red-400 hover:underline">
+                        Cancel Generation
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Job History Sidebar -->
+    <div class="lg:col-span-1">
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Recent Jobs</h2>
+            </div>
+            <div id="job-history" class="divide-y divide-gray-200 dark:divide-gray-700 max-h-96 overflow-y-auto">
+                <!-- Jobs loaded via JavaScript -->
+                <div class="p-4 text-center text-gray-500 dark:text-gray-400 text-sm">
+                    Loading...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    /**
+     * Generation Form Alpine.js Component
+     * Manages form state, provider/voice loading, and job submission
+     */
+    function generationForm() {
+        return {
+            // Form fields
+            wakeWords: [''],
+            provider: '',
+            voice: '',
+            count: 10,
+            outputDir: './output',
+
+            // State
+            providers: [],
+            voices: [],
+            isGenerating: false,
+            activeJob: null,
+            pollInterval: null,
+
+            // Computed
+            get canSubmit() {
+                return this.wakeWords.some(w => w.trim()) && this.provider;
+            },
+
+            // Lifecycle
+            async init() {
+                await this.loadProviders();
+                await this.loadRecentJobs();
+            },
+
+            // Wake word management
+            addWord() {
+                this.wakeWords.push('');
+            },
+            removeWord(index) {
+                this.wakeWords.splice(index, 1);
+            },
+
+            // Load providers from API
+            async loadProviders() {
+                try {
+                    const response = await fetch('/api/providers?available_only=true');
+                    this.providers = await response.json();
+
+                    // Update select element
+                    const select = this.$el.querySelector('select[x-model="provider"]');
+                    select.innerHTML = '<option value="">Select a provider</option>';
+                    this.providers.forEach(p => {
+                        const opt = document.createElement('option');
+                        opt.value = p.id;
+                        opt.textContent = p.name;
+                        select.appendChild(opt);
+                    });
+
+                    // Auto-select first available
+                    if (this.providers.length > 0) {
+                        this.provider = this.providers[0].id;
+                        await this.loadVoices();
+                    }
+                } catch (e) {
+                    console.error('Error loading providers:', e);
+                }
+            },
+
+            // Load voices for selected provider
+            async loadVoices() {
+                if (!this.provider) {
+                    this.voices = [];
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`/api/providers/${this.provider}/voices?limit=50`);
+                    this.voices = await response.json();
+                } catch (e) {
+                    console.error('Error loading voices:', e);
+                    this.voices = [];
+                }
+            },
+
+            // Load recent jobs
+            async loadRecentJobs() {
+                try {
+                    const response = await fetch('/api/generate/recent?limit=10');
+                    const jobs = await response.json();
+
+                    const container = document.getElementById('job-history');
+                    if (jobs.length === 0) {
+                        container.innerHTML = '<div class="p-4 text-center text-gray-500 dark:text-gray-400 text-sm">No recent jobs</div>';
+                        return;
+                    }
+
+                    container.innerHTML = jobs.map(job => `
+                        <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onclick="viewJob('${job.id}')">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="font-medium text-gray-900 dark:text-white text-sm">${job.wake_words.join(', ')}</span>
+                                <span class="px-2 py-0.5 text-xs rounded-full ${this.getStatusClass(job.status)}">${job.status}</span>
+                            </div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">
+                                ${job.completed_samples}/${job.total_samples} samples
+                            </div>
+                        </div>
+                    `).join('');
+                } catch (e) {
+                    console.error('Error loading jobs:', e);
+                }
+            },
+
+            getStatusClass(status) {
+                const classes = {
+                    pending: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300',
+                    running: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+                    completed: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300',
+                    failed: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
+                    cancelled: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                };
+                return classes[status] || classes.pending;
+            },
+
+            // Submit generation job
+            async submitForm(event) {
+                event.preventDefault();
+
+                const validWords = this.wakeWords.filter(w => w.trim());
+                if (validWords.length === 0) {
+                    alert('Please enter at least one wake word');
+                    return;
+                }
+
+                this.isGenerating = true;
+
+                try {
+                    const response = await fetch('/api/generate/start', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            wake_words: validWords,
+                            count: parseInt(this.count),
+                            provider: this.provider,
+                            voice_id: this.voice || null,
+                            output_dir: this.outputDir
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.job_id) {
+                        this.activeJob = {
+                            id: result.job_id,
+                            status: result.status,
+                            progress_percentage: 0,
+                            completed_samples: 0,
+                            total_samples: validWords.length * this.count
+                        };
+
+                        // Start polling for updates
+                        this.startPolling(result.job_id);
+                    }
+                } catch (e) {
+                    console.error('Error starting generation:', e);
+                    alert('Failed to start generation: ' + e.message);
+                    this.isGenerating = false;
+                }
+            },
+
+            // Poll for job updates
+            startPolling(jobId) {
+                if (this.pollInterval) {
+                    clearInterval(this.pollInterval);
+                }
+
+                this.pollInterval = setInterval(async () => {
+                    try {
+                        const response = await fetch(`/api/generate/status/${jobId}`);
+                        const status = await response.json();
+
+                        this.activeJob = status;
+
+                        // Stop polling if job is done
+                        if (['completed', 'failed', 'cancelled'].includes(status.status)) {
+                            clearInterval(this.pollInterval);
+                            this.pollInterval = null;
+                            this.isGenerating = false;
+                            this.loadRecentJobs();
+                        }
+                    } catch (e) {
+                        console.error('Error polling status:', e);
+                    }
+                }, 1000); // Poll every second
+            },
+
+            // Cancel current job
+            async cancelJob() {
+                if (!this.activeJob?.id) return;
+
+                try {
+                    await fetch(`/api/generate/cancel/${this.activeJob.id}`, { method: 'POST' });
+                    this.activeJob.status = 'cancelled';
+                    this.isGenerating = false;
+                    if (this.pollInterval) {
+                        clearInterval(this.pollInterval);
+                        this.pollInterval = null;
+                    }
+                } catch (e) {
+                    console.error('Error cancelling job:', e);
+                }
+            }
+        };
+    }
+
+    // Initialize form on page load
+    document.getElementById('generation-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        this.__x.$data.submitForm(e);
+    });
+</script>
+{% endblock %}

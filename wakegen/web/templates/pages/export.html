@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+
+{% block title %}Export{% endblock %}
+
+{% block content %}
+<!--
+    EXPORT PAGE
+    ===========
+    Export datasets to various training formats.
+    Features:
+    - Format selection
+    - Train/val/test split configuration
+    - Export progress
+    - Download links
+-->
+
+<div x-data="exportManager()">
+    <!-- Page Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Export Dataset</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Export your dataset to training-ready formats
+            </p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Export Configuration -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Source Selection -->
+            <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                <h3 class="font-semibold text-gray-900 dark:text-white mb-4">📁 Source Dataset</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Input
+                            Directory</label>
+                        <div class="flex space-x-2">
+                            <input type="text" x-model="config.inputDir"
+                                class="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg">
+                            <button
+                                class="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg">
+                                Browse
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-400">
+                        <span>📊 <span x-text="stats.totalFiles"></span> files</span>
+                        <span>⏱️ <span x-text="stats.totalDuration"></span> total</span>
+                        <span>💾 <span x-text="stats.totalSize"></span></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Format Selection -->
+            <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                <h3 class="font-semibold text-gray-900 dark:text-white mb-4">📦 Export Format</h3>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <template x-for="format in formats" :key="format.id">
+                        <button @click="config.format = format.id"
+                            :class="{'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/20': config.format === format.id}"
+                            class="p-4 text-left bg-gray-50 dark:bg-gray-700 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
+                            <div class="text-xl mb-2" x-text="format.icon"></div>
+                            <div class="font-medium text-gray-900 dark:text-white text-sm" x-text="format.name"></div>
+                            <div class="text-xs text-gray-500 mt-1" x-text="format.description"></div>
+                        </button>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Split Configuration -->
+            <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                <h3 class="font-semibold text-gray-900 dark:text-white mb-4">✂️ Dataset Split</h3>
+                <div class="space-y-6">
+                    <!-- Visual Split -->
+                    <div class="h-8 flex rounded-lg overflow-hidden">
+                        <div class="bg-green-500 flex items-center justify-center text-white text-xs font-medium"
+                            :style="`width: ${config.split.train * 100}%`">
+                            Train
+                        </div>
+                        <div class="bg-yellow-500 flex items-center justify-center text-white text-xs font-medium"
+                            :style="`width: ${config.split.val * 100}%`">
+                            Val
+                        </div>
+                        <div class="bg-blue-500 flex items-center justify-center text-white text-xs font-medium"
+                            :style="`width: ${config.split.test * 100}%`">
+                            Test
+                        </div>
+                    </div>
+
+                    <!-- Sliders -->
+                    <div class="grid grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Train: <span class="text-green-600"
+                                    x-text="`${(config.split.train * 100).toFixed(0)}%`"></span>
+                            </label>
+                            <input type="range" x-model="config.split.train" min="0.5" max="0.95" step="0.05"
+                                @input="adjustSplit('train')" class="w-full">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Val: <span class="text-yellow-600"
+                                    x-text="`${(config.split.val * 100).toFixed(0)}%`"></span>
+                            </label>
+                            <input type="range" x-model="config.split.val" min="0.05" max="0.3" step="0.05"
+                                @input="adjustSplit('val')" class="w-full">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Test: <span class="text-blue-600"
+                                    x-text="`${(config.split.test * 100).toFixed(0)}%`"></span>
+                            </label>
+                            <input type="range" x-model="config.split.test" min="0.05" max="0.3" step="0.05"
+                                @input="adjustSplit('test')" class="w-full">
+                        </div>
+                    </div>
+
+                    <!-- Stratify Option -->
+                    <label class="flex items-center cursor-pointer">
+                        <input type="checkbox" x-model="config.stratify"
+                            class="w-4 h-4 text-primary-600 rounded focus:ring-primary-500">
+                        <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                            Stratify by wake word (recommended)
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Output Options -->
+            <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                <h3 class="font-semibold text-gray-900 dark:text-white mb-4">⚙️ Output Options</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Output
+                            Directory</label>
+                        <input type="text" x-model="config.outputDir"
+                            class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg">
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <label class="flex items-center cursor-pointer">
+                            <input type="checkbox" x-model="config.generateManifest"
+                                class="w-4 h-4 text-primary-600 rounded focus:ring-primary-500">
+                            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Generate manifest file</span>
+                        </label>
+                        <label class="flex items-center cursor-pointer">
+                            <input type="checkbox" x-model="config.copyFiles"
+                                class="w-4 h-4 text-primary-600 rounded focus:ring-primary-500">
+                            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Copy files (vs symlink)</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Export Summary & Actions -->
+        <div class="space-y-6">
+            <!-- Summary Card -->
+            <div class="bg-gradient-to-br from-primary-500 to-accent-500 rounded-xl p-6 text-white">
+                <h3 class="font-semibold mb-4">📊 Export Summary</h3>
+                <div class="space-y-3 text-sm">
+                    <div class="flex items-center justify-between">
+                        <span class="opacity-80">Format</span>
+                        <span class="font-medium" x-text="formats.find(f => f.id === config.format)?.name"></span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="opacity-80">Train samples</span>
+                        <span x-text="Math.round(stats.totalFiles * config.split.train)"></span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="opacity-80">Val samples</span>
+                        <span x-text="Math.round(stats.totalFiles * config.split.val)"></span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="opacity-80">Test samples</span>
+                        <span x-text="Math.round(stats.totalFiles * config.split.test)"></span>
+                    </div>
+                </div>
+                <button @click="startExport()" :disabled="isExporting"
+                    class="w-full mt-6 px-4 py-3 bg-white/20 hover:bg-white/30 disabled:bg-white/10 backdrop-blur rounded-lg font-medium transition-colors">
+                    <span x-show="!isExporting">📤 Start Export</span>
+                    <span x-show="isExporting">Exporting...</span>
+                </button>
+            </div>
+
+            <!-- Recent Exports -->
+            <div
+                class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                    <h3 class="font-semibold text-gray-900 dark:text-white">📑 Recent Exports</h3>
+                </div>
+                <div class="divide-y divide-gray-200 dark:divide-gray-700">
+                    <template x-for="exp in recentExports" :key="exp.id">
+                        <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="font-medium text-gray-900 dark:text-white text-sm"
+                                    x-text="exp.format"></span>
+                                <span class="text-xs text-gray-500" x-text="exp.date"></span>
+                            </div>
+                            <p class="text-xs text-gray-500" x-text="exp.path"></p>
+                            <div class="mt-2">
+                                <a href="#" class="text-xs text-primary-600 hover:underline">Download</a>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function exportManager() {
+        return {
+            isExporting: false,
+
+            config: {
+                inputDir: './output',
+                outputDir: './export',
+                format: 'openwakeword',
+                split: { train: 0.8, val: 0.1, test: 0.1 },
+                stratify: true,
+                generateManifest: true,
+                copyFiles: false
+            },
+
+            stats: {
+                totalFiles: 250,
+                totalDuration: '3m 42s',
+                totalSize: '45.2 MB'
+            },
+
+            formats: [
+                { id: 'openwakeword', name: 'OpenWakeWord', icon: '🎯', description: 'For openWakeWord training' },
+                { id: 'mycroft', name: 'Mycroft Precise', icon: '🔮', description: 'Mycroft format' },
+                { id: 'picovoice', name: 'Picovoice', icon: '🔊', description: 'Picovoice Porcupine' },
+                { id: 'tensorflow', name: 'TensorFlow', icon: '🧠', description: 'TFRecord format' },
+                { id: 'pytorch', name: 'PyTorch', icon: '🔥', description: 'Torch dataset' },
+                { id: 'huggingface', name: 'HuggingFace', icon: '🤗', description: 'HF datasets format' }
+            ],
+
+            recentExports: [
+                { id: 1, format: 'OpenWakeWord', path: './export/openwakeword/', date: 'Dec 5' },
+                { id: 2, format: 'PyTorch', path: './export/pytorch/', date: 'Dec 3' }
+            ],
+
+            adjustSplit(changed) {
+                // Keep splits summing to 1.0
+                const total = this.config.split.train + this.config.split.val + this.config.split.test;
+                if (Math.abs(total - 1.0) > 0.01) {
+                    // Adjust the others proportionally
+                }
+            },
+
+            async startExport() {
+                this.isExporting = true;
+                await new Promise(r => setTimeout(r, 2000));
+                this.isExporting = false;
+                alert('Export complete! (Connect to API for real export)');
+            }
+        };
+    }
+</script>
+{% endblock %}

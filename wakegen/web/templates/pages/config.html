@@ -1,0 +1,378 @@
+{% extends "base.html" %}
+
+{% block title %}Configuration{% endblock %}
+
+{% block content %}
+<!--
+    CONFIGURATION EDITOR PAGE
+    =========================
+    Visual editor for wakegen.yaml configuration files.
+    Features:
+    - Form-based editing with sections
+    - Real-time YAML preview
+    - Validation feedback
+    - Load/Save functionality
+-->
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6" x-data="configEditor()">
+    <!-- Configuration Form -->
+    <div class="space-y-6">
+        <!-- Header with actions -->
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Configuration Editor</h1>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    Create and edit wakegen.yaml configuration files
+                </p>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button @click="loadConfig()"
+                    class="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+                    📂 Load
+                </button>
+                <button @click="saveConfig()" :disabled="!isValid"
+                    class="px-3 py-2 text-sm font-medium bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 text-white rounded-lg transition-colors">
+                    💾 Save
+                </button>
+            </div>
+        </div>
+
+        <!-- Section: Project -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <button @click="sections.project = !sections.project"
+                class="w-full p-4 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                <span class="font-semibold text-gray-900 dark:text-white">📋 Project Info</span>
+                <span x-text="sections.project ? '▼' : '▶'" class="text-gray-400"></span>
+            </button>
+            <div x-show="sections.project" x-collapse
+                class="p-4 pt-0 space-y-4 border-t border-gray-200 dark:border-gray-700">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Project Name</label>
+                    <input type="text" x-model="config.project.name"
+                        class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Version</label>
+                    <input type="text" x-model="config.project.version"
+                        class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                    <textarea x-model="config.project.description" rows="2"
+                        class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section: Generation -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <button @click="sections.generation = !sections.generation"
+                class="w-full p-4 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                <span class="font-semibold text-gray-900 dark:text-white">⚡ Generation Settings</span>
+                <span x-text="sections.generation ? '▼' : '▶'" class="text-gray-400"></span>
+            </button>
+            <div x-show="sections.generation" x-collapse
+                class="p-4 pt-0 space-y-4 border-t border-gray-200 dark:border-gray-700">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Wake Words</label>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">One per line</p>
+                    <textarea x-model="wakeWordsText" rows="3" @input="updateWakeWords()"
+                        placeholder="hey assistant&#10;hello world"
+                        class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white font-mono text-sm"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Count per
+                            Word</label>
+                        <input type="number" x-model.number="config.generation.count" min="1" max="10000"
+                            class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sample
+                            Rate</label>
+                        <select x-model.number="config.generation.sample_rate"
+                            class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white">
+                            <option value="16000">16000 Hz</option>
+                            <option value="22050">22050 Hz</option>
+                            <option value="44100">44100 Hz</option>
+                            <option value="48000">48000 Hz</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Output
+                        Directory</label>
+                    <input type="text" x-model="config.generation.output_dir"
+                        class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white">
+                </div>
+            </div>
+        </div>
+
+        <!-- Section: Providers -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <button @click="sections.providers = !sections.providers"
+                class="w-full p-4 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                <span class="font-semibold text-gray-900 dark:text-white">🎙️ Providers</span>
+                <span x-text="sections.providers ? '▼' : '▶'" class="text-gray-400"></span>
+            </button>
+            <div x-show="sections.providers" x-collapse
+                class="p-4 pt-0 space-y-4 border-t border-gray-200 dark:border-gray-700">
+                <template x-for="(provider, index) in config.providers" :key="index">
+                    <div class="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                        <div class="flex items-center justify-between mb-2">
+                            <select x-model="provider.type"
+                                class="px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-sm">
+                                <option value="edge_tts">Edge TTS</option>
+                                <option value="piper">Piper</option>
+                                <option value="coqui_tts">Coqui TTS</option>
+                                <option value="kokoro">Kokoro</option>
+                            </select>
+                            <button @click="removeProvider(index)"
+                                class="text-red-500 hover:text-red-700 text-sm">Remove</button>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <label class="text-xs text-gray-500">Weight:</label>
+                            <input type="number" x-model.number="provider.weight" min="0" max="1" step="0.1"
+                                class="w-20 px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-sm">
+                        </div>
+                    </div>
+                </template>
+                <button @click="addProvider()"
+                    class="w-full py-2 text-sm text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors">
+                    + Add Provider
+                </button>
+            </div>
+        </div>
+
+        <!-- Section: Export -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <button @click="sections.export = !sections.export"
+                class="w-full p-4 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                <span class="font-semibold text-gray-900 dark:text-white">📦 Export Settings</span>
+                <span x-text="sections.export ? '▼' : '▶'" class="text-gray-400"></span>
+            </button>
+            <div x-show="sections.export" x-collapse
+                class="p-4 pt-0 space-y-4 border-t border-gray-200 dark:border-gray-700">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Export Format</label>
+                    <select x-model="config.export.format"
+                        class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg">
+                        <option value="openwakeword">OpenWakeWord</option>
+                        <option value="mycroft">Mycroft Precise</option>
+                        <option value="picovoice">Picovoice</option>
+                        <option value="tensorflow">TensorFlow</option>
+                        <option value="pytorch">PyTorch</option>
+                        <option value="huggingface">HuggingFace</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Train/Val/Test
+                        Split</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <div>
+                            <label class="text-xs text-gray-500">Train</label>
+                            <input type="number" x-model.number="config.export.split.train" min="0" max="1" step="0.05"
+                                class="w-full px-2 py-1 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-sm">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500">Val</label>
+                            <input type="number" x-model.number="config.export.split.val" min="0" max="1" step="0.05"
+                                class="w-full px-2 py-1 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-sm">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500">Test</label>
+                            <input type="number" x-model.number="config.export.split.test" min="0" max="1" step="0.05"
+                                class="w-full px-2 py-1 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-sm">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- YAML Preview Panel -->
+    <div class="lg:sticky lg:top-6 h-fit">
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h3 class="font-semibold text-gray-900 dark:text-white">YAML Preview</h3>
+                <div class="flex items-center space-x-2">
+                    <span x-show="isValid" class="text-green-500 text-sm">✓ Valid</span>
+                    <span x-show="!isValid" class="text-red-500 text-sm">✗ Invalid</span>
+                    <button @click="copyYaml()"
+                        class="px-2 py-1 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+                        📋 Copy
+                    </button>
+                </div>
+            </div>
+            <div class="p-4 max-h-[70vh] overflow-y-auto">
+                <pre class="text-sm text-gray-800 dark:text-gray-200 font-mono whitespace-pre-wrap"
+                    x-text="yamlPreview"></pre>
+            </div>
+
+            <!-- Validation Errors -->
+            <div x-show="errors.length > 0"
+                class="p-4 border-t border-gray-200 dark:border-gray-700 bg-red-50 dark:bg-red-900/20">
+                <h4 class="text-sm font-medium text-red-700 dark:text-red-300 mb-2">Validation Errors</h4>
+                <ul class="text-xs text-red-600 dark:text-red-400 list-disc list-inside">
+                    <template x-for="error in errors">
+                        <li x-text="error"></li>
+                    </template>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    /**
+     * Configuration Editor Alpine.js Component
+     */
+    function configEditor() {
+        return {
+            // Collapsible sections state
+            sections: {
+                project: true,
+                generation: true,
+                providers: true,
+                export: false
+            },
+
+            // Configuration object
+            config: {
+                project: {
+                    name: 'my-wake-word-project',
+                    version: '1.0.0',
+                    description: 'Wake word dataset for smart assistant'
+                },
+                generation: {
+                    wake_words: ['hey assistant'],
+                    count: 100,
+                    sample_rate: 16000,
+                    output_dir: './output'
+                },
+                providers: [
+                    { type: 'edge_tts', weight: 1.0 }
+                ],
+                export: {
+                    format: 'openwakeword',
+                    split: { train: 0.8, val: 0.1, test: 0.1 }
+                }
+            },
+
+            // Helper for wake words textarea
+            wakeWordsText: 'hey assistant',
+
+            // Validation state
+            isValid: true,
+            errors: [],
+
+            // Computed YAML preview
+            get yamlPreview() {
+                return this.objectToYaml(this.config);
+            },
+
+            // Initialize
+            init() {
+                this.wakeWordsText = this.config.generation.wake_words.join('\n');
+            },
+
+            // Convert wake words text to array
+            updateWakeWords() {
+                this.config.generation.wake_words = this.wakeWordsText
+                    .split('\n')
+                    .map(w => w.trim())
+                    .filter(w => w);
+            },
+
+            // Provider management
+            addProvider() {
+                this.config.providers.push({ type: 'edge_tts', weight: 0.5 });
+            },
+            removeProvider(index) {
+                this.config.providers.splice(index, 1);
+            },
+
+            // Simple YAML serializer
+            objectToYaml(obj, indent = 0) {
+                const spaces = '  '.repeat(indent);
+                let yaml = '';
+
+                for (const [key, value] of Object.entries(obj)) {
+                    if (Array.isArray(value)) {
+                        yaml += `${spaces}${key}:\n`;
+                        value.forEach(item => {
+                            if (typeof item === 'object') {
+                                yaml += `${spaces}  - `;
+                                const itemYaml = this.objectToYaml(item, 0).trim().replace(/\n/g, `\n${spaces}    `);
+                                yaml += itemYaml + '\n';
+                            } else {
+                                yaml += `${spaces}  - ${item}\n`;
+                            }
+                        });
+                    } else if (typeof value === 'object' && value !== null) {
+                        yaml += `${spaces}${key}:\n`;
+                        yaml += this.objectToYaml(value, indent + 1);
+                    } else {
+                        yaml += `${spaces}${key}: ${value}\n`;
+                    }
+                }
+
+                return yaml;
+            },
+
+            // Copy to clipboard
+            async copyYaml() {
+                try {
+                    await navigator.clipboard.writeText(this.yamlPreview);
+                    alert('YAML copied to clipboard!');
+                } catch (e) {
+                    console.error('Copy failed:', e);
+                }
+            },
+
+            // Load configuration from file
+            async loadConfig() {
+                const path = prompt('Enter configuration file path:', 'wakegen.yaml');
+                if (!path) return;
+
+                try {
+                    const response = await fetch(`/api/config/load?path=${encodeURIComponent(path)}`);
+                    if (!response.ok) throw new Error('Failed to load');
+
+                    const data = await response.json();
+                    // Would need a YAML parser to convert back
+                    alert('Configuration loaded! (Parser not yet implemented)');
+                } catch (e) {
+                    alert('Error loading config: ' + e.message);
+                }
+            },
+
+            // Save configuration
+            async saveConfig() {
+                const path = prompt('Save configuration to:', 'wakegen.yaml');
+                if (!path) return;
+
+                try {
+                    const response = await fetch('/api/config/save', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            content: this.yamlPreview,
+                            path: path,
+                            overwrite: true
+                        })
+                    });
+
+                    const result = await response.json();
+                    alert(result.message);
+                } catch (e) {
+                    alert('Error saving config: ' + e.message);
+                }
+            }
+        };
+    }
+</script>
+{% endblock %}

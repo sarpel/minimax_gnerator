@@ -1,0 +1,113 @@
+/*
+ * WakeGen Web UI - Custom Styles
+ * 
+ * This file contains additional custom styles that complement TailwindCSS.
+ * Most styling is done via Tailwind utility classes in the templates,
+ * but some effects are easier to achieve with custom CSS.
+ */
+
+/* ============================================================================
+ * TRANSITIONS & ANIMATIONS
+ * ============================================================================ */
+
+/* Smooth fade-in animation for dynamically loaded content */
+.fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Pulse animation for loading indicators */
+.pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+/* ============================================================================
+ * AUDIO PLAYER STYLES
+ * ============================================================================ */
+
+/* Custom audio player container */
+.audio-player {
+    background: linear-gradient(135deg, rgba(168, 85, 247, 0.1), rgba(59, 130, 246, 0.1));
+    border-radius: 12px;
+    padding: 1rem;
+}
+
+/* Waveform visualization container */
+.waveform-container {
+    height: 60px;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* ============================================================================
+ * CARD EFFECTS
+ * ============================================================================ */
+
+/* Glassmorphism effect for cards (optional, looks great in dark mode) */
+.glass {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Hover glow effect */
+.hover-glow:hover {
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.3);
+}
+
+/* ============================================================================
+ * FORM STYLES
+ * ============================================================================ */
+
+/* Custom focus styles for inputs */
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: #a855f7;
+    box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.2);
+}
+
+/* ============================================================================
+ * SCROLLBAR (Dark Mode)
+ * ============================================================================ */
+
+/* These are also defined in base.html but included here for completeness */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(107, 114, 128, 0.5);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(107, 114, 128, 0.7);
+}

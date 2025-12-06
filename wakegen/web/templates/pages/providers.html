@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}Providers{% endblock %}
+
+{% block content %}
+<!--
+    PROVIDERS PAGE
+    ==============
+    Lists all TTS providers with their status and configuration options.
+    
+    HTMX PATTERNS USED:
+    - hx-get loads provider data on page load
+    - hx-target specifies where to put the response
+    - hx-swap="innerHTML" replaces the target's content
+-->
+
+<!-- Page Header -->
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">TTS Providers</h1>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Manage and configure text-to-speech providers
+        </p>
+    </div>
+    <div class="mt-4 sm:mt-0 flex items-center space-x-3">
+        <!-- Filter buttons -->
+        <button id="filter-all"
+            class="px-3 py-1.5 text-sm font-medium rounded-lg bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300"
+            onclick="filterProviders('all')">
+            All
+        </button>
+        <button id="filter-available"
+            class="px-3 py-1.5 text-sm font-medium rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+            onclick="filterProviders('available')">
+            Available Only
+        </button>
+    </div>
+</div>
+
+<!-- Provider Grid -->
+<div id="providers-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" hx-get="/api/providers"
+    hx-trigger="load" hx-swap="innerHTML">
+
+    <!-- Loading skeleton (shown while fetching) -->
+    <div class="animate-pulse">
+        <div class="bg-gray-200 dark:bg-gray-700 rounded-xl h-48"></div>
+    </div>
+    <div class="animate-pulse">
+        <div class="bg-gray-200 dark:bg-gray-700 rounded-xl h-48"></div>
+    </div>
+    <div class="animate-pulse">
+        <div class="bg-gray-200 dark:bg-gray-700 rounded-xl h-48"></div>
+    </div>
+</div>
+
+<!-- Provider Detail Modal -->
+<div id="provider-modal" x-data="{ open: false, provider: null }" x-show="open"
+    x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0"
+    x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150"
+    x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="fixed inset-0 z-50 overflow-y-auto"
+    style="display: none;">
+
+    <!-- Backdrop -->
+    <div class="fixed inset-0 bg-black/50" @click="open = false"></div>
+
+    <!-- Modal content -->
+    <div class="relative min-h-screen flex items-center justify-center p-4">
+        <div class="relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-lg w-full p-6" @click.stop>
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-4">
+                Provider Details
+            </h3>
+            <div id="modal-content">
+                <!-- Filled dynamically -->
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button @click="open = false"
+                    class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    /**
+     * Filter providers by availability
+     * This function toggles between showing all providers or only available ones
+     */
+    function filterProviders(filter) {
+        const grid = document.getElementById('providers-grid');
+        const allBtn = document.getElementById('filter-all');
+        const availBtn = document.getElementById('filter-available');
+
+        // Update button styles
+        if (filter === 'all') {
+            allBtn.className = 'px-3 py-1.5 text-sm font-medium rounded-lg bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300';
+            availBtn.className = 'px-3 py-1.5 text-sm font-medium rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700';
+            htmx.ajax('GET', '/api/providers', { target: '#providers-grid', swap: 'innerHTML' });
+        } else {
+            allBtn.className = 'px-3 py-1.5 text-sm font-medium rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700';
+            availBtn.className = 'px-3 py-1.5 text-sm font-medium rounded-lg bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300';
+            htmx.ajax('GET', '/api/providers?available_only=true', { target: '#providers-grid', swap: 'innerHTML' });
+        }
+    }
+
+    /**
+     * Custom HTMX handler to render provider cards from JSON response
+     * 
+     * HTMX by default expects HTML responses. Since our API returns JSON,
+     * we intercept the response and convert it to HTML cards.
+     */
+    document.body.addEventListener('htmx:afterOnLoad', function (event) {
+        // Only handle the providers endpoint
+        if (!event.detail.pathInfo.requestPath.includes('/api/providers')) return;
+
+        try {
+            const providers = JSON.parse(event.detail.xhr.responseText);
+            const html = providers.map(provider => renderProviderCard(provider)).join('');
+            event.detail.target.innerHTML = html || '<p class="text-gray-500 col-span-full text-center py-8">No providers found</p>';
+        } catch (e) {
+            console.error('Error parsing providers:', e);
+        }
+    });
+
+    /**
+     * Render a provider card HTML
+     * 
+     * This creates a beautiful card for each provider with:
+     * - Icon and name
+     * - Availability status badge
+     * - Description
+     * - Action buttons
+     */
+    function renderProviderCard(provider) {
+        const statusBadge = provider.is_available
+            ? '<span class="px-2 py-1 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full">✓ Available</span>'
+            : '<span class="px-2 py-1 text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full">✗ Unavailable</span>';
+
+        const gpuBadge = provider.requires_gpu
+            ? '<span class="px-2 py-0.5 text-xs bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 rounded">GPU</span>'
+            : '';
+
+        const apiKeyBadge = provider.requires_api_key
+            ? '<span class="px-2 py-0.5 text-xs bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 rounded">API Key</span>'
+            : '';
+
+        const missingDeps = provider.missing_dependencies && provider.missing_dependencies.length > 0
+            ? `<div class="mt-2 text-xs text-red-600 dark:text-red-400">Missing: ${provider.missing_dependencies.join(', ')}</div>`
+            : '';
+
+        return `
+            <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 card-hover">
+                <!-- Header -->
+                <div class="flex items-start justify-between mb-3">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold text-lg mr-3">
+                            🎙️
+                        </div>
+                        <div>
+                            <h3 class="font-semibold text-gray-900 dark:text-white">${provider.name}</h3>
+                            <code class="text-xs text-gray-500 dark:text-gray-400">${provider.id}</code>
+                        </div>
+                    </div>
+                    ${statusBadge}
+                </div>
+                
+                <!-- Description -->
+                <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">
+                    ${provider.description}
+                </p>
+                
+                <!-- Tags -->
+                <div class="flex flex-wrap gap-1 mb-3">
+                    ${gpuBadge}
+                    ${apiKeyBadge}
+                </div>
+                
+                ${missingDeps}
+                
+                <!-- Actions -->
+                <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex space-x-2">
+                    <button onclick="viewVoices('${provider.id}')"
+                            class="flex-1 px-3 py-2 text-sm font-medium text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
+                            ${!provider.is_available ? 'disabled class="opacity-50 cursor-not-allowed"' : ''}>
+                        List Voices
+                    </button>
+                    <button onclick="testProvider('${provider.id}')"
+                            class="flex-1 px-3 py-2 text-sm font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
+                            ${!provider.is_available ? 'disabled class="opacity-50 cursor-not-allowed"' : ''}>
+                        Test
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Open modal to view voices for a provider
+     */
+    async function viewVoices(providerId) {
+        const modal = document.getElementById('provider-modal');
+        const content = document.getElementById('modal-content');
+
+        content.innerHTML = '<div class="animate-pulse"><div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-2"></div></div>';
+        modal.__x.$data.open = true;
+
+        try {
+            const response = await fetch(`/api/providers/${providerId}/voices?limit=20`);
+            const voices = await response.json();
+
+            if (voices.length === 0) {
+                content.innerHTML = '<p class="text-gray-500">No voices available</p>';
+                return;
+            }
+
+            content.innerHTML = `
+                <div class="mb-2 text-sm text-gray-500">${voices.length} voices (showing first 20)</div>
+                <div class="max-h-64 overflow-y-auto space-y-2">
+                    ${voices.map(v => `
+                        <div class="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                            <div>
+                                <div class="font-medium text-gray-900 dark:text-white text-sm">${v.name}</div>
+                                <div class="text-xs text-gray-500">${v.language} · ${v.gender}</div>
+                            </div>
+                            <code class="text-xs text-gray-400">${v.id.substring(0, 20)}...</code>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        } catch (e) {
+            content.innerHTML = `<p class="text-red-500">Error loading voices: ${e.message}</p>`;
+        }
+    }
+
+    /**
+     * Test TTS generation for a provider
+     */
+    async function testProvider(providerId) {
+        const modal = document.getElementById('provider-modal');
+        const content = document.getElementById('modal-content');
+
+        content.innerHTML = '<div class="flex items-center"><div class="spinner w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full mr-3"></div> Testing provider...</div>';
+        modal.__x.$data.open = true;
+
+        try {
+            const response = await fetch(`/api/providers/${providerId}/test`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: 'Hello, this is a test.' })
+            });
+            const result = await response.json();
+
+            if (result.success) {
+                let html = `<div class="text-green-600 dark:text-green-400 mb-2">✓ ${result.message}</div>`;
+
+                if (result.audio_url) {
+                    html += `
+                        <div class="mt-4 bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                            <div class="text-xs text-gray-500 mb-1">Preview:</div>
+                            <audio controls autoplay class="w-full">
+                                <source src="${result.audio_url}" type="audio/wav">
+                                Your browser does not support the audio element.
+                            </audio>
+                        </div>
+                    `;
+                }
+                content.innerHTML = html;
+            } else {
+                content.innerHTML = `<div class="text-red-600 dark:text-red-400">✗ ${result.message}</div>`;
+            }
+        } catch (e) {
+            content.innerHTML = `<p class="text-red-500">Error: ${e.message}</p>`;
+        }
+    }
+</script>
+{% endblock %}

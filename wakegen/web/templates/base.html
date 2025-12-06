@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<!--
+    BASE TEMPLATE
+    =============
+    This is the master template that all pages extend from.
+    It defines the common structure: HTML head, sidebar, header, and main content area.
+
+    TEMPLATE INHERITANCE:
+    =====================
+    Jinja2 uses "block" tags to define replaceable sections.
+    Child templates extend this base and override blocks like 'title' and 'content'.
+
+    TECHNOLOGIES USED:
+    ==================
+    1. TailwindCSS (via CDN) - Utility-first CSS framework
+    2. Alpine.js (via CDN) - Minimal reactive JavaScript
+    3. HTMX (via CDN) - HTML-over-the-wire for AJAX
+
+    THEME SYSTEM:
+    =============
+    - Uses CSS custom properties for theme colors
+    - JavaScript toggles 'dark' class on html element
+    - Theme preference is saved to localStorage
+-->
+<html lang="en" x-data="{ darkMode: localStorage.getItem('theme') === 'dark' }" :class="{ 'dark': darkMode }">
+
+<head>
+    <!-- Character encoding and viewport for responsive design -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- SEO: Page title - overridden by child templates -->
+    <title>{% block title %}WakeGen{% endblock %} | Wake Word Generator</title>
+
+    <!-- SEO: Page description -->
+    <meta name="description"
+        content="{% block description %}Generate high-quality wake word datasets using multiple TTS providers{% endblock %}">
+
+    <!-- ================================================================== -->
+    <!-- TAILWIND CSS via CDN -->
+    <!-- ================================================================== -->
+    <!-- TailwindCSS is a utility-first CSS framework.
+         Instead of writing CSS rules, you apply utility classes directly.
+         Example: class="bg-blue-500 text-white p-4" = blue background, white text, padding -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Configure Tailwind with custom theme colors -->
+    <script>
+        /**
+         * Tailwind CSS Configuration
+         *
+         * This tells Tailwind to:
+         * 1. Use 'class' strategy for dark mode (add 'dark' class to <html>)
+         * 2. Extend the default theme with our custom colors
+         *
+         * Our color scheme uses purple/blue gradients to match audio/wakeword theme.
+         */
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        // Primary colors - Purple gradient
+                        primary: {
+                            50: '#faf5ff',
+                            100: '#f3e8ff',
+                            200: '#e9d5ff',
+                            300: '#d8b4fe',
+                            400: '#c084fc',
+                            500: '#a855f7',  // Main primary color
+                            600: '#9333ea',
+                            700: '#7c3aed',
+                            800: '#6b21a8',
+                            900: '#581c87',
+                            950: '#3b0764',
+                        },
+                        // Accent colors - Blue for highlights
+                        accent: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            200: '#bfdbfe',
+                            300: '#93c5fd',
+                            400: '#60a5fa',
+                            500: '#3b82f6',  // Main accent color
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            800: '#1e40af',
+                            900: '#1e3a8a',
+                            950: '#172554',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- ================================================================== -->
+    <!-- ALPINE.JS via CDN -->
+    <!-- ================================================================== -->
+    <!-- Alpine.js provides reactive UI without a build step.
+         Key directives:
+         - x-data: Define reactive data for a component
+         - x-show: Conditionally show/hide elements
+         - x-on:click or @click: Handle click events
+         - x-text: Set text content reactively
+         - x-bind or :attr: Bind attributes reactively -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <!-- ================================================================== -->
+    <!-- HTMX via CDN -->
+    <!-- ================================================================== -->
+    <!-- HTMX allows HTML elements to make AJAX requests and swap content.
+         Key attributes:
+         - hx-get="/url": Make GET request on trigger
+         - hx-post="/url": Make POST request on trigger
+         - hx-trigger="click": What triggers the request (click, load, etc.)
+         - hx-swap="innerHTML": How to swap the response into the page
+         - hx-target="#id": Where to put the response -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+    <!-- ================================================================== -->
+    <!-- GOOGLE FONTS -->
+    <!-- ================================================================== -->
+    <!-- Using Inter font for a clean, modern look -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- ================================================================== -->
+    <!-- CUSTOM STYLES -->
+    <!-- ================================================================== -->
+    <style>
+        /* Apply Inter font to everything */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Smooth scrolling for anchor links */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* Custom scrollbar for dark mode */
+        .dark ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        .dark ::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+
+        .dark ::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 4px;
+        }
+
+        .dark ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+
+        /* Gradient text for headings */
+        .gradient-text {
+            background: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Card hover effect */
+        .card-hover {
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Loading spinner animation */
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .spinner {
+            animation: spin 1s linear infinite;
+        }
+    </style>
+
+    <!-- Additional head content from child templates -->
+    {% block head %}{% endblock %}
+</head>
+
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen">
+    <!--
+        LAYOUT STRUCTURE
+        ================
+        The page uses a flex layout with:
+        1. Fixed sidebar on the left (hidden on mobile)
+        2. Main content area that scrolls
+        3. Header at the top of the content area
+
+        On mobile, the sidebar becomes a slide-out menu.
+    -->
+
+    <div class="flex min-h-screen" x-data="{ sidebarOpen: false }">
+        <!-- ============================================================== -->
+        <!-- SIDEBAR -->
+        <!-- ============================================================== -->
+        <!-- Navigation sidebar with links to all main sections.
+             On desktop: Always visible on the left
+             On mobile: Hidden by default, slides in when hamburger is clicked -->
+
+        <!-- Mobile sidebar backdrop (dark overlay) -->
+        <div x-show="sidebarOpen" x-transition:enter="transition-opacity ease-linear duration-300"
+            x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+            x-transition:leave="transition-opacity ease-linear duration-300" x-transition:leave-start="opacity-100"
+            x-transition:leave-end="opacity-0" class="fixed inset-0 bg-gray-900/50 z-40 lg:hidden"
+            @click="sidebarOpen = false">
+        </div>
+
+        <!-- Sidebar container -->
+        <aside :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
+            class="fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 lg:translate-x-0 lg:static lg:z-auto">
+
+            <!-- Logo/Brand -->
+            <div class="flex items-center h-16 px-6 border-b border-gray-200 dark:border-gray-700">
+                <!-- Microphone emoji as logo -->
+                <span class="text-2xl mr-2">🎤</span>
+                <span class="text-xl font-bold gradient-text">WakeGen</span>
+            </div>
+
+            <!-- Navigation Links -->
+            <nav class="p-4 space-y-1">
+                <!--
+                    NAVIGATION ITEM STRUCTURE
+                    Each link has:
+                    - Icon (emoji for simplicity, could use SVG icons)
+                    - Label text
+                    - Active state styling when on that page
+                -->
+
+                <!-- Dashboard -->
+                <a href="/" class="flex items-center px-4 py-2.5 text-sm font-medium rounded-lg
+                          {% if page_title == 'Dashboard' %}
+                          bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300
+                          {% else %}
+                          text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700
+                          {% endif %}">
+                    <span class="mr-3">📊</span>
+                    Dashboard
+                </a>
+
+                <!-- Providers -->
+                <a href="/providers" class="flex items-center px-4 py-2.5 text-sm font-medium rounded-lg
+                          {% if page_title == 'Providers' %}
+                          bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300
+                          {% else %}
+                          text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700
+                          {% endif %}">
+                    <span class="mr-3">🎙️</span>
+                    Providers
+                </a>
+
+                <!-- Generate -->
+                <a href="/generate" class="flex items-center px-4 py-2.5 text-sm font-medium rounded-lg
+                          {% if page_title == 'Generate' %}
+                          bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300
+                          {% else %}
+                          text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700
+                          {% endif %}">
+                    <span class="mr-3">⚡</span>
+                    Generate
+                </a>
+
+                <!-- Augmentation -->
+                <a href="/augmentation" class="flex items-center px-4 py-2.5 text-sm font-medium rounded-lg
+                          {% if page_title == 'Augmentation' %}
+                          bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300
+                          {% else %}
+                          text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700
+                          {% endif %}">
+                    <span class="mr-3">🎛️</span>
+                    Augmentation
+                </a>
+
+                <!-- Quality -->
+                <a href="/quality" class="flex items-center px-4 py-2.5 text-sm font-medium rounded-lg
+                          {% if page_title == 'Quality' %}
+                          bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300
+                          {% else %}
+                          text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700
+                          {% endif %}">
+                    <span class="mr-3">✅</span>
+                    Quality
+                </a>
+
+                <!-- Export -->
+                <a href="/export" class="flex items-center px-4 py-2.5 text-sm font-medium rounded-lg
+                          {% if page_title == 'Export' %}
+                          bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300
+                          {% else %}
+                          text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700
+                          {% endif %}">
+                    <span class="mr-3">📦</span>
+                    Export
+                </a>
+
+                <!-- Divider -->
+                <div class="my-4 border-t border-gray-200 dark:border-gray-700"></div>
+
+                <!-- Configuration -->
+                <a href="/config" class="flex items-center px-4 py-2.5 text-sm font-medium rounded-lg
+                          {% if page_title == 'Configuration' %}
+                          bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300
+                          {% else %}
+                          text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700
+                          {% endif %}">
+                    <span class="mr-3">⚙️</span>
+                    Configuration
+                </a>
+
+                <!-- System -->
+                <a href="/system" class="flex items-center px-4 py-2.5 text-sm font-medium rounded-lg
+                          {% if page_title == 'System' %}
+                          bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300
+                          {% else %}
+                          text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700
+                          {% endif %}">
+                    <span class="mr-3">🖥️</span>
+                    System
+                </a>
+            </nav>
+
+            <!-- Sidebar Footer -->
+            <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 dark:border-gray-700">
+                <div class="text-xs text-gray-500 dark:text-gray-400 text-center">
+                    WakeGen v1.0.0
+                </div>
+            </div>
+        </aside>
+
+        <!-- ============================================================== -->
+        <!-- MAIN CONTENT AREA -->
+        <!-- ============================================================== -->
+        <div class="flex-1 flex flex-col min-w-0">
+
+            <!-- Header -->
+            <header
+                class="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-4 lg:px-6">
+                <!-- Mobile menu button -->
+                <button @click="sidebarOpen = true"
+                    class="lg:hidden p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <!-- Hamburger icon -->
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                </button>
+
+                <!-- Page title -->
+                <h1 class="text-lg font-semibold text-gray-900 dark:text-white hidden lg:block">
+                    {% block page_heading %}{{ page_title | default('Dashboard') }}{% endblock %}
+                </h1>
+
+                <!-- Header actions -->
+                <div class="flex items-center space-x-3">
+                    <!-- Theme toggle button -->
+                    <button @click="darkMode = !darkMode; localStorage.setItem('theme', darkMode ? 'dark' : 'light')"
+                        class="p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                        <!-- Sun icon (shown in dark mode) -->
+                        <svg x-show="darkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                        </svg>
+                        <!-- Moon icon (shown in light mode) -->
+                        <svg x-show="!darkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                        </svg>
+                    </button>
+
+                    <!-- API Docs link -->
+                    <a href="/api/docs" target="_blank"
+                        class="hidden sm:flex items-center px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                        API Docs
+                    </a>
+                </div>
+            </header>
+
+            <!-- Main content -->
+            <main class="flex-1 p-4 lg:p-6 overflow-auto">
+                {% block content %}
+                <!-- Child templates override this block with their content -->
+                <p class="text-gray-500 dark:text-gray-400">No content defined</p>
+                {% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <!-- ================================================================== -->
+    <!-- HTMX CONFIGURATION -->
+    <!-- ================================================================== -->
+    <script>
+        /**
+         * HTMX Configuration
+         *
+         * These settings control how HTMX behaves globally.
+         */
+
+        // Add CSRF token to all HTMX requests (if you implement CSRF protection)
+        document.body.addEventListener('htmx:configRequest', function (evt) {
+            // Example: evt.detail.headers['X-CSRFToken'] = getCsrfToken();
+        });
+
+        // Show loading indicator during requests
+        document.body.addEventListener('htmx:beforeRequest', function (evt) {
+            // Could show a global loading spinner here
+        });
+
+        // Handle errors globally
+        document.body.addEventListener('htmx:responseError', function (evt) {
+            console.error('HTMX request failed:', evt.detail);
+            // Could show a toast notification here
+        });
+    </script>
+
+    <!-- Additional scripts from child templates -->
+    {% block scripts %}{% endblock %}
+</body>
+
+</html>
