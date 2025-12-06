@@ -229,17 +229,31 @@ async def validate_file(
 ) -> List[QualityIssue]:
     """
     Validate a single audio file.
-
+    
     Returns a list of detected issues (empty list if file is valid).
     """
     issues = []
+    
+    # Use only the filename for reporting to avoid leaking full paths
     relative_path = file_path.name
-
+    
     try:
-        import soundfile as sf
-
-        info = sf.info(str(file_path))
-        duration = info.duration
+        # Try using soundfile first (supports more formats)
+        try:
+            import soundfile as sf
+            info = sf.info(str(file_path))
+            duration = info.duration
+            sample_rate = info.samplerate
+            channels = info.channels
+        except ImportError:
+            # Fallback to wave (only supports WAV)
+            import wave
+            import contextlib
+            with contextlib.closing(wave.open(str(file_path), 'r')) as f:
+                frames = f.getnframes()
+                sample_rate = f.getframerate()
+                duration = frames / float(sample_rate)
+                channels = f.getnchannels()
 
         # Check duration
         if duration < min_duration:
@@ -263,31 +277,33 @@ async def validate_file(
             ))
 
         # Check sample rate
-        if info.samplerate != expected_sample_rate:
+        if sample_rate != expected_sample_rate:
             issues.append(QualityIssue(
                 file=relative_path,
                 type=IssueType.SAMPLE_RATE_MISMATCH,
                 severity=IssueSeverity.WARNING,
-                message=f"Sample rate {info.samplerate} Hz (expected {expected_sample_rate} Hz)",
-                value=float(info.samplerate),
+                message=f"Sample rate {sample_rate} Hz (expected {expected_sample_rate} Hz)",
+                value=float(sample_rate),
                 threshold=float(expected_sample_rate)
             ))
+            
+        # Check channels (mono required usually)
+        if channels != 1:
+             issues.append(QualityIssue(
+                file=relative_path,
+                type=IssueType.FORMAT_ERROR,
+                severity=IssueSeverity.ERROR,
+                message=f"Multi-channel audio ({channels} channels). Mono required.",
+                value=float(channels),
+                threshold=1.0
+            ))
 
-        # Check for clipping (would need to load audio data)
-        # This is a placeholder - real implementation would analyze waveform
-        # y, sr = sf.read(str(file_path))
-        # max_amplitude = np.max(np.abs(y))
-        # if max_amplitude > 0.99:
-        #     issues.append(...)
-
-    except ImportError:
-        logger.warning("soundfile not available for validation")
     except Exception as e:
         issues.append(QualityIssue(
             file=relative_path,
-            type=IssueType.FORMAT_ERROR,
+            type=IssueType.CORRUPT_FILE,
             severity=IssueSeverity.ERROR,
-            message=str(e)
+            message=f"Invalid or corrupt audio file: {str(e)}"
         ))
 
     return issues

@@ -272,12 +272,14 @@ async def start_export(
 async def run_export(job_id: str, request: ExportRequest) -> None:
     """
     Background task to run export.
-
-    This is a placeholder - actual implementation would use the
-    wakegen export pipeline.
     """
     import asyncio
+    import shutil
+    import json
+    import random
     from datetime import datetime
+    import pandas as pd
+    from sklearn.model_selection import train_test_split
 
     job = _export_jobs.get(job_id)
     if not job:
@@ -287,17 +289,145 @@ async def run_export(job_id: str, request: ExportRequest) -> None:
     job.started_at = datetime.now().isoformat()
 
     try:
-        # Simulate export progress
-        for i in range(job.total_files):
-            await asyncio.sleep(0.05)  # Simulate processing
-            job.processed_files = i + 1
-            job.progress_percentage = ((i + 1) / job.total_files) * 100
+        input_path = Path(request.input_dir)
+        output_path = Path(request.output_dir)
 
+        # 1. Collect all files and labels
+        files = []
+        labels = []
+        file_paths = list(input_path.rglob("*.wav"))
+        
+        job.total_files = len(file_paths)
+        if job.total_files == 0:
+            raise ValueError("No WAV files found to export")
+
+        for f in file_paths:
+            # Assuming parent directory is the label (wake word name)
+            label = f.parent.name
+            files.append(str(f))
+            labels.append(label)
+
+        # 2. Split dataset
+        # We need to split into Train/Val/Test
+        # First split off Test from (Train+Val)
+        remaining_ratio = request.split.train + request.split.val
+        if remaining_ratio <= 0:
+            raise ValueError("Train + Validation ratio must be > 0")
+
+        # Normalize test size relative to total
+        test_size = request.split.test
+        
+        # Initial DataFrame
+        df = pd.DataFrame({'path': files, 'label': labels})
+
+        splits = {}
+        
+        if test_size > 0:
+            if request.stratify:
+                fn_train_val, fn_test, param_train_val, param_test = train_test_split(
+                    df['path'], df['label'], test_size=test_size, stratify=df['label'], random_state=42
+                )
+            else:
+                fn_train_val, fn_test, param_train_val, param_test = train_test_split(
+                    df['path'], df['label'], test_size=test_size, random_state=42
+                )
+            splits['test'] = pd.DataFrame({'path': fn_test, 'label': param_test})
+            df_remaining = pd.DataFrame({'path': fn_train_val, 'label': param_train_val})
+        else:
+            splits['test'] = pd.DataFrame(columns=['path', 'label'])
+            df_remaining = df
+
+        # Now split remaining into Train/Val
+        # Ratio of Val relative to remaining
+        if len(df_remaining) > 0 and request.split.val > 0:
+            # val_ratio relative to (train + val)
+            val_relative = request.split.val / (request.split.train + request.split.val)
+            
+            if request.stratify and len(df_remaining['label'].unique()) > 1:
+                # Proper stratification requires at least 2 classes
+                 fn_train, fn_val, param_train, param_val = train_test_split(
+                    df_remaining['path'], df_remaining['label'], test_size=val_relative, stratify=df_remaining['label'], random_state=42
+                )
+            else:
+                 fn_train, fn_val, param_train, param_val = train_test_split(
+                    df_remaining['path'], df_remaining['label'], test_size=val_relative, random_state=42
+                )
+            
+            splits['train'] = pd.DataFrame({'path': fn_train, 'label': param_train})
+            splits['val'] = pd.DataFrame({'path': fn_val, 'label': param_val})
+        else:
+            splits['train'] = df_remaining
+            splits['val'] = pd.DataFrame(columns=['path', 'label'])
+
+        # 3. Export files
+        processed = 0
+        
+        for split_name, split_df in splits.items():
+            if split_df.empty:
+                continue
+                
+            for _, row in split_df.iterrows():
+                src_file = Path(row['path'])
+                label = row['label']
+                
+                # Determine destination based on format
+                if request.format == ExportFormat.OPENWAKEWORD:
+                    # structure: output/{split}/{label}/{filename}
+                    dest_dir = output_path / split_name / label
+                elif request.format == ExportFormat.MYCROFT:
+                    # structure: output/{label}/{filename} (Mycroft handles splits via text files usually, but here we separate by folder or just dump)
+                    # For simplicity, we'll group by label
+                    dest_dir = output_path / label
+                elif request.format == ExportFormat.PYTORCH:
+                     dest_dir = output_path / split_name / label
+                else:
+                    # Default flat or label-based
+                    dest_dir = output_path / split_name / label
+
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                dest_file = dest_dir / src_file.name
+                
+                # Copy or Symlink
+                if request.copy_files:
+                    shutil.copy2(src_file, dest_file)
+                else:
+                    # Symlink (requires admin on Windows sometimes, fallback to copy)
+                    try:
+                        import os
+                        os.symlink(src_file, dest_file)
+                    except OSError:
+                        shutil.copy2(src_file, dest_file)
+                
+                processed += 1
+                if processed % 10 == 0:
+                    job.processed_files = processed
+                    job.progress_percentage = (processed / job.total_files) * 95 # Leave 5% for manifest
+                    await asyncio.sleep(0.001) # Yield control
+
+        # 4. Generate Manifests
+        if request.generate_manifest:
+            manifest = {
+                "created_at": datetime.now().isoformat(),
+                "format": request.format,
+                "stats": {
+                    "total_files": job.total_files,
+                    "splits": {k: len(v) for k, v in splits.items()}
+                },
+                "classes": sorted(list(set(labels)))
+            }
+            
+            with open(output_path / "dataset_info.json", "w") as f:
+                json.dump(manifest, f, indent=2)
+
+        job.progress_percentage = 100
+        job.processed_files = job.total_files
         job.status = ExportStatus.COMPLETED
         job.completed_at = datetime.now().isoformat()
         logger.info(f"Export job {job_id} completed")
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         job.status = ExportStatus.FAILED
         job.error_message = str(e)
         logger.error(f"Export job {job_id} failed: {e}")

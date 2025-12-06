@@ -325,7 +325,36 @@
             },
 
             async applyAugmentation() {
-                alert('Augmentation settings saved! Apply to dataset functionality will be implemented with the augmentation API.');
+                try {
+                    const profile = this.profiles[this.selectedProfile];
+                    // Override with custom settings if needed, but here we just send the selected profile config
+
+                    const response = await fetch('/api/augmentation/apply', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            input_dir: "./output", // Default or user configurable
+                            output_dir: "./output/augmented",
+                            profile: {
+                                name: this.selectedProfile,
+                                description: profile.description,
+                                noise: this.noise,
+                                reverb: this.reverb,
+                                pitch: this.pitch,
+                                device: this.device
+                            },
+                            copies_per_file: 2
+                        })
+                    });
+
+                    if (!response.ok) throw new Error('Failed to start augmentation');
+
+                    const result = await response.json();
+                    alert(`Augmentation Started! Job ID: ${result.job_id}\nCheck console/logs for progress.`);
+
+                } catch (e) {
+                    alert(`Error: ${e.message}`);
+                }
             }
         };
     }

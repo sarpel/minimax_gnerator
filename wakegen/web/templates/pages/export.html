@@ -257,9 +257,58 @@
 
             async startExport() {
                 this.isExporting = true;
-                await new Promise(r => setTimeout(r, 2000));
-                this.isExporting = false;
-                alert('Export complete! (Connect to API for real export)');
+
+                try {
+                    const response = await fetch('/api/export/start', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            input_dir: this.inputDir,
+                            output_dir: this.outputDir,
+                            format: this.format,
+                            split: this.split,
+                            copy_files: true // Force copy for safety
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const err = await response.json();
+                        throw new Error(err.detail || 'Export start failed');
+                    }
+
+                    const result = await response.json();
+                    const jobId = result.job_id;
+
+                    // Poll for status
+                    const pollInterval = setInterval(async () => {
+                        try {
+                            const statusRes = await fetch(`/api/export/status/${jobId}`);
+                            const status = await statusRes.json();
+
+                            if (status.status === 'completed') {
+                                clearInterval(pollInterval);
+                                this.isExporting = false;
+                                alert(`Export Successfully Completed!\nOutput: ${status.output_dir}`);
+                            } else if (status.status === 'failed') {
+                                clearInterval(pollInterval);
+                                this.isExporting = false;
+                                alert(`Export Failed: ${status.error_message}`);
+                            } else {
+                                // Update progress if you had a progress bar
+                                // console.log(`Progress: ${status.progress_percentage}%`);
+                            }
+                        } catch (e) {
+                            clearInterval(pollInterval);
+                            this.isExporting = false;
+                        }
+                    }, 1000);
+
+                } catch (e) {
+                    alert(`Error: ${e.message}`);
+                    this.isExporting = false;
+                }
             }
         };
     }

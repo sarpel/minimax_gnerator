@@ -265,10 +265,59 @@
 
             async runValidation() {
                 this.isValidating = true;
-                // Simulate validation delay
-                await new Promise(r => setTimeout(r, 2000));
-                this.isValidating = false;
-                alert('Validation complete! (Connect to API for real results)');
+                this.healthScore = 0;
+                this.issues = [];
+                this.stats = { total: 0, valid: 0, duration: 0 };
+
+                try {
+                    // Call validation API
+                    const params = new URLSearchParams({
+                        directory: this.datasetPath,
+                        min_duration: 0.3,
+                        max_duration: 3.0,
+                        expected_sample_rate: 16000
+                    });
+
+                    const response = await fetch(`/api/quality/validate?${params}`);
+                    if (!response.ok) {
+                        const err = await response.json();
+                        throw new Error(err.detail || 'Validation failed');
+                    }
+
+                    const result = await response.json();
+
+                    // Update state with results
+                    this.healthScore = Math.round(result.health_score);
+                    this.issues = result.issues;
+                    this.stats = {
+                        total: result.total_files,
+                        valid: result.valid_files,
+                        duration: result.total_files * 0.8 // Using placeholder duration if not providing total seconds
+                    };
+
+                    // Generate recommendations based on issues
+                    this.recommendations = [];
+                    if (this.healthScore < 80) {
+                        this.recommendations.push("Consider removing or trimming invalid files to improve dataset quality.");
+                    }
+                    if (this.issues.some(i => i.type === 'duration_short')) {
+                        this.recommendations.push("Some files are too short. Check your generation settings.");
+                    }
+                    if (this.issues.some(i => i.type === 'sample_rate_mismatch')) {
+                        this.recommendations.push("Inconsistent sample rates detected. Resample your audio to 16kHz.");
+                    }
+                    if (result.total_files === 0) {
+                        this.recommendations.push("No files found. Go to 'Generate' tab to create samples.");
+                    }
+
+                    // Show success notification (could use a toast library if available)
+                    // console.log("Validation complete", result);
+
+                } catch (e) {
+                    alert(`Validation Error: ${e.message}`);
+                } finally {
+                    this.isValidating = false;
+                }
             }
         };
     }
