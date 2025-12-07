@@ -106,7 +106,11 @@ async def get_template() -> ConfigTemplate:
     """
     try:
         # Get template from existing function
-        template_dict = get_template_config()
+        # get_template_config returns a valid YAML string
+        raw_template = get_template_config()
+        
+        # Parse it to a dict so we can introspect sections
+        template_dict = yaml.safe_load(raw_template)
 
         # Convert to YAML with nice formatting
         yaml_content = yaml.dump(

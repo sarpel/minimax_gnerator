@@ -351,8 +351,8 @@
                             total_samples: validWords.length * this.count
                         };
 
-                        // Start polling for updates
-                        this.startPolling(result.job_id);
+                        // Start tracking for updates
+                        this.startTracking(result.job_id);
                     }
                 } catch (e) {
                     console.error('Error starting generation:', e);
@@ -361,11 +361,76 @@
                 }
             },
 
-            // Poll for job updates
-            startPolling(jobId) {
+            // Track job progress (WebSocket with polling fallback)
+            startTracking(jobId) {
+                // Cleanup previous tracking
+                this.stopTracking();
+
+                // Try WebSocket first
+                try {
+                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const host = window.location.host;
+                    const wsUrl = `${protocol}//${host}/ws/progress/${jobId}`;
+
+                    console.log('Connecting to WebSocket:', wsUrl);
+                    this.socket = new WebSocket(wsUrl);
+
+                    this.socket.onopen = () => {
+                        console.log('WebSocket connected');
+                    };
+
+                    this.socket.onmessage = (event) => {
+                        const data = JSON.parse(event.data);
+
+                        if (data.type === 'progress') {
+                            // Merge updates into activeJob to avoid UI flicker
+                            this.activeJob = { ...this.activeJob, ...data };
+                        }
+                        else if (['completed', 'failed', 'cancelled'].includes(data.type)) {
+                            this.activeJob.status = data.type;
+                            this.stopTracking();
+                            this.loadRecentJobs();
+                            this.isGenerating = false;
+                        }
+                    };
+
+                    this.socket.onerror = (e) => {
+                        console.warn('WebSocket error, falling back to polling');
+                        // Close will trigger onclose, where we handle fallback
+                    };
+
+                    this.socket.onclose = () => {
+                        // If job is still running, fallback to polling
+                        if (this.activeJob && ['pending', 'running'].includes(this.activeJob.status)) {
+                            console.log('WebSocket closed, switching to polling');
+                            this.startPolling(jobId);
+                        }
+                    };
+
+                } catch (e) {
+                    console.error('WebSocket setup failed, using polling:', e);
+                    this.startPolling(jobId);
+                }
+            },
+
+            // Stop all tracking methods
+            stopTracking() {
                 if (this.pollInterval) {
                     clearInterval(this.pollInterval);
+                    this.pollInterval = null;
                 }
+                if (this.socket) {
+                    // Remove listeners to prevent loops
+                    this.socket.onclose = null;
+                    this.socket.onerror = null;
+                    this.socket.close();
+                    this.socket = null;
+                }
+            },
+
+            // Fallback polling method
+            startPolling(jobId) {
+                if (this.pollInterval) clearInterval(this.pollInterval);
 
                 this.pollInterval = setInterval(async () => {
                     try {
@@ -374,17 +439,15 @@
 
                         this.activeJob = status;
 
-                        // Stop polling if job is done
                         if (['completed', 'failed', 'cancelled'].includes(status.status)) {
-                            clearInterval(this.pollInterval);
-                            this.pollInterval = null;
+                            this.stopTracking();
                             this.isGenerating = false;
                             this.loadRecentJobs();
                         }
                     } catch (e) {
-                        console.error('Error polling status:', e);
+                        console.error('Polling error:', e);
                     }
-                }, 1000); // Poll every second
+                }, 1000);
             },
 
             // Cancel current job
