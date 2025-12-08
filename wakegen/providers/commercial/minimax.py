@@ -332,11 +332,12 @@ class MiniMaxProvider(BaseProvider):
                     f"Available voices: {', '.join(available_voices)}"
                 )
 
-            # Determine if we need Turkish language boost
-            language_boost = "Turkish" if any(
-                voice_id in turkish_voices
-                for turkish_voices in [self.turkish_voices, self.english_with_turkish_boost]
-                if voice_id in turkish_voices
+            # Issue M-008 Fix: Simplified language boost logic
+            # The previous condition was redundant and always True when voice was valid
+            # Now just checks if voice is in either Turkish voice dictionary
+            language_boost = "Turkish" if (
+                voice_id in self.turkish_voices or 
+                voice_id in self.english_with_turkish_boost
             ) else None
 
             # Create the request with default settings

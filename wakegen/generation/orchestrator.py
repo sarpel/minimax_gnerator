@@ -193,7 +193,8 @@ class GenerationOrchestrator:
             "count": count,
             "output_dir": output_dir,
             "voice_ids": voice_ids,
-            "variation_params": variation_params.dict()
+            # Issue M-007 Fix: Use .model_dump() instead of deprecated .dict()
+            "variation_params": variation_params.model_dump()
         }
 
         await self.checkpoint_manager.create_checkpoint(

@@ -417,8 +417,11 @@ class AugmentationPipeline:
             AugmentationError: If saving fails.
         """
         try:
-            # Ensure directory exists
-            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            # Issue m-004 Fix: Handle empty dirname for relative paths
+            # os.path.dirname("audio.wav") returns "" which breaks os.makedirs
+            output_dir = os.path.dirname(filepath)
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
 
             # Save with soundfile
             sf.write(filepath, audio, self.sample_rate)
@@ -455,6 +458,7 @@ class AugmentationPipeline:
             os.makedirs(output_dir, exist_ok=True)
 
             results = []
+            failed_files = []  # Issue M-005: Track failures for reporting
             for i, input_path in enumerate(input_paths):
                 try:
                     # Generate output filename
@@ -469,8 +473,17 @@ class AugmentationPipeline:
                     logger.info(f"Processed {i+1}/{len(input_paths)}: {input_path} -> {output_path}")
 
                 except Exception as e:
+                    # Issue M-005 Fix: Track failed files instead of silently continuing
                     logger.error(f"Failed to process {input_path}: {str(e)}")
+                    failed_files.append((input_path, str(e)))
                     continue
+
+            # Report failures if any occurred
+            if failed_files:
+                failed_summary = "; ".join([f"{path}: {err}" for path, err in failed_files])
+                logger.warning(
+                    f"Batch augmentation completed with {len(failed_files)} failures: {failed_summary}"
+                )
 
             return results
 

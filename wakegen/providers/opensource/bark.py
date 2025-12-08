@@ -33,6 +33,7 @@ from wakegen.core.exceptions import ProviderError
 from wakegen.core.types import Gender, ProviderType
 from wakegen.providers.base import BaseProvider
 from wakegen.models.audio import Voice
+from wakegen.models.config import ProviderConfig
 
 
 class BarkProvider(BaseProvider):
@@ -97,6 +98,7 @@ class BarkProvider(BaseProvider):
     
     def __init__(
         self,
+        config: Optional[ProviderConfig] = None,
         use_gpu: bool = True,
         use_small_models: bool = False,
         text_use_gpu: bool = True,
@@ -107,13 +109,14 @@ class BarkProvider(BaseProvider):
         Initialize the Bark provider.
         
         Args:
+            config: Provider configuration. If None, uses default ProviderConfig.
             use_gpu: Whether to use GPU for inference.
             use_small_models: Use smaller models for faster inference.
             text_use_gpu: Use GPU for text encoding.
             coarse_use_gpu: Use GPU for coarse audio generation.
             fine_use_gpu: Use GPU for fine audio generation.
         """
-        super().__init__()
+        super().__init__(config or ProviderConfig())
         self._model = None
         self._use_gpu = use_gpu
         self._use_small_models = use_small_models
@@ -256,11 +259,11 @@ class BarkProvider(BaseProvider):
                 speaker_num = preset.split("_")[-1]
                 
                 voices.append(Voice(
-                    voice_id=preset,
+                    id=preset,
                     name=f"Bark {lang.upper()} Speaker {speaker_num}",
                     gender=gender,
                     language=lang,
-                    description=f"Bark expressive voice for {lang.upper()}",
+                    provider=ProviderType.BARK,
                 ))
         
         return voices
