@@ -197,3 +197,86 @@
 </div>
 
 {% endblock %}
+
+{% block scripts %}
+<script>
+    /**
+     * HTMX JSON Response Handlers for Dashboard
+     * 
+     * The dashboard summary cards use HTMX to load data from JSON API endpoints.
+     * HTMX expects HTML responses by default, so we intercept JSON responses
+     * and convert them to HTML before they're inserted into the DOM.
+     */
+    document.body.addEventListener('htmx:afterOnLoad', function (event) {
+        const path = event.detail.pathInfo.requestPath;
+
+        try {
+            // Handle /api/providers/summary
+            if (path.includes('/api/providers/summary')) {
+                const data = JSON.parse(event.detail.xhr.responseText);
+                event.detail.target.innerHTML = `
+                    <div class="text-2xl font-bold text-gray-900 dark:text-white">
+                        ${data.available_count}/${data.total_count}
+                    </div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400">Providers Available</div>
+                `;
+            }
+
+            // Handle /api/system/cache/summary
+            if (path.includes('/api/system/cache/summary')) {
+                const data = JSON.parse(event.detail.xhr.responseText);
+                event.detail.target.innerHTML = `
+                    <div class="text-2xl font-bold text-gray-900 dark:text-white">
+                        ${data.size_human || '0 B'}
+                    </div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400">Cache Size</div>
+                    <div class="text-xs text-gray-400 mt-1">${data.file_count || 0} files</div>
+                `;
+            }
+
+            // Handle /api/system/gpu/summary
+            if (path.includes('/api/system/gpu/summary')) {
+                const data = JSON.parse(event.detail.xhr.responseText);
+                const status = data.available ?
+                    `<span class="text-green-600 dark:text-green-400">Available</span>` :
+                    `<span class="text-gray-500">Not Available</span>`;
+                const gpuName = data.name || 'CPU Only';
+
+                event.detail.target.innerHTML = `
+                    <div class="text-2xl font-bold text-gray-900 dark:text-white">${status}</div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400">GPU Status</div>
+                    <div class="text-xs text-gray-400 mt-1">${gpuName}</div>
+                `;
+            }
+
+            // Handle /api/generate/recent - jobs list
+            if (path.includes('/api/generate/recent')) {
+                const jobs = JSON.parse(event.detail.xhr.responseText);
+
+                if (!jobs || jobs.length === 0) {
+                    // Keep the default empty state HTML
+                    return;
+                }
+
+                let html = '';
+                for (const job of jobs.slice(0, 5)) {
+                    const statusClass = job.status === 'completed' ? 'text-green-600' :
+                        job.status === 'failed' ? 'text-red-600' : 'text-yellow-600';
+                    html += `
+                        <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <div class="flex items-center justify-between">
+                                <div class="font-medium text-gray-900 dark:text-white">${job.wake_word || 'Unknown'}</div>
+                                <span class="${statusClass} text-sm">${job.status || 'pending'}</span>
+                            </div>
+                            <div class="text-xs text-gray-500 mt-1">${job.samples_generated || 0} samples</div>
+                        </div>
+                    `;
+                }
+                event.detail.target.innerHTML = html;
+            }
+        } catch (e) {
+            console.error('Error parsing dashboard JSON:', e);
+        }
+    });
+</script>
+{% endblock %}

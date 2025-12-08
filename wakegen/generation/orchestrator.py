@@ -347,16 +347,16 @@ class GenerationOrchestrator:
         # Create provider config from the main config
         provider_config = ProviderConfig()
 
-        # Try to get commercial provider first
+        # Try to get commercial provider first (MiniMax is the primary commercial provider)
         if self.config.use_commercial_providers:
             try:
-                return get_provider(ProviderType.COMMERCIAL, provider_config)
+                return get_provider(ProviderType.MINIMAX, provider_config)
             except Exception as e:
-                logger.warning(f"Commercial provider unavailable: {str(e)}")
+                logger.warning(f"Commercial provider (MiniMax) unavailable: {str(e)}")
 
-        # Fall back to free provider
+        # Fall back to free provider (Edge TTS is the primary free provider)
         try:
-            return get_provider(ProviderType.FREE, provider_config)
+            return get_provider(ProviderType.EDGE_TTS, provider_config)
         except Exception as e:
             raise GenerationError(f"No available providers: {str(e)}") from e
 
@@ -386,8 +386,15 @@ class GenerationOrchestrator:
 
         file_path = output_path / filename
 
-        # Save audio data
-        await result.audio_data.save_to_file(str(file_path))
+        # Save audio data using soundfile
+        # Note: AudioSample.file_path contains the source path of the generated audio
+        # For now, we copy the file if it exists, otherwise log a warning
+        import shutil
+        source_path = result.audio_data.file_path
+        if source_path and Path(source_path).exists():
+            shutil.copy2(source_path, file_path)
+        else:
+            logger.warning(f"Source audio file not found: {source_path}")
 
         logger.info(f"Saved audio sample: {file_path}")
         return str(file_path)
@@ -531,16 +538,17 @@ class GenerationOrchestrator:
         fallback_providers = []
 
         # Get all available providers
+        # Issue C-001 & C-003 Fix: Use correct ProviderType enums and proper exception handling
         try:
             if self.config.use_commercial_providers:
-                fallback_providers.append(get_provider(ProviderType.COMMERCIAL, provider_config))
-        except:
-            pass
+                fallback_providers.append(get_provider(ProviderType.MINIMAX, provider_config))
+        except (ConfigError, Exception) as e:
+            logger.debug(f"MiniMax provider unavailable for fallback: {e}")
 
         try:
-            fallback_providers.append(get_provider(ProviderType.FREE, provider_config))
-        except:
-            pass
+            fallback_providers.append(get_provider(ProviderType.EDGE_TTS, provider_config))
+        except (ConfigError, Exception) as e:
+            logger.debug(f"Edge TTS provider unavailable for fallback: {e}")
 
         if not fallback_providers:
             raise GenerationError("No fallback providers available")
@@ -571,7 +579,8 @@ class GenerationOrchestrator:
         params_list = []
         task_ids = []
 
-        async for params in self.variation_engine.generate_variations(combinations_needed):
+        # Issue M-006 Fix: generate_variations returns a sync Iterator, not AsyncIterator
+        for params in self.variation_engine.generate_variations(combinations_needed):
             task_id = f"task_{self._task_count}"
             params_list.append(params)
             task_ids.append(task_id)

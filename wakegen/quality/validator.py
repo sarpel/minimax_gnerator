@@ -23,8 +23,12 @@ from pydantic import BaseModel, Field
 from wakegen.core.exceptions import QualityAssuranceError
 from wakegen.utils.audio import load_audio_file, get_audio_duration
 
-class ValidationError(QualityAssuranceError):
-    """Custom exception for validation failures."""
+class SampleValidationError(QualityAssuranceError):
+    """Custom exception for sample validation failures.
+    
+    Named SampleValidationError (not ValidationError) to avoid collision
+    with pydantic.ValidationError which is commonly imported.
+    """
 
 @dataclass
 class SampleValidationResult:
@@ -199,7 +203,7 @@ async def validate_sample(
         )
 
     except Exception as e:
-        raise ValidationError(f"Validation failed for {file_path}: {str(e)}") from e
+        raise SampleValidationError(f"Validation failed for {file_path}: {str(e)}") from e
 
 async def _calculate_file_hash(file_path: Path) -> str:
     """Calculate SHA256 hash of file for integrity verification.

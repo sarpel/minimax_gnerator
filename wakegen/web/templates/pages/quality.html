@@ -227,12 +227,12 @@
         return {
             datasetPath: './output',
             isValidating: false,
-            healthScore: 87,
+            healthScore: 0,  // Start with zero until validation runs
 
             stats: {
-                totalFiles: 250,
-                validFiles: 235,
-                issues: 15
+                totalFiles: 0,
+                validFiles: 0,
+                issues: 0
             },
 
             metrics: {
@@ -241,22 +241,14 @@
                 snr: { avg: 35, min: 18, max: 52 }
             },
 
-            issues: [
-                { file: 'hey_assistant/sample_042.wav', message: 'Duration too short (0.2s)', severity: 'warning' },
-                { file: 'hey_assistant/sample_089.wav', message: 'Clipping detected', severity: 'error' },
-                { file: 'hello_world/sample_015.wav', message: 'Low SNR (12dB)', severity: 'warning' }
-            ],
+            // Issues start empty - populated after validation
+            issues: [],
 
-            distribution: [
-                { name: 'hey assistant', count: 125 },
-                { name: 'hello world', count: 75 },
-                { name: 'ok computer', count: 50 }
-            ],
+            distribution: [],
 
             recommendations: [
-                'Consider adding more samples for "ok computer"',
-                'Apply noise augmentation to improve robustness',
-                'Review 3 files with clipping issues'
+                'Click "Validate" to analyze your dataset',
+                'Generate samples first if no files exist'
             ],
 
             get maxCount() {

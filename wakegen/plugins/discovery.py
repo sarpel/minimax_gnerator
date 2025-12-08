@@ -28,6 +28,7 @@ wakegen generate --provider my-plugin --text "hello"
 
 from __future__ import annotations
 
+import sys
 import logging
 from typing import Dict, List, Optional, Type
 from importlib.metadata import entry_points, EntryPoint
@@ -99,15 +100,18 @@ def discover_plugins(force_reload: bool = False) -> List[LoadedPlugin]:
     if force_reload:
         _loaded_plugins.clear()
     
-    logger.info(f"Discovering plugins from entry point group: {PLUGIN_ENTRY_POINT_GROUP}")
+    logger.info(
+        "Discovering plugins from entry point group",
+        extra={"component": "plugin_discovery", "action": "discover", "group": PLUGIN_ENTRY_POINT_GROUP}
+    )
     
     # Get all entry points in our group
-    # Python 3.10+ uses select(), older versions use different API
-    try:
-        # Python 3.10+ style
+    # Issue 17 fix: Explicit version check instead of try/except
+    # Python 3.10+ changed entry_points() API to accept group parameter
+    # Python 3.9 returns dict-like object that needs .get()
+    if sys.version_info >= (3, 10):
         eps = entry_points(group=PLUGIN_ENTRY_POINT_GROUP)
-    except TypeError:
-        # Python 3.9 style (entry_points() returns a dict-like object)
+    else:
         all_eps = entry_points()
         eps = all_eps.get(PLUGIN_ENTRY_POINT_GROUP, [])
     
@@ -117,12 +121,21 @@ def discover_plugins(force_reload: bool = False) -> List[LoadedPlugin]:
             loaded = load_plugin(ep)
             if loaded:
                 _loaded_plugins[loaded.name] = loaded
-                logger.info(f"Loaded plugin: {loaded.name} v{loaded.metadata.version}")
+                logger.info(
+                    "Plugin loaded successfully",
+                    extra={"component": "plugin_discovery", "action": "load", "plugin_name": loaded.name, "version": loaded.metadata.version}
+                )
         except Exception as e:
-            logger.warning(f"Failed to load plugin from entry point '{ep.name}': {e}")
+            logger.warning(
+                "Failed to load plugin from entry point",
+                extra={"component": "plugin_discovery", "action": "load_failed", "entry_point": ep.name, "error": str(e)}
+            )
     
     _discovery_done = True
-    logger.info(f"Plugin discovery complete. Found {len(_loaded_plugins)} plugins.")
+    logger.info(
+        "Plugin discovery complete",
+        extra={"component": "plugin_discovery", "action": "complete", "plugins_found": len(_loaded_plugins)}
+    )
     
     return list(_loaded_plugins.values())
 
@@ -276,11 +289,17 @@ def register_plugin_provider(plugin: LoadedPlugin) -> bool:
         # Register in a plugins-specific registry
         _register_plugin_to_registry(plugin.name, wrapper_class)
         
-        logger.info(f"Registered plugin provider: {plugin.name}")
+        logger.info(
+            "Plugin provider registered",
+            extra={"component": "plugin_registry", "action": "register", "plugin_name": plugin.name}
+        )
         return True
         
     except Exception as e:
-        logger.error(f"Failed to register plugin '{plugin.name}' as provider: {e}")
+        logger.error(
+            "Failed to register plugin as provider",
+            extra={"component": "plugin_registry", "action": "register_failed", "plugin_name": plugin.name, "error": str(e)}
+        )
         return False
 
 

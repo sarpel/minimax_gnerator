@@ -17,6 +17,11 @@ from wakegen.core.exceptions import (
     AudioError,
     GenerationError,
     AugmentationError,
+    # Additional exceptions that were missing from exports (Issue 8):
+    NoiseError,
+    RoomSimulationError,
+    MicrophoneSimulationError,
+    QualityAssuranceError,
 )
 from wakegen.core.protocols import TTSProvider
 
@@ -35,6 +40,11 @@ __all__ = [
     "AudioError",
     "GenerationError",
     "AugmentationError",
+    # Additional exceptions (Issue 8):
+    "NoiseError",
+    "RoomSimulationError",
+    "MicrophoneSimulationError",
+    "QualityAssuranceError",
     # Protocols
     "TTSProvider",
 ]

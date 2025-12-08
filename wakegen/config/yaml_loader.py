@@ -350,9 +350,18 @@ class ExportConfig(BaseModel):
         str_strip_whitespace=True,
     )
     
+    # Supported export formats:
+    # - openwakeword: For openWakeWord training with train/val/test splits
+    # - speechbrain: SpeechBrain framework format
+    # - wav2vec: Wav2Vec2 / HuBERT compatible format
+    # - mycroft: Mycroft Precise wake word engine
+    # - picovoice: Picovoice Porcupine wake word engine
+    # - tensorflow: TFRecord format for TensorFlow
+    # - pytorch: PyTorch Dataset compatible format
+    # - huggingface: HuggingFace datasets Arrow format
     format: str = Field(
         default="openwakeword",
-        pattern=r"^(openwakeword|speechbrain|wav2vec)$",
+        pattern=r"^(openwakeword|speechbrain|wav2vec|mycroft|picovoice|tensorflow|pytorch|huggingface)$",
         description="Export format for the training framework"
     )
     split_ratio: list[float] = Field(

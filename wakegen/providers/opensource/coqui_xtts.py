@@ -154,11 +154,13 @@ class CoquiXTTSProvider(BaseProvider):
             try:
                 # Use XTTS voice cloning
                 # The reference audio provides the voice characteristics to clone
-                # We explicitly set language to Turkish ('tr') as per requirements
+                # Issue 7 fix: Language is configurable via config, defaults to 'en'
+                # Supported: en, es, fr, de, it, pt, pl, tr, ru, nl, cs, ar, zh-cn, ja, hu, ko
+                language = getattr(self._config, 'language', 'en')
                 model.tts_to_file(
                     text=text,
                     speaker_wav=reference_audio_path,
-                    language="tr",
+                    language=language,
                     file_path=temp_path
                 )
 
@@ -266,5 +268,22 @@ class CoquiXTTSProvider(BaseProvider):
         except Exception as e:
             raise ProviderError(f"Voice cloning failed: {str(e)}") from e
 
+
+    async def cleanup(self) -> None:
+        """
+        Release XTTS model from memory.
+        
+        Issue 18: XTTS models are large (~2GB). This method releases
+        the model and triggers garbage collection to free memory.
+        """
+        self._xtts_model = None
+        self._voice_cache.clear()
+        self._model_loaded = False
+        
+        # Force garbage collection to free memory
+        import gc
+        gc.collect()
+
 # Register this provider so the factory knows about it
+
 register_provider(ProviderType.COQUI_XTTS, CoquiXTTSProvider)

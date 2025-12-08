@@ -216,11 +216,13 @@ async def run_generation_job(job_id: str) -> None:
             save_job(job)
             return
 
-        # Select first English voice or first available
-        voice = next(
-            (v for v in voices if v.language.startswith("en-")),
-            voices[0]
-        )
+        # Filter voices by language preference (English first, then any)
+        # We use multiple voices to create variation in the output
+        english_voices = [v for v in voices if v.language.startswith("en-")]
+        available_voices = english_voices if english_voices else voices
+        
+        # Log how many voices we have for variation
+        logger.info(f"Using {len(available_voices)} voices for variation")
 
         # Create output directory
         os.makedirs(job.output_dir, exist_ok=True)
@@ -243,6 +245,12 @@ async def run_generation_job(job_id: str) -> None:
 
             for i in range(job.count):
                 sample_index += 1
+                
+                # VOICE ROTATION: Cycle through available voices to create variation
+                # This prevents all samples from having the same audio (identical hash)
+                voice_index = (sample_index - 1) % len(available_voices)
+                voice = available_voices[voice_index]
+                
                 filename = f"{wake_word.replace(' ', '_').lower()}_{sample_index:04d}.wav"
                 file_path = os.path.join(word_dir, filename)
 

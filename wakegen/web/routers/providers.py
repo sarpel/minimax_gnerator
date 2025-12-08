@@ -496,3 +496,183 @@ async def test_provider(
             success=False,
             message=f"Generation failed: {str(e)}"
         )
+
+
+# =============================================================================
+# SPECIAL PROVIDER INSTALLATION
+# =============================================================================
+# Some providers (like Bark) can't be installed via pip from PyPI and require
+# special installation commands. This endpoint allows installing them via GUI.
+
+class InstallProviderRequest(BaseModel):
+    """Request schema for installing a special provider."""
+    provider_id: str = Field(..., description="Provider ID to install")
+
+
+class InstallProviderResponse(BaseModel):
+    """Response schema for provider installation."""
+    success: bool = Field(..., description="Whether installation succeeded")
+    message: str = Field(..., description="Installation result message")
+    output: Optional[str] = Field(None, description="Installation output")
+
+
+# Dictionary of special providers that require non-standard installation.
+# These can't be installed reliably on all platforms via pyproject.toml.
+# Users can install them via the GUI "Install" button or manually.
+SPECIAL_PROVIDERS = {
+    "bark": {
+        "name": "Bark TTS",
+        "install_command": "pip install git+https://github.com/suno-ai/bark.git",
+        "description": "Expressive TTS from Suno (requires ~5GB VRAM)",
+        "check_import": "bark",
+    },
+    "chattts": {
+        "name": "ChatTTS",
+        "install_command": "pip install ChatTTS",
+        "description": "Conversational speech synthesis",
+        "check_import": "ChatTTS",
+    },
+    "f5_tts": {
+        "name": "F5-TTS",
+        "install_command": "pip install f5-tts",
+        "description": "High-quality voice cloning (~1.5GB VRAM)",
+        "check_import": "f5_tts",
+    },
+    "styletts2": {
+        "name": "StyleTTS2",
+        "install_command": "pip install styletts2",
+        "description": "State-of-the-art expressive TTS (~1GB VRAM)",
+        "check_import": "styletts2",
+    },
+    "kokoro": {
+        "name": "Kokoro TTS",
+        "install_command": "pip install kokoro-onnx",
+        "description": "Lightweight 82M param ONNX model (CPU-friendly)",
+        "check_import": "kokoro_onnx",
+    },
+    "mimic3": {
+        "name": "Mimic3 TTS",
+        "install_command": "pip install mycroft-mimic3-tts",
+        "description": "Privacy-friendly offline TTS (Linux only, requires eSpeak)",
+        "check_import": "mimic3_tts",
+    },
+    "orpheus": {
+        "name": "Orpheus TTS",
+        "install_command": "pip install orpheus-tts",
+        "description": "Scalable TTS with multiple model sizes",
+        "check_import": "orpheus_tts",
+    },
+}
+
+
+@router.get(
+    "/special",
+    summary="List special providers requiring manual installation"
+)
+async def list_special_providers():
+    """
+    List providers that require special installation (not in pyproject.toml).
+    
+    These providers can be installed via the POST /install endpoint.
+    """
+    import importlib.util
+    
+    result = []
+    for provider_id, info in SPECIAL_PROVIDERS.items():
+        # Check if already installed by trying to import
+        is_installed = importlib.util.find_spec(info["check_import"]) is not None
+        
+        result.append({
+            "id": provider_id,
+            "name": info["name"],
+            "description": info["description"],
+            "install_command": info["install_command"],
+            "is_installed": is_installed,
+        })
+    
+    return result
+
+
+@router.post(
+    "/install",
+    response_model=InstallProviderResponse,
+    summary="Install a special provider"
+)
+async def install_special_provider(request: InstallProviderRequest) -> InstallProviderResponse:
+    """
+    Install a special provider that requires non-PyPI installation.
+    
+    This runs the installation command in a subprocess and returns the result.
+    Use this for providers like Bark that need to be installed from GitHub.
+    
+        REQUEST BODY:
+        =============
+        provider_id: The ID of the provider to install (e.g., "bark")
+        
+        RETURNS:
+        ========
+        InstallProviderResponse: Success status and installation output
+        
+        SECURITY NOTE:
+        ==============
+        This only allows installing from the predefined SPECIAL_PROVIDERS list.
+        Arbitrary commands cannot be executed.
+    """
+    import subprocess
+    import sys
+    
+    provider_id = request.provider_id.lower()
+    
+    # Validate provider is in our allowed list
+    if provider_id not in SPECIAL_PROVIDERS:
+        return InstallProviderResponse(
+            success=False,
+            message=f"Unknown provider: {provider_id}. "
+                    f"Available: {', '.join(SPECIAL_PROVIDERS.keys())}"
+        )
+    
+    provider_info = SPECIAL_PROVIDERS[provider_id]
+    install_command = provider_info["install_command"]
+    
+    logger.info(f"Installing special provider {provider_id}: {install_command}")
+    
+    try:
+        # Run the installation command
+        # We use the same Python interpreter that's running this script
+        process = subprocess.run(
+            install_command.split(),
+            capture_output=True,
+            text=True,
+            timeout=600,  # 10 minute timeout for large packages
+        )
+        
+        if process.returncode == 0:
+            logger.info(f"Successfully installed {provider_id}")
+            return InstallProviderResponse(
+                success=True,
+                message=f"Successfully installed {provider_info['name']}! "
+                        "Please restart the server to use this provider.",
+                output=process.stdout[-1000:] if process.stdout else None  # Last 1000 chars
+            )
+        else:
+            logger.error(f"Installation failed for {provider_id}: {process.stderr}")
+            return InstallProviderResponse(
+                success=False,
+                message=f"Installation failed. See output for details.",
+                output=process.stderr[-1000:] if process.stderr else None
+            )
+            
+    except subprocess.TimeoutExpired:
+        logger.error(f"Installation timed out for {provider_id}")
+        return InstallProviderResponse(
+            success=False,
+            message="Installation timed out after 10 minutes. "
+                    "Try running the command manually in a terminal."
+        )
+    except Exception as e:
+        logger.error(f"Installation error for {provider_id}: {e}")
+        return InstallProviderResponse(
+            success=False,
+            message=f"Installation error: {str(e)}"
+        )
+

@@ -117,21 +117,47 @@ class MiniMaxTTSRequest(BaseModel):
 class MiniMaxTTSResponse(BaseModel):
     """
     Response model for MiniMax TTS API.
-    This represents the expected response from the MiniMax API.
+    
+    This represents the actual response structure from the MiniMax API.
+    The API returns:
+    - base_resp: Contains status_code (0 = success) and status_msg
+    - data: Contains the audio data when successful
+    
+    Note: The API does NOT return a top-level 'success' field, so we compute it
+    from base_resp.status_code.
     """
-    success: bool = Field(..., description="Whether the request was successful")
-    audio_data: Optional[str] = Field(
-        None,
-        description="Base64 encoded audio data (if success=True)"
+    base_resp: dict = Field(
+        ..., 
+        description="API response metadata containing status_code and status_msg"
     )
-    error: Optional[str] = Field(
+    data: Optional[dict] = Field(
         None,
-        description="Error message (if success=False)"
+        description="Response data containing audio (hex_audio or audio field)"
     )
-    request_id: Optional[str] = Field(
+    extra_info: Optional[dict] = Field(
         None,
-        description="Request identifier for tracking"
+        description="Additional info like audio_file, subtitle_file"
     )
+    
+    @property
+    def success(self) -> bool:
+        """Check if the API call was successful (status_code == 0)."""
+        return self.base_resp.get("status_code", -1) == 0
+    
+    @property
+    def audio_data(self) -> Optional[str]:
+        """Get the base64/hex audio data from the response."""
+        if self.data:
+            # MiniMax returns audio in hex_audio or audio field
+            return self.data.get("audio") or self.data.get("hex_audio")
+        return None
+    
+    @property
+    def error(self) -> Optional[str]:
+        """Get error message if request failed."""
+        if not self.success:
+            return self.base_resp.get("status_msg", "Unknown MiniMax API error")
+        return None
 
 class MiniMaxProvider(BaseProvider):
     """
@@ -337,8 +363,11 @@ class MiniMaxProvider(BaseProvider):
             import base64
             audio_bytes = base64.b64decode(response.audio_data)
 
-            # Ensure the output directory exists
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            # Issue C-005 Fix: Handle empty directory path for relative paths
+            # os.path.dirname returns empty string for paths like "audio.wav"
+            output_dir = os.path.dirname(output_path)
+            if output_dir:  # Only create directory if dirname is non-empty
+                os.makedirs(output_dir, exist_ok=True)
 
             # Write the audio data to file
             with open(output_path, "wb") as f:

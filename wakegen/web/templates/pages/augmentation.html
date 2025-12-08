@@ -326,9 +326,7 @@
 
             async applyAugmentation() {
                 try {
-                    const profile = this.profiles[this.selectedProfile];
-                    // Override with custom settings if needed, but here we just send the selected profile config
-
+                    // Build augmentation profile from current settings
                     const response = await fetch('/api/augmentation/apply', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -336,12 +334,12 @@
                             input_dir: "./output", // Default or user configurable
                             output_dir: "./output/augmented",
                             profile: {
-                                name: this.selectedProfile,
-                                description: profile.description,
-                                noise: this.noise,
-                                reverb: this.reverb,
-                                pitch: this.pitch,
-                                device: this.device
+                                name: this.activePreset,
+                                description: `${this.activePreset} augmentation profile`,
+                                noise: this.settings.noise,
+                                reverb: this.settings.reverb,
+                                pitch: this.settings.pitch,
+                                devices: this.selectedDevices
                             },
                             copies_per_file: 2
                         })

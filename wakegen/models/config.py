@@ -2,7 +2,6 @@ from typing import Optional, Dict, Tuple, List
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from wakegen.core.types import AudioFormat, QualityLevel
-from dataclasses import field
 
 # We use 'BaseSettings' from pydantic-settings.
 # This allows us to load configuration from environment variables automatically.

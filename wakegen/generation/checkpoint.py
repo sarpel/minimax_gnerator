@@ -78,6 +78,40 @@ class CheckpointManager:
 
         return self._db
 
+    async def __aenter__(self) -> 'CheckpointManager':
+        """Async context manager entry.
+        
+        Issue 14: Enables 'async with CheckpointManager(...) as cm:' pattern
+        for automatic resource cleanup.
+        
+        Returns:
+            Self for use in context
+        """
+        await self._get_connection()
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Async context manager exit.
+        
+        Issue 14: Ensures database connection is properly closed even on errors.
+        
+        Args:
+            exc_type: Exception type if an error occurred
+            exc_val: Exception value if an error occurred
+            exc_tb: Exception traceback if an error occurred
+        """
+        await self.close()
+        return None
+    
+    async def close(self) -> None:
+        """Close database connection and release resources.
+        
+        Issue 14: Explicit cleanup method for graceful shutdown.
+        """
+        if self._db is not None:
+            await self._db.close()
+            self._db = None
+
     async def _initialize_schema(self) -> None:
         """Initialize database schema if it doesn't exist."""
         db = await self._get_connection()
@@ -315,7 +349,7 @@ class CheckpointManager:
             task_id = row[0]
             parameters_json = row[1]
             if parameters_json:
-                parameters = GenerationParameters.parse_raw(parameters_json)
+                parameters = GenerationParameters.model_validate_json(parameters_json)
                 tasks.append((task_id, parameters))
 
         return tasks
@@ -341,7 +375,7 @@ class CheckpointManager:
             task_id = row[0]
             result_json = row[1]
             if result_json:
-                result = GenerationResult.parse_raw(result_json)
+                result = GenerationResult.model_validate_json(result_json)
                 tasks.append((task_id, result))
 
         return tasks

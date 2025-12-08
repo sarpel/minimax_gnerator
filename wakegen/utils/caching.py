@@ -463,10 +463,16 @@ class CacheManager:
         # Calculate MD5 hash
         return hashlib.md5(data.encode("utf-8")).hexdigest()
         
-    def get(self, text: str, voice_id: str, params: Dict[str, Any] = {}) -> Optional[str]:
+    def get(self, text: str, voice_id: str, params: Optional[Dict[str, Any]] = None) -> Optional[str]:
         """
         Tries to retrieve a file path from the cache.
+        
+        Issue M-002 Fix: Use None as default instead of mutable {} to prevent
+        shared state bugs across function calls.
         """
+        # Default to empty dict if None (avoid mutable default argument)
+        if params is None:
+            params = {}
         file_hash = self._get_hash(text, voice_id, params)
         # We assume cached files are wavs for now, but this could be improved
         cache_path = os.path.join(self.cache_dir, f"{file_hash}.wav")
@@ -477,10 +483,15 @@ class CacheManager:
             
         return None
         
-    def get_path(self, text: str, voice_id: str, params: Dict[str, Any] = {}) -> str:
+    def get_path(self, text: str, voice_id: str, params: Optional[Dict[str, Any]] = None) -> str:
         """
         Returns the path where a new cache file should be saved.
+        
+        Issue M-002 Fix: Use None as default instead of mutable {}.
         """
+        # Default to empty dict if None (avoid mutable default argument)
+        if params is None:
+            params = {}
         file_hash = self._get_hash(text, voice_id, params)
         return os.path.join(self.cache_dir, f"{file_hash}.wav")
 

@@ -25,8 +25,13 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from wakegen.generation.rate_limiter import RateLimiter
 from wakegen.generation.progress import ProgressTracker
 from wakegen.models.generation import GenerationParameters, GenerationResult
+from wakegen.models.audio import AudioSample
 from wakegen.core.exceptions import GenerationError, ProviderError
 from wakegen.core.protocols import TTSProvider
+
+import time
+import tempfile
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -125,11 +130,18 @@ class BatchProcessor:
                 await self.progress_tracker.update_task_status(task_id, "processing")
 
             try:
+                # Issue C-002 Fix: Use correct method signature from TTSProvider protocol
+                # provider.generate(text, voice_id, output_path) instead of generate_audio(params)
+                output_path = self._generate_output_path(params)
+                
                 # Generate audio with timeout
-                result = await asyncio.wait_for(
-                    provider.generate_audio(params),
+                await asyncio.wait_for(
+                    provider.generate(params.text, params.voice_id, output_path),
                     timeout=self.config.timeout_seconds
                 )
+                
+                # Create GenerationResult from the generated audio
+                result = self._create_generation_result(params, output_path)
 
                 # Update progress on success
                 if self.progress_tracker:
@@ -156,6 +168,66 @@ class BatchProcessor:
                 raise GenerationError(f"Generation failed for task {task_id}: {str(e)}") from e
 
         return await _generate_with_retry()
+
+    def _generate_output_path(self, params: GenerationParameters) -> str:
+        """Generate a unique output path for the audio file.
+        
+        Args:
+            params: Generation parameters
+            
+        Returns:
+            Unique file path for the generated audio
+        """
+        # Create temp directory for generated audio
+        temp_dir = tempfile.gettempdir()
+        audio_dir = os.path.join(temp_dir, "wakegen_audio")
+        os.makedirs(audio_dir, exist_ok=True)
+        
+        # Create unique filename based on text, voice, and timestamp
+        timestamp = int(time.time() * 1000)
+        safe_text = params.text[:20].replace(" ", "_").replace("/", "_")
+        filename = f"{safe_text}_{params.voice_id}_{timestamp}.wav"
+        return os.path.join(audio_dir, filename)
+    
+    def _create_generation_result(
+        self,
+        params: GenerationParameters,
+        output_path: str
+    ) -> GenerationResult:
+        """Create a GenerationResult from generated audio.
+        
+        Args:
+            params: Original generation parameters
+            output_path: Path to the generated audio file
+            
+        Returns:
+            GenerationResult with audio metadata
+        """
+        # Get audio duration if file exists
+        duration = None
+        if os.path.exists(output_path):
+            try:
+                import soundfile as sf
+                info = sf.info(output_path)
+                duration = info.duration
+            except Exception:
+                pass
+        
+        audio_sample = AudioSample(
+            file_path=output_path,
+            text=params.text,
+            voice_id=params.voice_id,
+            provider=getattr(self, '_current_provider_type', 'edge_tts'),
+            duration_seconds=duration
+        )
+        
+        return GenerationResult(
+            parameters=params,
+            audio_data=audio_sample,
+            generation_time=0.0,  # Could be tracked if needed
+            provider_used=audio_sample.provider,
+            success=True
+        )
 
     async def _worker(
         self,
@@ -274,23 +346,33 @@ class BatchProcessor:
             Tuple of (task_id, result, error) for each completed task
         """
         # First try with primary provider
+        # Issue M-003 Fix: Track task params properly for fallback
+        task_params_map = {task_id: params for task_id, params in tasks}
+        
         async for task_id, result, error in self.process_batch(primary_provider, tasks):
             if error is None:
                 # Success with primary provider
                 yield task_id, result, None
             else:
-                # Try with fallback providers
+                # Try with fallback providers - use the actual failed task's params
+                actual_params = task_params_map.get(task_id)
+                if actual_params is None:
+                    yield task_id, None, error
+                    continue
+                    
                 fallback_error = None
+                fallback_success = False
                 for fallback_provider in fallback_providers:
                     try:
                         fallback_result = await self._process_single_task(
-                            fallback_provider, tasks[0][1], task_id  # Use first task's params as example
+                            fallback_provider, actual_params, task_id
                         )
                         yield task_id, fallback_result, None
+                        fallback_success = True
                         break
                     except Exception as e:
                         fallback_error = e
                         continue
 
-                if fallback_error:
+                if not fallback_success and fallback_error:
                     yield task_id, None, fallback_error

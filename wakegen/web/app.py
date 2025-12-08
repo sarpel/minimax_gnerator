@@ -39,8 +39,9 @@ a configured application instance.
 """
 
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Optional, AsyncGenerator
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -54,6 +55,43 @@ from wakegen.web.config import WebConfig, get_settings
 # Set up logging for this module
 # Logging helps us track what's happening in the application
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# LIFESPAN CONTEXT MANAGER (M-001 Fix)
+# =============================================================================
+# Issue M-001 Fix: Use modern lifespan context manager instead of deprecated
+# @app.on_event("startup") and @app.on_event("shutdown") decorators.
+# 
+# The lifespan pattern is the recommended approach in FastAPI 0.100+:
+# - Code before `yield` runs on startup
+# - Code after `yield` runs on shutdown
+# - The `app` parameter gives access to the FastAPI instance
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """
+    Lifespan context manager for FastAPI startup and shutdown events.
+    
+    This replaces the deprecated @app.on_event("startup") and 
+    @app.on_event("shutdown") decorators.
+    
+    Everything before `yield` runs BEFORE the app starts accepting requests.
+    Everything after `yield` runs AFTER the app stops accepting requests.
+    """
+    # -------------------------------------------------------------------------
+    # STARTUP LOGIC
+    # -------------------------------------------------------------------------
+    logger.info("=" * 60)
+    logger.info("🎤 WakeGen Web UI starting up...")
+    logger.info("=" * 60)
+    
+    # Yield control to the application - it runs here until shutdown
+    yield
+    
+    # -------------------------------------------------------------------------
+    # SHUTDOWN LOGIC
+    # -------------------------------------------------------------------------
+    logger.info("🎤 WakeGen Web UI shutting down...")
 
 
 def create_app(config: Optional[WebConfig] = None) -> FastAPI:
@@ -137,6 +175,9 @@ wake word audio datasets using multiple TTS providers.
 
         # Debug mode enables more detailed error responses
         debug=settings.debug,
+        
+        # Issue M-001 Fix: Use lifespan context manager for startup/shutdown
+        lifespan=lifespan,
     )
 
     # =========================================================================
@@ -388,8 +429,12 @@ wake word audio datasets using multiple TTS providers.
         logger.info("All API routers registered successfully")
 
     except ImportError as e:
-        # If routers aren't created yet, log a warning but don't crash
-        logger.warning(f"Some routers not yet available: {e}")
+        # Issue 13 fix: Better error messages with module name and install instructions
+        module_name = getattr(e, 'name', 'unknown')
+        logger.warning(
+            f"Router import failed - missing module: {module_name}. "
+            f"Error: {str(e)}. This may indicate missing dependencies."
+        )
 
     # Register audio router separately (optional feature)
     try:
@@ -402,7 +447,8 @@ wake word audio datasets using multiple TTS providers.
         )
         logger.info("Audio router registered")
     except ImportError as e:
-        logger.warning(f"Audio router not available: {e}")
+        module_name = getattr(e, 'name', 'unknown')
+        logger.warning(f"Audio router import failed - module: {module_name}. Error: {str(e)}")
 
     # Register augmentation router
     try:
@@ -415,7 +461,8 @@ wake word audio datasets using multiple TTS providers.
         )
         logger.info("Augmentation router registered")
     except ImportError as e:
-        logger.warning(f"Augmentation router not available: {e}")
+        module_name = getattr(e, 'name', 'unknown')
+        logger.warning(f"Augmentation router import failed - module: {module_name}. Error: {str(e)}")
 
     # Register quality router
     try:
@@ -428,7 +475,8 @@ wake word audio datasets using multiple TTS providers.
         )
         logger.info("Quality router registered")
     except ImportError as e:
-        logger.warning(f"Quality router not available: {e}")
+        module_name = getattr(e, 'name', 'unknown')
+        logger.warning(f"Quality router import failed - module: {module_name}. Error: {str(e)}")
 
     # Register export router
     try:
@@ -441,7 +489,8 @@ wake word audio datasets using multiple TTS providers.
         )
         logger.info("Export router registered")
     except ImportError as e:
-        logger.warning(f"Export router not available: {e}")
+        module_name = getattr(e, 'name', 'unknown')
+        logger.warning(f"Export router import failed - module: {module_name}. Error: {str(e)}")
 
     # Register system router
     try:
@@ -454,7 +503,8 @@ wake word audio datasets using multiple TTS providers.
         )
         logger.info("System router registered")
     except ImportError as e:
-        logger.warning(f"System router not available: {e}")
+        module_name = getattr(e, 'name', 'unknown')
+        logger.warning(f"System router import failed - module: {module_name}. Error: {str(e)}")
 
     # =========================================================================
     # WEBSOCKET ROUTES
@@ -471,42 +521,7 @@ wake word audio datasets using multiple TTS providers.
         )
         logger.info("WebSocket router registered")
     except ImportError as e:
-        logger.warning(f"WebSocket router not available: {e}")
-
-    # =========================================================================
-    # STARTUP AND SHUTDOWN EVENTS
-    # =========================================================================
-    # These functions run when the server starts and stops.
-    # Useful for initializing connections, loading data, etc.
-
-    @app.on_event("startup")
-    async def on_startup() -> None:
-        """
-        Called when the server starts up.
-
-        Use this for:
-        - Connecting to databases
-        - Loading configuration
-        - Initializing caches
-        - Logging startup messages
-        """
-        logger.info("=" * 60)
-        logger.info("🎤 WakeGen Web UI starting up...")
-        logger.info(f"   Host: {settings.host}")
-        logger.info(f"   Port: {settings.port}")
-        logger.info(f"   Debug: {settings.debug}")
-        logger.info("=" * 60)
-
-    @app.on_event("shutdown")
-    async def on_shutdown() -> None:
-        """
-        Called when the server shuts down.
-
-        Use this for:
-        - Closing database connections
-        - Flushing caches to disk
-        - Cleanup operations
-        """
-        logger.info("🎤 WakeGen Web UI shutting down...")
+        module_name = getattr(e, 'name', 'unknown')
+        logger.warning(f"WebSocket router import failed - module: {module_name}. Error: {str(e)}")
 
     return app

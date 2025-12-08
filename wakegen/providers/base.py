@@ -45,3 +45,29 @@ class BaseProvider(ABC):
         Validate config. Must be implemented by subclasses.
         """
         pass
+
+    async def cleanup(self) -> None:
+        """
+        Release resources held by the provider.
+        
+        Issue 18: Default implementation does nothing. Providers with heavy
+        models (XTTS, Bark, ChatTTS) should override this to release memory.
+        """
+        # Default: no cleanup needed for lightweight providers
+        pass
+    
+    async def health_check(self) -> bool:
+        """
+        Check if provider is operational.
+        
+        Issue 19: Default implementation validates config. Providers can
+        override for more sophisticated checks.
+        
+        Returns:
+            True if provider is healthy, False otherwise
+        """
+        try:
+            await self.validate_config()
+            return True
+        except Exception:
+            return False

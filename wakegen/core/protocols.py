@@ -45,3 +45,44 @@ class TTSProvider(Protocol):
         Raises ConfigError if something is wrong.
         """
         ...
+
+    async def cleanup(self) -> None:
+        """
+        Release resources held by the provider.
+        
+        Issue 18: Cleanup protocol for releasing heavy ML models, GPU memory,
+        and other resources. Providers with large models should implement this
+        to free memory when the provider is no longer needed.
+        
+        Example:
+            provider = get_provider(ProviderType.COQUI_XTTS, config)
+            try:
+                await provider.generate(...)
+            finally:
+                await provider.cleanup()  # Release model from memory
+        """
+        ...
+    
+    async def health_check(self) -> bool:
+        """
+        Check if the provider is operational and ready to generate audio.
+        
+        Issue 19: Health check protocol for monitoring provider status.
+        Returns True if the provider can successfully generate audio,
+        False otherwise.
+        
+        This can be used by:
+        - Web UI to show provider status
+        - Monitoring systems to track availability
+        - Load balancers to route requests
+        
+        Returns:
+            True if provider is healthy and operational, False otherwise
+            
+        Example:
+            if await provider.health_check():
+                await provider.generate(...)
+            else:
+                logger.error("Provider is not healthy")
+        """
+        ...

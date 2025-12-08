@@ -238,6 +238,25 @@ def generate(
     asyncio.run(run_interactive_generation())
 
 
+@cli.command()
+def wizard():
+    """
+    Interactive wizard for generating wake word samples.
+    
+    This launches a step-by-step guide that helps you:
+    - Choose your wake word(s)
+    - Select TTS providers and voices
+    - Configure sample count and output location
+    - Start generation with sensible defaults
+    
+    Perfect for new users or quick one-off generations!
+    
+    Example:
+        wakegen wizard
+    """
+    asyncio.run(run_interactive_generation())
+
+
 async def run_interactive_generation():
     """
     Runs the generation process using the interactive wizard.
@@ -1282,7 +1301,7 @@ class {class_name}(TTSPlugin):
             version="0.1.0",
             description="A custom TTS provider for wakegen",
             author="Your Name",
-            homepage="https://github.com/yourusername/{plugin_name}",
+            homepage="https://github.com/sarpel/{plugin_name}",
             requires_api_key=False,
             requires_gpu=False,
             supported_languages=["en"],

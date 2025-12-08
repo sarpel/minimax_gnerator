@@ -3,7 +3,7 @@
 
 # The version of our package.
 # We use Semantic Versioning (Major.Minor.Patch).
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 # Auto-register plugins when wakegen is imported
 # This makes plugins available immediately without explicit initialization

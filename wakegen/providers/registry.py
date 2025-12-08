@@ -15,6 +15,7 @@ Key Features:
 from dataclasses import dataclass
 from typing import Dict, Type, List, Optional
 import importlib.util
+import os
 import sys
 
 from wakegen.core.types import ProviderType
@@ -102,6 +103,52 @@ def get_provider(provider_type: ProviderType, config: ProviderConfig) -> TTSProv
     provider_class = _PROVIDER_REGISTRY[provider_type]
     # We assume the provider class accepts 'config' in its constructor
     return provider_class(config)  # type: ignore
+
+
+def get_any_provider(provider_name: str, config: ProviderConfig) -> TTSProvider:
+    """
+    Get a provider by name, supporting both built-in and plugin providers.
+    
+    Issue 15: This unified lookup function tries built-in providers first,
+    then falls back to plugin providers. Supports both enum-based names
+    (e.g., "edge_tts") and plugin names (e.g., "my-custom-plugin").
+    
+    Args:
+        provider_name: Name of the provider (enum value or plugin name)
+        config: Provider configuration
+        
+    Returns:
+        TTSProvider instance
+        
+    Raises:
+        ConfigError: If provider is not found in either registry
+        
+    Example:
+        # Built-in provider
+        provider = get_any_provider("edge_tts", config)
+        
+        # Plugin provider
+        provider = get_any_provider("my-custom-plugin", config)
+    """
+    # Try built-in providers first
+    try:
+        provider_type = ProviderType(provider_name)
+        return get_provider(provider_type, config)
+    except ValueError:
+        # Not a built-in provider, try plugins
+        try:
+            from wakegen.plugins.discovery import get_plugin_provider
+            return get_plugin_provider(provider_name, config)
+        except ImportError:
+            raise ConfigError(
+                f"Provider '{provider_name}' not found. "
+                f"It's not a built-in provider and plugin system is not available."
+            )
+        except ConfigError:
+            raise ConfigError(
+                f"Provider '{provider_name}' not found in built-in or plugin providers. "
+                f"Available built-in: {[p.value for p in list_available_providers()]}"
+            )
 
 
 def list_available_providers() -> List[ProviderType]:
@@ -367,7 +414,3 @@ def clear_availability_cache() -> None:
     or setting an environment variable) to force re-checking availability.
     """
     _PROVIDER_AVAILABILITY_CACHE.clear()
-
-
-# Need to import os for API key checking
-import os

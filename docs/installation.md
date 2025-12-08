@@ -12,7 +12,7 @@ This guide covers installing WakeGen on various platforms.
 
 ```bash
 # Clone and install
-git clone https://github.com/yourusername/wakegen.git
+git clone https://github.com/sarpel/wakegen.git
 cd wakegen
 pip install -e .
 ```
@@ -22,7 +22,7 @@ pip install -e .
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/wakegen.git
+git clone https://github.com/sarpel/wakegen.git
 cd wakegen
 ```
 
@@ -272,7 +272,7 @@ For contributing to WakeGen:
 
 ```bash
 # Clone with development dependencies
-git clone https://github.com/yourusername/wakegen.git
+git clone https://github.com/sarpel/wakegen.git
 cd wakegen
 
 # Create virtual environment

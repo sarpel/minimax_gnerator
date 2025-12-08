@@ -54,7 +54,7 @@ class AugmentationPipeline:
     def __init__(
         self,
         profile: AugmentationProfile,
-        sample_rate: int = 24000,
+        sample_rate: int = 16000,
         temp_dir: Optional[str] = None
     ):
         """
@@ -504,7 +504,7 @@ class AugmentationPipeline:
 # Convenience function for easy pipeline creation
 def create_pipeline(
     profile_id: EnvironmentProfile,
-    sample_rate: int = 24000
+    sample_rate: int = 16000
 ) -> AugmentationPipeline:
     """
     Create an augmentation pipeline with the specified environment profile.

@@ -25,7 +25,7 @@
                 </p>
             </div>
 
-            <form id="generation-form" class="p-6 space-y-6" x-data="generationForm()">
+            <form id="generation-form" class="p-6 space-y-6" x-data="generationForm()" @submit.prevent="submitForm($event)">
                 <!-- Wake Words Input -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -469,10 +469,7 @@
         };
     }
 
-    // Initialize form on page load
-    document.getElementById('generation-form').addEventListener('submit', function (e) {
-        e.preventDefault();
-        this.__x.$data.submitForm(e);
-    });
+    // Form submission is now handled by Alpine.js through @submit.prevent on the form element
+    // This ensures proper binding with the Alpine component data and methods
 </script>
 {% endblock %}

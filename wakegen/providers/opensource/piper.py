@@ -5,6 +5,7 @@ import subprocess
 import asyncio
 from typing import List, Any, Optional
 from pathlib import Path
+from functools import lru_cache
 
 from wakegen.core.types import ProviderType, Gender
 from wakegen.core.exceptions import ProviderError
@@ -27,9 +28,9 @@ class PiperTTSProvider(BaseProvider):
         Piper doesn't require API keys, so we just need basic configuration.
         """
         super().__init__(config)
-        # We'll store the Piper executable path and model cache
+        # Issue 16 fix: No longer using unbounded dict cache
+        # Voice caching is now handled by @lru_cache decorator on _load_voice_model
         self._piper_executable: Optional[str] = None
-        self._model_cache: dict = {}
 
     @property
     def provider_type(self) -> ProviderType:
@@ -47,17 +48,23 @@ class PiperTTSProvider(BaseProvider):
             raise ProviderError("Piper TTS library is not installed. Please install with: pip install piper-tts")
 
         # Check if we can find the piper executable
+        # Issue 6 fix: Using async subprocess instead of blocking subprocess.run
         try:
-            result = subprocess.run(
-                ["piper", "--help"],
-                capture_output=True,
-                text=True,
-                timeout=5
+            proc = await asyncio.create_subprocess_exec(
+                "piper", "--help",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
             )
-            if result.returncode != 0:
-                # Try to download Piper if not available
+            try:
+                await asyncio.wait_for(proc.communicate(), timeout=5.0)
+                if proc.returncode != 0:
+                    # Try to download Piper if not available
+                    self._download_piper_executable()
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
                 self._download_piper_executable()
-        except (subprocess.TimeoutExpired, FileNotFoundError):
+        except FileNotFoundError:
             self._download_piper_executable()
 
     def _download_piper_executable(self) -> None:
@@ -192,19 +199,29 @@ class PiperTTSProvider(BaseProvider):
 
         Returns:
             The PiperVoice object ready for synthesis
+            
+        Note:
+            Issue 16: Voice models are cached using @lru_cache (maxsize=5)
+            to prevent unlimited memory growth. Least recently used models
+            are automatically evicted when cache is full.
         """
-        # Check if we have this voice cached
-        if voice_id in self._model_cache:
-            return self._model_cache[voice_id]
-
+        # Delegate to cached loader
+        return await self._load_voice_model(voice_id)
+    
+    @staticmethod
+    @lru_cache(maxsize=5)
+    def _load_voice_model(voice_id: str) -> Any:
+        """
+        Load and cache a Piper voice model (LRU cache with max 5 models).
+        
+        This is a static method so @lru_cache works properly.
+        The cache will automatically evict least recently used models.
+        """
         try:
             from piper_tts import PiperVoice
 
             # Create the voice object (this will download if needed)
             voice = PiperVoice.load(voice_id)
-
-            # Cache the voice for future use
-            self._model_cache[voice_id] = voice
             return voice
 
         except Exception as e:
