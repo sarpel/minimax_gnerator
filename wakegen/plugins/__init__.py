@@ -26,6 +26,7 @@ from wakegen.plugins.base import (
 from wakegen.plugins.discovery import (
     discover_plugins,
     load_plugin,
+    get_plugin,
     get_loaded_plugins,
     register_plugin_provider,
     reload_plugins,
@@ -39,6 +40,7 @@ __all__ = [
     # Discovery functions
     "discover_plugins",
     "load_plugin",
+    "get_plugin",
     "get_loaded_plugins",
     "register_plugin_provider",
     "reload_plugins",

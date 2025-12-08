@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
 import logging
-from sklearn.model_selection import train_test_split # type: ignore
+from sklearn.model_selection import train_test_split
 
 # We use 'logging' to print messages to the console in a structured way.
 logger = logging.getLogger(__name__)

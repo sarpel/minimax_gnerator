@@ -31,7 +31,7 @@ import wakegen.providers
 console = Console()
 
 @click.group()
-def cli():
+def cli() -> None:
     """
     Wake Word Dataset Generator CLI.
     
@@ -43,7 +43,7 @@ def cli():
 @cli.command(name="list-providers")
 @click.option("--available-only", "-a", is_flag=True, help="Show only providers that are ready to use")
 @click.option("--verbose", "-v", is_flag=True, help="Show detailed information including install hints")
-def list_providers(available_only: bool, verbose: bool):
+def list_providers(available_only: bool, verbose: bool) -> None:
     """
     Lists all supported TTS providers and their availability status.
     
@@ -92,7 +92,7 @@ def list_providers(available_only: bool, verbose: bool):
                 requirements = "[dim]All satisfied[/dim]"
             else:
                 requirements = "\n".join([
-                    f"[yellow]• {dep}[/yellow]" for dep in p.missing_dependencies
+                    f"[yellow]• {dep}[/yellow]" for dep in (p.missing_dependencies or [])
                 ])
                 if p.install_hint:
                     requirements += f"\n[dim]{p.install_hint}[/dim]"
@@ -114,7 +114,7 @@ def list_providers(available_only: bool, verbose: bool):
 @cli.command(name="list-voices")
 @click.option("--provider", default="all", help="Provider to list voices for (default: all)")
 @click.option("--language", "-l", multiple=True, help="Filter voices by language code (e.g., tr-TR)")
-def list_voices(provider: str, language: tuple):
+def list_voices(provider: str, language: tuple[str, ...]) -> None:
     """
     Lists available voices for the specified provider(s).
     
@@ -129,7 +129,7 @@ def list_voices(provider: str, language: tuple):
     asyncio.run(run_list_voices(provider, language))
 
 
-async def run_list_voices(provider_name: str, languages: tuple):
+async def run_list_voices(provider_name: str, languages: tuple[str, ...]) -> None:
     """
     Async implementation of list-voices.
     """
@@ -201,8 +201,8 @@ def generate(
     provider: str,
     voice: Optional[str],
     config: Optional[str],
-    language: tuple
-):
+    language: tuple[str, ...]
+) -> None:
     """
     Generates audio samples for a wake word.
     
@@ -239,7 +239,7 @@ def generate(
 
 
 @cli.command()
-def wizard():
+def wizard() -> None:
     """
     Interactive wizard for generating wake word samples.
     
@@ -257,7 +257,7 @@ def wizard():
     asyncio.run(run_interactive_generation())
 
 
-async def run_interactive_generation():
+async def run_interactive_generation() -> None:
     """
     Runs the generation process using the interactive wizard.
     """
@@ -279,8 +279,8 @@ async def run_interactive_generation():
 
 async def run_generation_from_config(
     config_path: str,
-    language_override: Optional[tuple] = None
-):
+    language_override: Optional[tuple[str, ...]] = None
+) -> None:
     """
     Runs generation based on a YAML configuration file.
     """
@@ -303,7 +303,7 @@ async def run_generation_from_config(
         for p_config in config.providers:
             try:
                 # Initialize provider
-                provider = get_provider(p_config.type, get_provider_config())
+                provider = get_provider(ProviderType(p_config.type), get_provider_config())
                 
                 # Determine voices to use
                 voices_to_use = []
@@ -374,7 +374,7 @@ async def run_generation(
     voice_id: Optional[str] = None,
     preset: Optional[str] = None,
     languages: Optional[list[str]] = None
-):
+) -> None:
     """
     Core generation logic.
     """
@@ -465,7 +465,7 @@ async def run_generation(
 @cli.command()
 @click.option("--input-dir", required=True, help="Directory containing audio files to augment")
 @click.option("--output-dir", required=True, help="Directory to save augmented files")
-def augment(input_dir: str, output_dir: str):
+def augment(input_dir: str, output_dir: str) -> None:
     """
     Applies augmentation effects (noise, reverb) to existing audio files.
     """
@@ -475,7 +475,7 @@ def augment(input_dir: str, output_dir: str):
 
 @cli.command()
 @click.option("--data-dir", required=True, help="Directory containing the dataset")
-def validate(data_dir: str):
+def validate(data_dir: str) -> None:
     """
     Runs quality assurance checks on the dataset.
     """
@@ -487,7 +487,7 @@ def validate(data_dir: str):
 @click.option("--data-dir", required=True, help="Directory containing the dataset")
 @click.option("--format", default="openwakeword", help="Export format (default: openwakeword)")
 @click.option("--output-path", required=True, help="Path to save the exported manifest/files")
-def export(data_dir: str, format: str, output_path: str):
+def export(data_dir: str, format: str, output_path: str) -> None:
     """
     Exports the dataset to a specific format for training.
     """
@@ -498,7 +498,7 @@ def export(data_dir: str, format: str, output_path: str):
 @cli.command()
 @click.option("--model-type", default="openwakeword", help="Type of model to train")
 @click.option("--output-script", default="train.sh", help="Path to save the training script")
-def train_script(model_type: str, output_script: str):
+def train_script(model_type: str, output_script: str) -> None:
     """
     Generates a training script for the selected model type.
     """
@@ -542,8 +542,8 @@ def batch(
     provider: str,
     voice: Optional[str],
     split_by_provider: bool,
-    providers: tuple
-):
+    providers: tuple[str, ...]
+) -> None:
     """
     Generate samples for multiple wake words in batch mode.
     
@@ -584,7 +584,7 @@ async def run_batch_generation(
     voice_id: Optional[str],
     split_by_provider: bool,
     provider_list: Optional[list]
-):
+) -> None:
     """
     Async implementation of batch generation.
     
@@ -682,7 +682,7 @@ async def run_batch_generation(
     
     # 5. Initialize providers and get voices
     provider_config = get_provider_config()
-    provider_instances: dict[ProviderType, tuple[TTSProvider, Optional[any]]] = {}
+    provider_instances: dict[ProviderType, tuple[TTSProvider, Optional[Any]]] = {}
     
     for p_type, _ in providers_to_use:
         try:
@@ -693,7 +693,14 @@ async def run_batch_generation(
             if voice_id:
                 from wakegen.core.protocols import Voice
                 from wakegen.core.types import Gender
-                selected_voice = Voice(id=voice_id, name=voice_id, language="unknown", gender=Gender.NEUTRAL)
+                selected_voice = Voice(
+                    id=voice_id, 
+                    name=voice_id, 
+                    language="unknown", 
+                    gender=Gender.NEUTRAL,
+                    provider=p_type.value,
+                    supports_cloning=False
+                )
             else:
                 voices = await provider.list_voices()
                 if voices:
@@ -784,7 +791,7 @@ async def run_batch_generation(
 
 
 @cli.group()
-def config():
+def config() -> None:
     """
     Manage wakegen configuration files.
     
@@ -812,7 +819,7 @@ def config():
     is_flag=True,
     help="Overwrite existing file without asking"
 )
-def config_init(output: str, force: bool):
+def config_init(output: str, force: bool) -> None:
     """
     Generate a template wakegen.yaml configuration file.
     
@@ -877,7 +884,7 @@ def config_init(output: str, force: bool):
     is_flag=True,
     help="Show detailed configuration values"
 )
-def config_validate(path: str, verbose: bool):
+def config_validate(path: str, verbose: bool) -> None:
     """
     Validate a wakegen configuration file.
     
@@ -995,7 +1002,7 @@ def _print_config_summary(config: WakegenConfig) -> None:
 
 
 @cli.group()
-def plugin():
+def plugin() -> None:
     """
     Manage third-party TTS provider plugins.
     
@@ -1012,7 +1019,7 @@ def plugin():
 
 @plugin.command(name="list")
 @click.option("--verbose", "-v", is_flag=True, help="Show detailed plugin information")
-def plugin_list(verbose: bool):
+def plugin_list(verbose: bool) -> None:
     """
     List all installed wakegen plugins.
     
@@ -1095,7 +1102,7 @@ def plugin_list(verbose: bool):
 
 @plugin.command(name="info")
 @click.argument("name")
-def plugin_info(name: str):
+def plugin_info(name: str) -> None:
     """
     Show detailed information about a specific plugin.
     
@@ -1154,7 +1161,7 @@ def plugin_info(name: str):
 
 
 @plugin.command(name="reload")
-def plugin_reload():
+def plugin_reload() -> None:
     """
     Reload all plugins.
     
@@ -1189,7 +1196,7 @@ def plugin_reload():
 @plugin.command(name="create")
 @click.argument("name")
 @click.option("--output-dir", "-o", default=".", help="Directory to create plugin in")
-def plugin_create(name: str, output_dir: str):
+def plugin_create(name: str, output_dir: str) -> None:
     """
     Create a template for a new wakegen plugin.
     
@@ -1379,7 +1386,7 @@ class {class_name}(TTSPlugin):
 
 
 @cli.group()
-def cache():
+def cache() -> None:
     """
     Manage the audio generation cache.
     
@@ -1396,7 +1403,7 @@ def cache():
 
 @cache.command(name="stats")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def cache_stats(as_json: bool):
+def cache_stats(as_json: bool) -> None:
     """
     Show cache statistics.
     
@@ -1434,7 +1441,7 @@ def cache_stats(as_json: bool):
 
 @cache.command(name="clear")
 @click.option("--force", "-f", is_flag=True, help="Skip confirmation")
-def cache_clear(force: bool):
+def cache_clear(force: bool) -> None:
     """
     Clear all cached files.
     
@@ -1465,7 +1472,7 @@ def cache_clear(force: bool):
 
 
 @cache.command(name="path")
-def cache_path():
+def cache_path() -> None:
     """
     Show the cache directory location.
     
@@ -1489,7 +1496,7 @@ def cache_path():
 @cache.command(name="list")
 @click.option("--limit", "-n", default=20, help="Maximum entries to show")
 @click.option("--sort", "-s", type=click.Choice(["recent", "oldest", "size"]), default="recent", help="Sort order")
-def cache_list(limit: int, sort: str):
+def cache_list(limit: int, sort: str) -> None:
     """
     List cached files.
     
@@ -1550,7 +1557,7 @@ def cache_list(limit: int, sort: str):
 
 @cli.command(name="gpu-status")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def gpu_status(as_json: bool):
+def gpu_status(as_json: bool) -> None:
     """
     Show GPU status and availability.
     
@@ -1655,7 +1662,7 @@ def gpu_status(as_json: bool):
     is_flag=True,
     help="Enable debug mode with verbose logging"
 )
-def serve(host: str, port: int, reload: bool, debug: bool):
+def serve(host: str, port: int, reload: bool, debug: bool) -> None:
     """
     Start the WakeGen Web UI server.
     

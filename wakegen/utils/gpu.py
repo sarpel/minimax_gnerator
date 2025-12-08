@@ -262,7 +262,7 @@ class GPUManager:
         "default": 500,         # Conservative default
     }
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the GPU manager."""
         self._status: Optional[GPUStatus] = None
         self._model_assignments: Dict[str, int] = {}  # model_id -> gpu_id
@@ -345,6 +345,7 @@ class GPUManager:
             )
         
         # Find best GPU
+        gpu_id: Optional[int] = None
         if preferred_gpu is not None and preferred_gpu < self.num_gpus:
             # Check if preferred GPU has enough memory
             if self.get_available_memory(preferred_gpu) >= required_memory_mb:

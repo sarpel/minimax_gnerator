@@ -88,13 +88,13 @@ class DatasetMetadata:
     
     def to_json(self, path: Path) -> None:
         """Save metadata to JSON file."""
-        with open(path, "w", encoding="utf-8") as f:
+        with open(str(path), "w", encoding="utf-8") as f:
             json.dump(self.to_dict(), f, indent=2)
     
     @classmethod
     def from_json(cls, path: Path) -> "DatasetMetadata":
         """Load metadata from JSON file."""
-        with open(path, "r", encoding="utf-8") as f:
+        with open(str(path), "r", encoding="utf-8") as f:
             data = json.load(f)
         return cls(**data)
 
@@ -131,6 +131,10 @@ class BaseExporter:
     """Base class for dataset exporters."""
     
     format_name: str = "base"
+    output_dir: Path
+    source_dir: Path
+    wake_word: str
+    metadata: DatasetMetadata
     
     def __init__(
         self,
@@ -176,7 +180,7 @@ class BaseExporter:
     def _collect_audio_files(self, directory: Path) -> List[Path]:
         """Collect all audio files from a directory."""
         extensions = {".wav", ".mp3", ".flac", ".ogg"}
-        files = []
+        files: List[Path] = []
         for ext in extensions:
             files.extend(directory.glob(f"*{ext}"))
             files.extend(directory.glob(f"**/*{ext}"))
@@ -287,8 +291,8 @@ class MycroftPreciseExporter(BaseExporter):
             "threshold": 0.5,
         }
         
-        with open(self.output_dir / "precise_config.json", "w") as f:
-            json.dump(config, f, indent=2)
+        with open(str(self.output_dir / "precise_config.json"), "w") as config_file:
+            json.dump(config, config_file, indent=2)
         
         logger.info(f"Exported to Mycroft Precise format at {self.output_dir}")
         return self.output_dir
@@ -354,8 +358,8 @@ class PicovoiceExporter(BaseExporter):
         
         # Create manifest CSV (Picovoice Console format)
         manifest_path = self.output_dir / "manifest.csv"
-        with open(manifest_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=["audio_filepath", "text", "label", "split"])
+        with open(str(manifest_path), "w", newline="", encoding="utf-8") as csv_file:
+            writer = csv.DictWriter(csv_file, fieldnames=["audio_filepath", "text", "label", "split"])
             writer.writeheader()
             writer.writerows(manifest_entries)
         
@@ -375,8 +379,8 @@ class PicovoiceExporter(BaseExporter):
             },
         }
         
-        with open(self.output_dir / "picovoice_config.json", "w") as f:
-            json.dump(config, f, indent=2)
+        with open(str(self.output_dir / "picovoice_config.json"), "w") as config_file:
+            json.dump(config, config_file, indent=2)
         
         # Save full metadata
         self.metadata.positive_samples = len(positive_files)
@@ -446,8 +450,8 @@ class TensorFlowExporter(BaseExporter):
         
         # Create tf.data pipeline configuration
         pipeline_config = self._create_pipeline_config()
-        with open(self.output_dir / "tf_data_config.json", "w") as f:
-            json.dump(pipeline_config, f, indent=2)
+        with open(str(self.output_dir / "tf_data_config.json"), "w") as config_file:
+            json.dump(pipeline_config, config_file, indent=2)
         
         # Create example loading script
         self._create_example_script()
@@ -624,8 +628,8 @@ if __name__ == "__main__":
     print(f"Test batches: {len(list(test_ds))}")
 '''
         
-        with open(self.output_dir / "load_tf_dataset.py", "w") as f:
-            f.write(script)
+        with open(str(self.output_dir / "load_tf_dataset.py"), "w") as script_file:
+            script_file.write(script)
 
 
 class PyTorchExporter(BaseExporter):
@@ -684,8 +688,8 @@ class PyTorchExporter(BaseExporter):
         
         # Create DataLoader configuration
         dataloader_config = self._create_dataloader_config()
-        with open(self.output_dir / "dataloader_config.json", "w") as f:
-            json.dump(dataloader_config, f, indent=2)
+        with open(str(self.output_dir / "dataloader_config.json"), "w") as config_file:
+            json.dump(dataloader_config, config_file, indent=2)
         
         # Create example Dataset class
         self._create_dataset_class()
@@ -719,8 +723,8 @@ class PyTorchExporter(BaseExporter):
                         })
             
             labels_path = split_dir / "labels.csv"
-            with open(labels_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=["filename", "label", "label_name"])
+            with open(str(labels_path), "w", newline="", encoding="utf-8") as csv_file:
+                writer = csv.DictWriter(csv_file, fieldnames=["filename", "label", "label_name"])
                 writer.writeheader()
                 writer.writerows(labels)
     
@@ -926,7 +930,9 @@ class HuggingFaceExporter(BaseExporter):
         
         # Collect negative samples
         negative_files = []
-        train_neg, val_neg, test_neg = [], [], []
+        train_neg: List[Path] = []
+        val_neg: List[Path] = []
+        test_neg: List[Path] = []
         if negative_samples_dir:
             neg_path = Path(negative_samples_dir)
             negative_files = self._collect_audio_files(neg_path)
@@ -1001,9 +1007,9 @@ class HuggingFaceExporter(BaseExporter):
         
         # Write metadata JSON Lines file
         metadata_path = data_dir / f"{split_name}.jsonl"
-        with open(metadata_path, "w", encoding="utf-8") as f:
+        with open(str(metadata_path), "w", encoding="utf-8") as meta_file:
             for entry in metadata_entries:
-                f.write(json.dumps(entry) + "\n")
+                meta_file.write(json.dumps(entry) + "\n")
     
     def _create_loading_script(self) -> None:
         """Create Hugging Face dataset loading script."""
@@ -1196,8 +1202,9 @@ for example in train_data:
             f.write(card)
 
 
+from typing import Type
 # Export format registry
-EXPORTERS: Dict[ExportFormat, type] = {
+EXPORTERS: Dict[ExportFormat, Type[BaseExporter]] = {
     ExportFormat.MYCROFT_PRECISE: MycroftPreciseExporter,
     ExportFormat.PICOVOICE: PicovoiceExporter,
     ExportFormat.TENSORFLOW: TensorFlowExporter,
@@ -1259,7 +1266,7 @@ def list_export_formats() -> List[Dict[str, str]]:
         {
             "format": fmt.value,
             "name": fmt.name,
-            "description": EXPORTERS[fmt].__doc__.strip().split("\n")[0] if fmt in EXPORTERS else "",
+            "description": (EXPORTERS[fmt].__doc__ or "").strip().split("\n")[0] if fmt in EXPORTERS else "",
         }
         for fmt in ExportFormat
     ]

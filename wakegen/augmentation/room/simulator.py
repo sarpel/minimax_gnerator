@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from wakegen.core.exceptions import RoomSimulationError
 from wakegen.utils.audio import load_audio
 import soundfile as sf
+import librosa
 import warnings
 
 # Suppress pyroomacoustics warnings for cleaner output
@@ -76,7 +77,7 @@ class RoomSimulator:
     def create_room_impulse_response(
         self,
         room_params: RoomParameters
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Generate a room impulse response using the image method.
 
@@ -156,10 +157,10 @@ class RoomSimulator:
 
     def apply_room_simulation(
         self,
-        audio: np.ndarray,
-        rir: np.ndarray,
+        audio: np.ndarray[Any, Any],
+        rir: np.ndarray[Any, Any],
         wet_dry_mix: float = 0.5
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Apply room simulation to audio using convolution with impulse response.
 
@@ -198,7 +199,7 @@ class RoomSimulator:
         except Exception as e:
             raise RoomSimulationError(f"Failed to apply room simulation: {str(e)}") from e
 
-    def _fft_convolve(self, signal: np.ndarray, kernel: np.ndarray) -> np.ndarray:
+    def _fft_convolve(self, signal: np.ndarray[Any, Any], kernel: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
         """
         Perform FFT-based convolution for efficient processing.
 

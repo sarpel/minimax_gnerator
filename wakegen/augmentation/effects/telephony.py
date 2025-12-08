@@ -18,7 +18,7 @@ an old landline, a cell phone, or a Zoom call.
 
 from __future__ import annotations
 import numpy as np
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple, Dict, Any
 from dataclasses import dataclass
 from enum import Enum
 from wakegen.core.exceptions import AugmentationError
@@ -81,7 +81,7 @@ class TelephonySimulator:
     """
     
     # Frequency characteristics for each phone type
-    PHONE_CHARACTERISTICS: Dict[PhoneType, Dict] = {
+    PHONE_CHARACTERISTICS: Dict[PhoneType, Dict[str, Any]] = {
         PhoneType.PSTN_LANDLINE: {
             "low_cut": 300,
             "high_cut": 3400,
@@ -138,10 +138,10 @@ class TelephonySimulator:
     
     def apply_bandpass_filter(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         low_cut: float,
         high_cut: float
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Apply a bandpass filter to simulate phone bandwidth.
         
@@ -180,10 +180,10 @@ class TelephonySimulator:
     
     def add_codec_artifacts(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         quantization_bits: int = 16,
         add_noise: bool = True
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Add codec-like artifacts (quantization noise, compression effects).
         
@@ -213,10 +213,10 @@ class TelephonySimulator:
     
     def add_packet_loss(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         loss_rate: float = 0.02,
         packet_size_ms: float = 20.0
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Simulate network packet loss by zeroing out random segments.
         
@@ -256,9 +256,9 @@ class TelephonySimulator:
     
     def add_jitter(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         jitter_ms: float = 20.0
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Simulate network jitter by applying slight time stretching variations.
         
@@ -292,10 +292,10 @@ class TelephonySimulator:
     
     def add_phone_echo(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         echo_delay_ms: float = 150.0,
         echo_level: float = 0.1
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Add telephone echo effect.
         
@@ -328,9 +328,9 @@ class TelephonySimulator:
     
     def simulate_phone_call(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         phone_type: PhoneType
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Apply phone-specific frequency and codec characteristics.
         
@@ -368,9 +368,9 @@ class TelephonySimulator:
     
     def apply_full_simulation(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         config: TelephonyConfig
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Apply complete telephony simulation including network effects.
         
@@ -479,10 +479,10 @@ class DistanceSimulator:
     
     def apply_distance_attenuation(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         distance_meters: float,
         reference_distance: float = 0.3
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Apply volume attenuation based on distance (inverse square law).
         
@@ -508,9 +508,9 @@ class DistanceSimulator:
     
     def apply_air_absorption(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         distance_meters: float
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Simulate high-frequency absorption through air.
         
@@ -552,9 +552,9 @@ class DistanceSimulator:
     
     def apply_proximity_effect_loss(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         distance_meters: float
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Simulate loss of proximity effect at increased distances.
         
@@ -597,10 +597,10 @@ class DistanceSimulator:
     
     def add_simple_reverb(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         rt60: float = 0.5,
         wet_level: float = 0.3
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Add simple reverb to simulate room acoustics.
         
@@ -648,9 +648,9 @@ class DistanceSimulator:
     
     def simulate_distance(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         distance_meters: float
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Apply basic distance simulation.
         
@@ -674,9 +674,9 @@ class DistanceSimulator:
     
     def apply_full_simulation(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         config: DistanceConfig
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Apply complete distance and room simulation.
         

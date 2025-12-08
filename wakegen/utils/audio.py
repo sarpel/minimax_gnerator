@@ -2,6 +2,7 @@ import os
 import soundfile as sf
 import librosa
 import numpy as np
+from typing import Any
 from wakegen.core.exceptions import AudioError
 
 # We use 'soundfile' to read and write audio files because it's fast and reliable.
@@ -31,7 +32,7 @@ def save_audio(data: bytes, file_path: str, sample_rate: int = 24000) -> None:
         # Wrap any error in our custom AudioError
         raise AudioError(f"Failed to save audio to {file_path}: {str(e)}") from e
 
-def load_audio(file_path: str) -> tuple[np.ndarray, int]:
+def load_audio(file_path: str) -> tuple[np.ndarray[Any, Any], int]:
     """
     Loads an audio file into a numpy array.
 
@@ -85,7 +86,7 @@ def resample_audio(file_path: str, target_sr: int = 16000) -> None:
         raise AudioError(f"Failed to resample audio {file_path}: {str(e)}") from e
 
 # Additional functions for quality assurance system
-async def load_audio_file(file_path: str) -> tuple[np.ndarray, int]:
+async def load_audio_file(file_path: str) -> tuple[np.ndarray[Any, Any], int]:
     """
     Async wrapper for load_audio function.
 
@@ -99,7 +100,7 @@ async def load_audio_file(file_path: str) -> tuple[np.ndarray, int]:
     """
     return load_audio(file_path)
 
-def get_audio_duration(audio_data: np.ndarray, sample_rate: int) -> float:
+def get_audio_duration(audio_data: np.ndarray[Any, Any], sample_rate: int) -> float:
     """
     Calculate the duration of audio data in seconds.
 

@@ -65,9 +65,9 @@ class MicrophoneSimulator:
 
     def apply_microphone_effect(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         profile: MicrophoneProfile
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Apply microphone frequency response and characteristics to audio.
 
@@ -103,9 +103,9 @@ class MicrophoneSimulator:
 
     def _apply_frequency_response(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         profile: MicrophoneProfile
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Apply the frequency response curve using FFT-based EQ.
 
@@ -117,9 +117,9 @@ class MicrophoneSimulator:
             Audio with frequency response applied.
         """
         # Convert frequency response to EQ curve
-        freq_points, gain_db = zip(*profile.frequency_response)
-        freq_points = np.array(freq_points)
-        gain_db = np.array(gain_db)
+        freq_points_tuple, gain_db_tuple = zip(*profile.frequency_response)
+        freq_points = np.array(freq_points_tuple)
+        gain_db = np.array(gain_db_tuple)
 
         # Convert dB to linear gain
         gain_linear = 10.0 ** (gain_db / 20.0)
@@ -139,10 +139,10 @@ class MicrophoneSimulator:
 
     def _apply_fft_eq(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         eq_curve_func: Any,
         sample_rate: int
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Apply EQ using FFT-based frequency domain processing.
 
@@ -167,9 +167,9 @@ class MicrophoneSimulator:
 
     def _add_harmonic_distortion(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         distortion_amount: float
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Add harmonic distortion to simulate microphone nonlinearities.
 
@@ -193,9 +193,9 @@ class MicrophoneSimulator:
 
     def _add_microphone_noise(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         noise_floor_db: float
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Add microphone self-noise based on noise floor specification.
 

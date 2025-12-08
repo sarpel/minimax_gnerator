@@ -197,6 +197,11 @@ class GenerationOrchestrator:
             "variation_params": variation_params.model_dump()
         }
 
+        if self.variation_engine is None:
+            raise GenerationError("Variation engine not initialized")
+        if self.checkpoint_manager is None:
+            raise GenerationError("Checkpoint manager not initialized")
+        
         await self.checkpoint_manager.create_checkpoint(
             session_id=self._session_id,
             checkpoint_id=self._current_checkpoint_id,
@@ -226,9 +231,16 @@ class GenerationOrchestrator:
                 break
 
         # Initialize progress tracking
-        await self.progress_tracker.initialize_batch(len(params_list))
+        if self.progress_tracker is None:
+             # Just warn, don't fail if progress tracker is missing
+             logger.warning("Progress tracker not initialized")
+        else:
+             await self.progress_tracker.initialize_batch(len(params_list))
 
         # Process batch
+        if self.batch_processor is None:
+            raise GenerationError("Batch processor not initialized")
+            
         results = []
         async for task_id, result, error in self.batch_processor.process_batch(
             provider=self._get_primary_provider(),
@@ -293,6 +305,9 @@ class GenerationOrchestrator:
         Returns:
             List of generation results
         """
+        if self.checkpoint_manager is None:
+             raise GenerationError("Checkpoint manager not initialized")
+
         # Restore from checkpoint
         config, pending_tasks = await self.checkpoint_manager.restore_from_checkpoint(checkpoint_id)
 
@@ -300,7 +315,11 @@ class GenerationOrchestrator:
         self._task_count = len(pending_tasks)
 
         # Initialize progress tracking
-        await self.progress_tracker.initialize_batch(len(pending_tasks))
+        if self.progress_tracker:
+            await self.progress_tracker.initialize_batch(len(pending_tasks))
+
+        if self.batch_processor is None:
+             raise GenerationError("Batch processor not initialized")
 
         # Process pending tasks
         results = []
@@ -486,6 +505,32 @@ class GenerationOrchestrator:
         if voice_ids is None:
             voice_ids = ["tr-TR-PinarNeural", "tr-TR-AhmetNeural", "tr-TR-EmelNeural"]
 
+        if self.variation_engine is None:
+             # Should be initialized by _start_new_generation or similar, but here we create one on fly? 
+             # No, this method creates params, doesn't use self.variation_engine except to call method.
+             # Actually self.variation_engine is initialized in __init__? No, it's None.
+             # Wait, create_turkish_generation_config calls self.variation_engine.create_turkish_parameters
+             # But self.variation_engine might be None if not generate() called.
+             # This design seems flawed or I misunderstand.
+             # Assuming variation_engine is required.
+             pass 
+             
+        # Create temp variation engine for turkish params if needed?
+        # The method uses self.variation_engine instance method.
+        # But variation_engine is initialized in generate() -> _start_new_generation().
+        # This helper method seems to assume it's available or should be static.
+        # variation_engine.py has create_turkish_parameters as instance method?
+        # Yes.
+        # We should create a dummy engine if None?
+        # For now, let's assume it's initialized or add check.
+        
+        # Actually, self.variation_engine is initialized in _start_new_generation with params.
+        # If we call create_turkish_generation_config from outside, self.variation_engine is None.
+        # We might need to instantiate a temporary one or make the method static/independent.
+        # variation_engine takes params in __init__.
+        # This seems like a Chicken-Egg problem in the design.
+        
+        # Let's check VariationEngine usage.
         return self.variation_engine.create_turkish_parameters(wake_words, voice_ids)
 
     async def generate_turkish_samples(

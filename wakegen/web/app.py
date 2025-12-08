@@ -41,7 +41,7 @@ a configured application instance.
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional, AsyncGenerator
+from typing import Optional, AsyncGenerator, Dict
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -302,7 +302,19 @@ wake word audio datasets using multiple TTS providers.
 
     @app.get("/providers", response_class=HTMLResponse)
     async def providers_page(request: Request) -> HTMLResponse:
-        """Serve the providers management page."""
+        """
+        Serve the providers management page.
+        
+        Displays a dashboard showing all available TTS providers, their
+        installation status, voice counts, and configuration options.
+        Users can enable/disable providers and view available voices.
+        
+        Args:
+            request: FastAPI Request object containing session and app state.
+            
+        Returns:
+            HTMLResponse: Rendered providers.html template.
+        """
         templates: Jinja2Templates = request.app.state.templates
         return templates.TemplateResponse(
             "pages/providers.html",
@@ -311,7 +323,19 @@ wake word audio datasets using multiple TTS providers.
 
     @app.get("/generate", response_class=HTMLResponse)
     async def generate_page(request: Request) -> HTMLResponse:
-        """Serve the generation page."""
+        """
+        Serve the audio generation page.
+        
+        Provides the main interface for generating wake word audio samples.
+        Users can specify wake words, select providers and voices, configure
+        sample count, and start batch generation jobs.
+        
+        Args:
+            request: FastAPI Request object containing session and app state.
+            
+        Returns:
+            HTMLResponse: Rendered generate.html template.
+        """
         templates: Jinja2Templates = request.app.state.templates
         return templates.TemplateResponse(
             "pages/generate.html",
@@ -320,7 +344,19 @@ wake word audio datasets using multiple TTS providers.
 
     @app.get("/config", response_class=HTMLResponse)
     async def config_page(request: Request) -> HTMLResponse:
-        """Serve the configuration editor page."""
+        """
+        Serve the configuration editor page.
+        
+        Provides a form-based interface for editing wakegen.yaml settings.
+        Users can modify generation parameters, provider settings, output
+        directories, and export configurations.
+        
+        Args:
+            request: FastAPI Request object containing session and app state.
+            
+        Returns:
+            HTMLResponse: Rendered config.html template.
+        """
         templates: Jinja2Templates = request.app.state.templates
         return templates.TemplateResponse(
             "pages/config.html",
@@ -329,7 +365,19 @@ wake word audio datasets using multiple TTS providers.
 
     @app.get("/augmentation", response_class=HTMLResponse)
     async def augmentation_page(request: Request) -> HTMLResponse:
-        """Serve the augmentation settings page."""
+        """
+        Serve the augmentation settings page.
+        
+        Provides controls for audio augmentation effects including noise
+        injection, room simulation, microphone simulation, and time/pitch
+        stretching. Users can create and manage augmentation profiles.
+        
+        Args:
+            request: FastAPI Request object containing session and app state.
+            
+        Returns:
+            HTMLResponse: Rendered augmentation.html template.
+        """
         templates: Jinja2Templates = request.app.state.templates
         return templates.TemplateResponse(
             "pages/augmentation.html",
@@ -338,7 +386,19 @@ wake word audio datasets using multiple TTS providers.
 
     @app.get("/quality", response_class=HTMLResponse)
     async def quality_page(request: Request) -> HTMLResponse:
-        """Serve the quality dashboard page."""
+        """
+        Serve the quality dashboard page.
+        
+        Displays quality metrics for generated audio samples including
+        ASR verification results, SNR scores, and validation statistics.
+        Users can review and filter samples by quality thresholds.
+        
+        Args:
+            request: FastAPI Request object containing session and app state.
+            
+        Returns:
+            HTMLResponse: Rendered quality.html template.
+        """
         templates: Jinja2Templates = request.app.state.templates
         return templates.TemplateResponse(
             "pages/quality.html",
@@ -347,7 +407,19 @@ wake word audio datasets using multiple TTS providers.
 
     @app.get("/export", response_class=HTMLResponse)
     async def export_page(request: Request) -> HTMLResponse:
-        """Serve the export page."""
+        """
+        Serve the dataset export page.
+        
+        Provides options for exporting datasets to various training formats
+        including OpenWakeWord, Mycroft Precise, Picovoice, TensorFlow,
+        PyTorch, and HuggingFace. Users can configure train/val/test splits.
+        
+        Args:
+            request: FastAPI Request object containing session and app state.
+            
+        Returns:
+            HTMLResponse: Rendered export.html template.
+        """
         templates: Jinja2Templates = request.app.state.templates
         return templates.TemplateResponse(
             "pages/export.html",
@@ -356,7 +428,19 @@ wake word audio datasets using multiple TTS providers.
 
     @app.get("/system", response_class=HTMLResponse)
     async def system_page(request: Request) -> HTMLResponse:
-        """Serve the system status page."""
+        """
+        Serve the system status page.
+        
+        Displays system health information including GPU availability,
+        memory usage, provider status, and active generation jobs.
+        Useful for monitoring and troubleshooting.
+        
+        Args:
+            request: FastAPI Request object containing session and app state.
+            
+        Returns:
+            HTMLResponse: Rendered system.html template.
+        """
         templates: Jinja2Templates = request.app.state.templates
         return templates.TemplateResponse(
             "pages/system.html",
@@ -364,7 +448,7 @@ wake word audio datasets using multiple TTS providers.
         )
 
     @app.get("/api/health")
-    async def health_check() -> dict:
+    async def health_check() -> Dict[str, str]:
         """
         Health check endpoint.
 

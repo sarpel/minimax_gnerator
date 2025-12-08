@@ -67,8 +67,8 @@ class QualityIssue(BaseModel):
     type: IssueType = Field(..., description="Type of issue")
     severity: IssueSeverity = Field(..., description="Severity level")
     message: str = Field(..., description="Human-readable description")
-    value: Optional[float] = Field(None, description="Measured value if applicable")
-    threshold: Optional[float] = Field(None, description="Threshold that was exceeded")
+    value: Optional[float] = Field(default=None, description="Measured value if applicable")
+    threshold: Optional[float] = Field(default=None, description="Threshold that was exceeded")
 
 
 class DurationMetrics(BaseModel):

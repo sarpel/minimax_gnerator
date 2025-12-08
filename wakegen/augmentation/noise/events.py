@@ -17,6 +17,7 @@ from __future__ import annotations
 import random
 import numpy as np
 from typing import List, Tuple, Dict, Any
+from typing import Any, Optional, List
 from dataclasses import dataclass
 from wakegen.core.exceptions import NoiseError
 
@@ -110,7 +111,7 @@ class NoiseEventGenerator:
         event_type: str,
         duration: float,
         intensity: float = 0.5
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Generate a specific type of noise event.
 
@@ -163,7 +164,7 @@ class NoiseEventGenerator:
         num_samples: int,
         center_freq: float,
         freq_range: Tuple[float, float]
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Generate noise concentrated around a specific frequency band.
 
@@ -195,8 +196,8 @@ class NoiseEventGenerator:
     def _create_event_envelope(
         self,
         event_type: str,
-        t: np.ndarray
-    ) -> np.ndarray:
+        t: np.ndarray[Any, Any]
+    ) -> np.ndarray[Any, Any]:
         """
         Create an amplitude envelope for different event types.
 
@@ -302,9 +303,9 @@ class NoiseEventGenerator:
 
     def apply_events_to_noise(
         self,
-        base_noise: np.ndarray,
+        base_noise: np.ndarray[Any, Any],
         events: List[NoiseEvent]
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Apply noise events to a base noise signal.
 

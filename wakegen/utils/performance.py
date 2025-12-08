@@ -56,12 +56,12 @@ class PerformanceMonitor:
         self.name = name
         self.start_time = 0.0
 
-    def __enter__(self):
+    def __enter__(self) -> "PerformanceMonitor":
         self.start_time = time.perf_counter()
         log_memory_usage(f"Start {self.name}")
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         end_time = time.perf_counter()
         duration = end_time - self.start_time
         logger.info(f"Block '{self.name}' finished in {duration:.4f} seconds")

@@ -14,7 +14,7 @@ Key Features:
 
 from __future__ import annotations
 import numpy as np
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any
 from wakegen.core.exceptions import RoomSimulationError
 
 class RoomConvolver:
@@ -46,10 +46,10 @@ class RoomConvolver:
 
     def convolve(
         self,
-        signal: np.ndarray,
-        kernel: np.ndarray,
+        signal: np.ndarray[Any, Any],
+        kernel: np.ndarray[Any, Any],
         wet_dry_mix: float = 1.0
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Apply convolution using overlap-add method for efficiency.
 
@@ -79,10 +79,10 @@ class RoomConvolver:
 
     def _direct_convolve(
         self,
-        signal: np.ndarray,
-        kernel: np.ndarray,
+        signal: np.ndarray[Any, Any],
+        kernel: np.ndarray[Any, Any],
         wet_dry_mix: float
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Direct convolution for short kernels.
 
@@ -115,10 +115,10 @@ class RoomConvolver:
 
     def _overlap_add_convolve(
         self,
-        signal: np.ndarray,
-        kernel: np.ndarray,
+        signal: np.ndarray[Any, Any],
+        kernel: np.ndarray[Any, Any],
         wet_dry_mix: float
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Overlap-add convolution for long kernels.
 
@@ -179,7 +179,7 @@ class RoomConvolver:
 
         return mixed
 
-    def _pad_to_length(self, array: np.ndarray, target_length: int) -> np.ndarray:
+    def _pad_to_length(self, array: np.ndarray[Any, Any], target_length: int) -> np.ndarray[Any, Any]:
         """
         Pad array to target length with zeros.
 
@@ -199,10 +199,10 @@ class RoomConvolver:
 
     def batch_convolve(
         self,
-        signals: list[np.ndarray],
-        kernel: np.ndarray,
+        signals: list[np.ndarray[Any, Any]],
+        kernel: np.ndarray[Any, Any],
         wet_dry_mix: float = 1.0
-    ) -> list[np.ndarray]:
+    ) -> list[np.ndarray[Any, Any]]:
         """
         Apply convolution to multiple signals efficiently.
 

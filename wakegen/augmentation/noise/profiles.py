@@ -13,6 +13,7 @@ Key Features:
 """
 
 from __future__ import annotations
+import random
 from typing import Dict, Any, List
 from dataclasses import dataclass
 from wakegen.core.types import EnvironmentProfile
@@ -48,7 +49,7 @@ class NoiseProfileManager:
     custom profile creation.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize with default profiles."""
         self.profiles = self._create_default_profiles()
 

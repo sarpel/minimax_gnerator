@@ -13,7 +13,7 @@ Key Features:
 """
 
 from dataclasses import dataclass
-from typing import Dict, Type, List, Optional
+from typing import Dict, Type, List, Optional, cast, Any
 import importlib.util
 import os
 import sys
@@ -42,10 +42,10 @@ class ProviderInfo:
     requires_gpu: bool = False
     requires_api_key: bool = False
     is_available: bool = False
-    missing_dependencies: List[str] = None
+    missing_dependencies: Optional[List[str]] = None
     install_hint: Optional[str] = None
     
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.missing_dependencies is None:
             self.missing_dependencies = []
 
@@ -138,7 +138,7 @@ def get_any_provider(provider_name: str, config: ProviderConfig) -> TTSProvider:
         # Not a built-in provider, try plugins
         try:
             from wakegen.plugins.discovery import get_plugin_provider
-            return get_plugin_provider(provider_name, config)
+            return cast(TTSProvider, get_plugin_provider(provider_name, config))
         except ImportError:
             raise ConfigError(
                 f"Provider '{provider_name}' not found. "
@@ -197,7 +197,7 @@ def _check_module_available(module_name: str) -> bool:
 
 # Define what each provider needs to work
 # Format: {ProviderType: (required_modules, optional_modules, api_key_env_var, gpu_required, install_hint)}
-_PROVIDER_REQUIREMENTS: Dict[ProviderType, dict] = {
+_PROVIDER_REQUIREMENTS: Dict[ProviderType, Dict[str, Any]] = {
     ProviderType.EDGE_TTS: {
         "required": ["edge_tts"],
         "optional": [],

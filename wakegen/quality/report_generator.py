@@ -42,18 +42,18 @@ class ReportGenerationConfig(BaseModel):
     """Configuration for report generation."""
 
     # Visualization settings
-    plotly_theme: str = Field("plotly_white", description="Plotly theme for visualizations")
-    color_scheme: str = Field("viridis", description="Color scheme for charts")
-    interactive_charts: bool = Field(True, description="Enable interactive charts")
+    plotly_theme: str = Field(default="plotly_white", description="Plotly theme for visualizations")
+    color_scheme: str = Field(default="viridis", description="Color scheme for charts")
+    interactive_charts: bool = Field(default=True, description="Enable interactive charts")
 
     # Content settings
-    include_detailed_tables: bool = Field(True, description="Include detailed data tables")
-    include_sample_analysis: bool = Field(True, description="Include individual sample analysis")
-    max_samples_in_report: int = Field(50, description="Maximum samples to include in detailed analysis")
+    include_detailed_tables: bool = Field(default=True, description="Include detailed data tables")
+    include_sample_analysis: bool = Field(default=True, description="Include individual sample analysis")
+    max_samples_in_report: int = Field(default=50, description="Maximum samples to include in detailed analysis")
 
     # Template settings
-    template_name: str = Field("default_report.html", description="Jinja2 template name")
-    custom_css: Optional[str] = Field(None, description="Custom CSS for report")
+    template_name: str = Field(default="default_report.html", description="Jinja2 template name")
+    custom_css: Optional[str] = Field(default=None, description="Custom CSS for report")
 
 async def generate_report(
     dataset_path: str | Path,
@@ -223,7 +223,7 @@ def _create_duration_histogram(df: pd.DataFrame, config: ReportGenerationConfig)
         template=config.plotly_theme
     )
 
-    return fig.to_html(full_html=False, include_plotlyjs="cdn")
+    return str(fig.to_html(full_html=False, include_plotlyjs="cdn"))
 
 def _create_quality_distribution(df: pd.DataFrame, config: ReportGenerationConfig) -> str:
     """Create quality score distribution chart.
@@ -259,7 +259,7 @@ def _create_quality_distribution(df: pd.DataFrame, config: ReportGenerationConfi
         template=config.plotly_theme
     )
 
-    return fig.to_html(full_html=False, include_plotlyjs="cdn")
+    return str(fig.to_html(full_html=False, include_plotlyjs="cdn"))
 
 def _create_snr_quality_scatter(df: pd.DataFrame, config: ReportGenerationConfig) -> str:
     """Create SNR vs Quality scatter plot.
@@ -287,7 +287,7 @@ def _create_snr_quality_scatter(df: pd.DataFrame, config: ReportGenerationConfig
         template=config.plotly_theme
     )
 
-    return fig.to_html(full_html=False, include_plotlyjs="cdn")
+    return str(fig.to_html(full_html=False, include_plotlyjs="cdn"))
 
 def _create_component_scores_chart(df: pd.DataFrame, config: ReportGenerationConfig) -> str:
     """Create component scores breakdown chart.
@@ -326,7 +326,7 @@ def _create_component_scores_chart(df: pd.DataFrame, config: ReportGenerationCon
         template=config.plotly_theme
     )
 
-    return fig.to_html(full_html=False, include_plotlyjs="cdn")
+    return str(fig.to_html(full_html=False, include_plotlyjs="cdn"))
 
 def _create_file_size_distribution(df: pd.DataFrame, config: ReportGenerationConfig) -> str:
     """Create file size distribution chart.
@@ -356,7 +356,7 @@ def _create_file_size_distribution(df: pd.DataFrame, config: ReportGenerationCon
         template=config.plotly_theme
     )
 
-    return fig.to_html(full_html=False, include_plotlyjs="cdn")
+    return str(fig.to_html(full_html=False, include_plotlyjs="cdn"))
 
 def _generate_data_tables(
     stats_result: DatasetStatisticsResult,

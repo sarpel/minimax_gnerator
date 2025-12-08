@@ -426,10 +426,10 @@ class GenerationCache:
             self._update_stats()
             return self._stats
     
-    def __enter__(self):
+    def __enter__(self) -> "GenerationCache":
         return self
     
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Optional[Any], exc_val: Optional[Any], exc_tb: Optional[Any]) -> None:
         self.save_metadata()
 
 

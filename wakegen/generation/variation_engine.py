@@ -36,10 +36,10 @@ class VariationParameters:
     voice_ids: List[str]
     speed_range: Tuple[float, float] = (0.8, 1.2)
     pitch_range: Tuple[float, float] = (0.9, 1.1)
-    prosody_variations: List[str] = None
-    emphasis_positions: List[int] = None
+    prosody_variations: Optional[List[str]] = None
+    emphasis_positions: Optional[List[int]] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Initialize default variations if not provided."""
         if self.prosody_variations is None:
             # Default prosody variations for natural speech

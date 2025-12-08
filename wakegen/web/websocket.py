@@ -38,7 +38,7 @@ clients can connect to a WebSocket and receive push notifications.
 
 import asyncio
 import logging
-from typing import Dict, Set, Optional
+from typing import Dict, Set, Optional, Any
 from datetime import datetime
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -138,7 +138,7 @@ class ConnectionManager:
 
         logger.info(f"WebSocket disconnected for job {job_id}")
 
-    async def send_progress(self, job_id: str, data: dict) -> None:
+    async def send_progress(self, job_id: str, data: Dict[str, Any]) -> None:
         """
         Send a progress update to all clients watching a job.
 
@@ -164,7 +164,7 @@ class ConnectionManager:
                 logger.warning(f"Failed to send to WebSocket: {e}")
                 self.disconnect(websocket, job_id)
 
-    async def broadcast_all(self, data: dict) -> None:
+    async def broadcast_all(self, data: Dict[str, Any]) -> None:
         """
         Send a message to ALL connected clients (all jobs).
 
@@ -349,7 +349,7 @@ async def websocket_stats(websocket: WebSocket) -> None:
 # =============================================================================
 
 
-async def notify_job_progress(job_id: str, progress_data: dict) -> None:
+async def notify_job_progress(job_id: str, progress_data: Dict[str, Any]) -> None:
     """
     Utility function to notify all WebSocket clients about job progress.
 

@@ -297,7 +297,8 @@ class PiperTTSProvider(BaseProvider):
                     name=v["name"],
                     gender=gender,
                     language=v["language"],
-                    provider=self.provider_type
+                    provider=self.provider_type,
+                    supports_cloning=False
                 ))
 
             return voice_list

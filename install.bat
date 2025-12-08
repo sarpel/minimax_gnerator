@@ -17,9 +17,9 @@ if %errorlevel% neq 0 (
 )
 
 REM Create virtual environment if it doesn't exist
-if not exist ".venv" (
+if not exist "venv" (
     echo [INFO] Creating virtual environment...
-    python -m venv .venv
+    python -m venv venv
     if %errorlevel% neq 0 (
         echo [ERROR] Failed to create virtual environment.
         pause
@@ -32,7 +32,7 @@ if not exist ".venv" (
 
 REM Activate virtual environment and install dependencies
 echo [INFO] Installing dependencies...
-call .venv\Scripts\activate.bat
+call venv\Scripts\activate.bat
 pip install -e .[web]
 
 if %errorlevel% neq 0 (

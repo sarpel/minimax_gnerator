@@ -13,7 +13,7 @@ import hashlib
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict, Tuple, Any
 
 import numpy as np
 from pydantic import BaseModel, Field
@@ -43,17 +43,17 @@ class DeduplicationConfig(BaseModel):
     """Configuration for duplicate detection."""
 
     # Similarity thresholds (0-1)
-    fingerprint_threshold: float = Field(0.95, description="Fingerprint similarity threshold")
-    spectrogram_threshold: float = Field(0.90, description="Spectrogram hash similarity threshold")
-    embedding_threshold: float = Field(0.85, description="Embedding similarity threshold")
+    fingerprint_threshold: float = Field(default=0.95, description="Fingerprint similarity threshold")
+    spectrogram_threshold: float = Field(default=0.90, description="Spectrogram hash similarity threshold")
+    embedding_threshold: float = Field(default=0.85, description="Embedding similarity threshold")
 
     # Processing parameters
-    fingerprint_window_size: int = Field(1024, description="Window size for fingerprinting")
-    spectrogram_bins: int = Field(128, description="Spectrogram frequency bins")
-    embedding_dimension: int = Field(64, description="Embedding dimension for similarity")
+    fingerprint_window_size: int = Field(default=1024, description="Window size for fingerprinting")
+    spectrogram_bins: int = Field(default=128, description="Spectrogram frequency bins")
+    embedding_dimension: int = Field(default=64, description="Embedding dimension for similarity")
 
     # Performance
-    max_files_in_memory: int = Field(1000, description="Maximum files to keep in memory cache")
+    max_files_in_memory: int = Field(default=1000, description="Maximum files to keep in memory cache")
 
 async def detect_duplicates(
     target_file_path: str | Path,
@@ -122,7 +122,7 @@ async def detect_duplicates(
     return results
 
 async def _detect_duplicates_single(
-    target_audio: np.ndarray,
+    target_audio: np.ndarray[Any, Any],
     target_sample_rate: int,
     reference_file: Path,
     config: DeduplicationConfig
@@ -178,8 +178,8 @@ async def _detect_duplicates_single(
     )
 
 async def _detect_fingerprint_duplicates(
-    target_audio: np.ndarray,
-    ref_audio: np.ndarray,
+    target_audio: np.ndarray[Any, Any],
+    ref_audio: np.ndarray[Any, Any],
     config: DeduplicationConfig
 ) -> DuplicateDetectionResult:
     """Detect duplicates using audio fingerprinting.
@@ -214,7 +214,7 @@ async def _detect_fingerprint_duplicates(
         }
     )
 
-def _generate_audio_fingerprint(audio_data: np.ndarray, config: DeduplicationConfig) -> List[str]:
+def _generate_audio_fingerprint(audio_data: np.ndarray[Any, Any], config: DeduplicationConfig) -> List[str]:
     """Generate robust audio fingerprint from audio data.
 
     Uses spectro-temporal features with hashing for robustness.
@@ -281,8 +281,8 @@ def _calculate_fingerprint_similarity(
     return intersection / union
 
 async def _detect_spectrogram_duplicates(
-    target_audio: np.ndarray,
-    ref_audio: np.ndarray,
+    target_audio: np.ndarray[Any, Any],
+    ref_audio: np.ndarray[Any, Any],
     config: DeduplicationConfig
 ) -> DuplicateDetectionResult:
     """Detect duplicates using spectrogram hashing.
@@ -317,7 +317,7 @@ async def _detect_spectrogram_duplicates(
         }
     )
 
-def _generate_spectrogram_hash(audio_data: np.ndarray, config: DeduplicationConfig) -> str:
+def _generate_spectrogram_hash(audio_data: np.ndarray[Any, Any], config: DeduplicationConfig) -> str:
     """Generate hash from spectrogram representation.
 
     Args:
@@ -375,8 +375,8 @@ def _calculate_hash_similarity(hash1: str, hash2: str) -> float:
     return matching_bits / total_bits
 
 async def _detect_embedding_duplicates(
-    target_audio: np.ndarray,
-    ref_audio: np.ndarray,
+    target_audio: np.ndarray[Any, Any],
+    ref_audio: np.ndarray[Any, Any],
     config: DeduplicationConfig
 ) -> DuplicateDetectionResult:
     """Detect duplicates using audio embeddings.
@@ -414,7 +414,7 @@ async def _detect_embedding_duplicates(
         }
     )
 
-def _generate_audio_embedding(audio_data: np.ndarray, config: DeduplicationConfig) -> np.ndarray:
+def _generate_audio_embedding(audio_data: np.ndarray[Any, Any], config: DeduplicationConfig) -> np.ndarray[Any, Any]:
     """Generate semantic embedding from audio data.
 
     Uses spectral and temporal features to create semantic representation.
@@ -468,9 +468,9 @@ def _generate_audio_embedding(audio_data: np.ndarray, config: DeduplicationConfi
     # Normalize embedding
     embedding = (embedding - np.min(embedding)) / (np.max(embedding) - np.min(embedding) + 1e-10)
 
-    return embedding
+    return np.array(embedding)
 
-def _calculate_spectral_flatness(magnitudes: np.ndarray) -> float:
+def _calculate_spectral_flatness(magnitudes: np.ndarray[Any, Any]) -> float:
     """Calculate spectral flatness measure.
 
     Args:
@@ -482,9 +482,9 @@ def _calculate_spectral_flatness(magnitudes: np.ndarray) -> float:
     magnitudes = magnitudes + 1e-10  # Avoid log(0)
     geometric_mean = np.exp(np.mean(np.log(magnitudes)))
     arithmetic_mean = np.mean(magnitudes)
-    return geometric_mean / arithmetic_mean
+    return float(geometric_mean / arithmetic_mean)
 
-def _calculate_skewness(data: np.ndarray) -> float:
+def _calculate_skewness(data: np.ndarray[Any, Any]) -> float:
     """Calculate skewness of data distribution.
 
     Args:
@@ -497,9 +497,9 @@ def _calculate_skewness(data: np.ndarray) -> float:
     std = np.std(data)
     if std == 0:
         return 0.0
-    return np.mean(((data - mean) / std) ** 3)
+    return float(np.mean(((data - mean) / std) ** 3))
 
-def _calculate_kurtosis(data: np.ndarray) -> float:
+def _calculate_kurtosis(data: np.ndarray[Any, Any]) -> float:
     """Calculate kurtosis of data distribution.
 
     Args:
@@ -512,9 +512,9 @@ def _calculate_kurtosis(data: np.ndarray) -> float:
     std = np.std(data)
     if std == 0:
         return 0.0
-    return np.mean(((data - mean) / std) ** 4) - 3  # Excess kurtosis
+    return float(np.mean(((data - mean) / std) ** 4) - 3)  # Excess kurtosis
 
-def _simple_resample(audio_data: np.ndarray, ratio: float) -> np.ndarray:
+def _simple_resample(audio_data: np.ndarray[Any, Any], ratio: float) -> np.ndarray[Any, Any]:
     """Simple audio resampling using linear interpolation.
 
     For basic comparison purposes only.
@@ -536,7 +536,7 @@ def _simple_resample(audio_data: np.ndarray, ratio: float) -> np.ndarray:
     else:
         return _simple_resample_channel(audio_data, ratio)
 
-def _simple_resample_channel(channel_data: np.ndarray, ratio: float) -> np.ndarray:
+def _simple_resample_channel(channel_data: np.ndarray[Any, Any], ratio: float) -> np.ndarray[Any, Any]:
     """Resample single channel using linear interpolation.
 
     Args:

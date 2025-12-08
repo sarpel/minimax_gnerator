@@ -172,7 +172,7 @@ class F5TTSProvider(BaseProvider):
             # Run generation in executor (CPU-bound operation)
             loop = asyncio.get_running_loop()
             
-            def _run_inference():
+            def _run_inference() -> Any:
                 """Run the TTS inference."""
                 if reference_audio:
                     # Voice cloning mode
@@ -220,6 +220,7 @@ class F5TTSProvider(BaseProvider):
                     gender=v_gender,
                     language=v_lang,
                     provider=self.provider_type,
+                    supports_cloning=False
                 ))
             
             # Add a "cloning" placeholder to indicate voice cloning is supported
@@ -229,6 +230,7 @@ class F5TTSProvider(BaseProvider):
                 gender=Gender.NEUTRAL,
                 language="any",
                 provider=self.provider_type,
+                supports_cloning=True
             ))
             
             return voices
@@ -260,7 +262,7 @@ register_provider(ProviderType.F5_TTS, F5TTSProvider)
 # =============================================================================
 
 
-async def test_f5_tts_provider():
+async def test_f5_tts_provider() -> None:
     """
     Test function to verify F5-TTS provider works correctly.
     Run with: python -m wakegen.providers.opensource.f5_tts

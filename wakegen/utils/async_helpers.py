@@ -36,7 +36,7 @@ def retry_async(
     delay: float = 1.0,
     exceptions: tuple[Type[Exception], ...] = (Exception,),
     exponential_backoff: bool = False
-) -> Callable:
+) -> Callable[..., Any]:
     """
     A decorator to retry an async function if it raises an exception.
 
@@ -55,7 +55,7 @@ def retry_async(
             # This will be retried up to 3 times if it fails
             return await api.get_data()
     """
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             last_exception = None
@@ -183,7 +183,7 @@ class ParallelExecutor:
         tasks: List[T],
         worker: Callable[[T], Coroutine[Any, Any, Any]],
         progress_callback: Optional[Callable[[int, int], None]] = None
-    ) -> List[TaskResult]:
+    ) -> List[TaskResult[Any]]:
         """
         Execute tasks in parallel.
         
@@ -198,14 +198,15 @@ class ParallelExecutor:
         self._semaphore = asyncio.Semaphore(self.max_concurrent)
         self._stats = ParallelExecutorStats(total_tasks=len(tasks))
         
-        results: List[TaskResult] = []
+        results: List[TaskResult[Any]] = []
         completed = 0
         
-        async def run_task(task_id: int, task: T) -> TaskResult:
+        async def run_task(task_id: int, task: T) -> TaskResult[Any]:
             nonlocal completed
             
+            assert self._semaphore is not None
             async with self._semaphore:
-                # Rate limiting
+                    # Rate limiting
                 if self.rate_limit:
                     now = time.time()
                     elapsed = now - self._last_task_time
@@ -260,7 +261,7 @@ class ParallelExecutor:
         self,
         tasks: List[T],
         worker: Callable[[T], Coroutine[Any, Any, Any]]
-    ) -> AsyncIterator[TaskResult]:
+    ) -> AsyncIterator[TaskResult[Any]]:
         """
         Execute tasks and yield results as they complete.
         
@@ -276,7 +277,8 @@ class ParallelExecutor:
         """
         self._semaphore = asyncio.Semaphore(self.max_concurrent)
         
-        async def run_task(task_id: int, task: T) -> TaskResult:
+        async def run_task(task_id: int, task: T) -> TaskResult[Any]:
+            assert self._semaphore is not None
             async with self._semaphore:
                 if self.rate_limit:
                     await asyncio.sleep(self.rate_limit)
@@ -299,10 +301,10 @@ class ParallelExecutor:
                     )
         
         # Create all task coroutines
-        pending = [
+        pending = {
             asyncio.create_task(run_task(i, task))
             for i, task in enumerate(tasks)
-        ]
+        }
         
         # Yield results as they complete
         while pending:
@@ -446,7 +448,7 @@ async def process_in_batches(
 
 
 async def gather_with_limit(
-    coros: List[Coroutine],
+    coros: List[Coroutine[Any, Any, Any]],
     limit: int
 ) -> List[Any]:
     """
@@ -461,7 +463,7 @@ async def gather_with_limit(
     """
     semaphore = asyncio.Semaphore(limit)
     
-    async def limited_coro(coro):
+    async def limited_coro(coro: Coroutine[Any, Any, Any]) -> Any:
         async with semaphore:
             return await coro
     
@@ -469,7 +471,7 @@ async def gather_with_limit(
 
 
 async def first_successful(
-    coros: List[Coroutine],
+    coros: List[Coroutine[Any, Any, Any]],
     timeout: Optional[float] = None
 ) -> Any:
     """

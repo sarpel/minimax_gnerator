@@ -18,7 +18,7 @@ import random
 import numpy as np
 import librosa
 import soundfile as sf
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any
 from wakegen.core.exceptions import NoiseError
 from wakegen.utils.audio import load_audio
 
@@ -56,7 +56,7 @@ class NoiseMixer:
         duration_seconds: float,
         noise_type: str = "white",
         color: float = 1.0
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Generate synthetic noise of the specified type and duration.
 
@@ -94,7 +94,7 @@ class NoiseMixer:
         except Exception as e:
             raise NoiseError(f"Failed to generate {noise_type} noise: {str(e)}") from e
 
-    def _generate_colored_noise(self, num_samples: int, beta: float) -> np.ndarray:
+    def _generate_colored_noise(self, num_samples: int, beta: float) -> np.ndarray[Any, Any]:
         """
         Generate colored noise using the spectral synthesis method.
 
@@ -131,10 +131,10 @@ class NoiseMixer:
 
     def mix_with_noise(
         self,
-        clean_audio: np.ndarray,
-        noise_audio: np.ndarray,
+        clean_audio: np.ndarray[Any, Any],
+        noise_audio: np.ndarray[Any, Any],
         target_snr_db: float
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Mix clean audio with noise at the specified SNR level.
 

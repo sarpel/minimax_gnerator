@@ -35,7 +35,7 @@ def load_preset(preset_name: str) -> Dict[str, Any]:
     except Exception as e:
         raise ConfigError(f"Failed to load preset '{preset_name}': {str(e)}") from e
 
-def get_generation_config(preset_name: str = None) -> GenerationConfig:
+def get_generation_config(preset_name: str | None = None) -> GenerationConfig:
     """
     Creates a GenerationConfig object.
     If a preset is provided, it loads values from there.

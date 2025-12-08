@@ -27,19 +27,19 @@ class MiniMaxVoiceSetting(BaseModel):
     These control the basic characteristics of the generated speech.
     """
     speed: float = Field(
-        1.0,
+        default=1.0,
         description="Speech speed (0.5 to 2.0, where 1.0 is normal)",
         ge=0.5,
         le=2.0
     )
     volume: float = Field(
-        1.0,
+        default=1.0,
         description="Volume level (0.1 to 10.0, where 1.0 is normal)",
         ge=0.1,
         le=10.0
     )
     pitch: float = Field(
-        0.0,
+        default=0.0,
         description="Pitch adjustment in semitones (-12 to +12)",
         ge=-12.0,
         le=12.0
@@ -73,18 +73,18 @@ class MiniMaxAudioSetting(BaseModel):
     These control the technical characteristics of the generated audio file.
     """
     sample_rate: int = Field(
-        16000,
+        default=16000,
         description="Sample rate in Hz",
         ge=8000,
         le=48000
     )
     format: str = Field(
-        "wav",
+        default="wav",
         description="Audio format (wav, mp3, flac)",
         pattern="^(wav|mp3|flac)$"
     )
     channel: int = Field(
-        1,
+        default=1,
         description="Number of audio channels (1=mono, 2=stereo)",
         ge=1,
         le=2
@@ -98,19 +98,19 @@ class MiniMaxTTSRequest(BaseModel):
     text: str = Field(..., description="Text to synthesize")
     voice_id: str = Field(..., description="Voice identifier")
     voice_setting: MiniMaxVoiceSetting = Field(
-        default_factory=MiniMaxVoiceSetting,
+        default_factory=lambda: MiniMaxVoiceSetting(),
         description="Basic voice settings"
     )
     voice_modify: Optional[MiniMaxVoiceModify] = Field(
-        None,
+        default=None,
         description="Advanced voice modifications"
     )
     audio_setting: MiniMaxAudioSetting = Field(
-        default_factory=MiniMaxAudioSetting,
+        default_factory=lambda: MiniMaxAudioSetting(),
         description="Audio output settings"
     )
     language_boost: Optional[str] = Field(
-        None,
+        default=None,
         description="Language to boost (e.g., 'Turkish' for better Turkish pronunciation)"
     )
 
@@ -126,23 +126,23 @@ class MiniMaxTTSResponse(BaseModel):
     Note: The API does NOT return a top-level 'success' field, so we compute it
     from base_resp.status_code.
     """
-    base_resp: dict = Field(
+    base_resp: Dict[str, Any] = Field(
         ..., 
         description="API response metadata containing status_code and status_msg"
     )
-    data: Optional[dict] = Field(
-        None,
+    data: Optional[Dict[str, Any]] = Field(
+        default=None,
         description="Response data containing audio (hex_audio or audio field)"
     )
-    extra_info: Optional[dict] = Field(
-        None,
+    extra_info: Optional[Dict[str, Any]] = Field(
+        default=None,
         description="Additional info like audio_file, subtitle_file"
     )
     
     @property
     def success(self) -> bool:
         """Check if the API call was successful (status_code == 0)."""
-        return self.base_resp.get("status_code", -1) == 0
+        return int(self.base_resp.get("status_code", -1)) == 0
     
     @property
     def audio_data(self) -> Optional[str]:
@@ -156,7 +156,7 @@ class MiniMaxTTSResponse(BaseModel):
     def error(self) -> Optional[str]:
         """Get error message if request failed."""
         if not self.success:
-            return self.base_resp.get("status_msg", "Unknown MiniMax API error")
+            return str(self.base_resp.get("status_msg", "Unknown MiniMax API error"))
         return None
 
 class MiniMaxProvider(BaseProvider):
@@ -190,7 +190,7 @@ class MiniMaxProvider(BaseProvider):
         self.last_reset_time = time.time()
 
         # Turkish voices configuration
-        self.turkish_voices = {
+        self.turkish_voices: Dict[str, Dict[str, Any]] = {
             "Turkish_CalmWoman": {
                 "gender": Gender.FEMALE,
                 "language": "tr-TR",
@@ -204,7 +204,7 @@ class MiniMaxProvider(BaseProvider):
         }
 
         # English voices that support Turkish language boost
-        self.english_with_turkish_boost = {
+        self.english_with_turkish_boost: Dict[str, Dict[str, Any]] = {
             "en-US-Woman": {
                 "gender": Gender.FEMALE,
                 "language": "en-US",
@@ -344,8 +344,8 @@ class MiniMaxProvider(BaseProvider):
             request = MiniMaxTTSRequest(
                 text=text,
                 voice_id=voice_id,
-                voice_setting=MiniMaxVoiceSetting(),  # Use defaults
-                audio_setting=MiniMaxAudioSetting(),  # Use defaults
+                voice_setting=MiniMaxVoiceSetting(speed=1.0, volume=1.0, pitch=0.0),  # Use defaults explicitly
+                audio_setting=MiniMaxAudioSetting(sample_rate=16000, format="wav", channel=1),  # Use defaults explicitly
                 language_boost=language_boost
             )
 
@@ -394,20 +394,22 @@ class MiniMaxProvider(BaseProvider):
             for voice_id, voice_info in self.turkish_voices.items():
                 voice_list.append(Voice(
                     id=voice_id,
-                    name=voice_info["description"],
+                    name=str(voice_info["description"]),
                     gender=voice_info["gender"],
-                    language=voice_info["language"],
-                    provider=self.provider_type
+                    language=str(voice_info["language"]),
+                    provider=self.provider_type,
+                    supports_cloning=False
                 ))
 
             # Add English voices with Turkish boost
             for voice_id, voice_info in self.english_with_turkish_boost.items():
                 voice_list.append(Voice(
                     id=voice_id,
-                    name=voice_info["description"] + " (Turkish boost)",
+                    name=str(voice_info["description"]) + " (Turkish boost)",
                     gender=voice_info["gender"],
-                    language=voice_info["language"],
-                    provider=self.provider_type
+                    language=str(voice_info["language"]),
+                    provider=self.provider_type,
+                    supports_cloning=False
                 ))
 
             logger.info(f"Listed {len(voice_list)} MiniMax voices")
@@ -433,8 +435,9 @@ class MiniMaxProvider(BaseProvider):
             test_request = MiniMaxTTSRequest(
                 text="Test",
                 voice_id="Turkish_CalmWoman",
-                voice_setting=MiniMaxVoiceSetting(),
-                audio_setting=MiniMaxAudioSetting(),
+                voice_setting=MiniMaxVoiceSetting(speed=1.0, volume=1.0, pitch=0.0),
+                audio_setting=MiniMaxAudioSetting(sample_rate=16000, format="wav", channel=1),
+                voice_modify=None,
                 language_boost="Turkish"
             )
 

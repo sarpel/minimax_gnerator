@@ -68,42 +68,42 @@ class DeviceType(str, Enum):
 
 class NoiseConfig(BaseModel):
     """Configuration for noise injection."""
-    enabled: bool = Field(True, description="Whether to apply noise")
-    type: NoiseType = Field(NoiseType.AMBIENT, description="Type of noise")
-    snr_min: float = Field(10, ge=0, le=50, description="Minimum SNR in dB")
-    snr_max: float = Field(30, ge=0, le=50, description="Maximum SNR in dB")
-    probability: float = Field(0.5, ge=0, le=1, description="Probability of applying")
+    enabled: bool = Field(default=True, description="Whether to apply noise")
+    type: NoiseType = Field(default=NoiseType.AMBIENT, description="Type of noise")
+    snr_min: float = Field(default=10, ge=0, le=50, description="Minimum SNR in dB")
+    snr_max: float = Field(default=30, ge=0, le=50, description="Maximum SNR in dB")
+    probability: float = Field(default=0.5, ge=0, le=1, description="Probability of applying")
 
 
 class ReverbConfig(BaseModel):
     """Configuration for reverb effect."""
-    enabled: bool = Field(True, description="Whether to apply reverb")
-    room_size: RoomSize = Field(RoomSize.MEDIUM, description="Room size preset")
-    decay: float = Field(0.5, ge=0.1, le=2.0, description="Decay time in seconds")
-    wet_dry_mix: float = Field(0.3, ge=0, le=1, description="Wet/dry mix ratio")
+    enabled: bool = Field(default=True, description="Whether to apply reverb")
+    room_size: RoomSize = Field(default=RoomSize.MEDIUM, description="Room size preset")
+    decay: float = Field(default=0.5, ge=0.1, le=2.0, description="Decay time in seconds")
+    wet_dry_mix: float = Field(default=0.3, ge=0, le=1, description="Wet/dry mix ratio")
 
 
 class PitchConfig(BaseModel):
     """Configuration for pitch/speed variation."""
-    enabled: bool = Field(True, description="Whether to vary pitch/speed")
-    pitch_semitones: float = Field(1.0, ge=0, le=4, description="Pitch range in semitones")
-    speed_percent: float = Field(5.0, ge=0, le=20, description="Speed variation percent")
+    enabled: bool = Field(default=True, description="Whether to vary pitch/speed")
+    pitch_semitones: float = Field(default=1.0, ge=0, le=4, description="Pitch range in semitones")
+    speed_percent: float = Field(default=5.0, ge=0, le=20, description="Speed variation percent")
 
 
 class DeviceConfig(BaseModel):
     """Configuration for device simulation."""
-    enabled: bool = Field(False, description="Whether to simulate devices")
+    enabled: bool = Field(default=False, description="Whether to simulate devices")
     devices: List[DeviceType] = Field(default_factory=list, description="Devices to simulate")
 
 
 class AugmentationProfile(BaseModel):
     """Complete augmentation configuration."""
     name: str = Field(..., description="Profile name")
-    description: Optional[str] = Field(None, description="Profile description")
-    noise: NoiseConfig = Field(default_factory=NoiseConfig)
-    reverb: ReverbConfig = Field(default_factory=ReverbConfig)
-    pitch: PitchConfig = Field(default_factory=PitchConfig)
-    device: DeviceConfig = Field(default_factory=DeviceConfig)
+    description: Optional[str] = Field(default=None, description="Profile description")
+    noise: NoiseConfig = Field(default_factory=lambda: NoiseConfig())
+    reverb: ReverbConfig = Field(default_factory=lambda: ReverbConfig())
+    pitch: PitchConfig = Field(default_factory=lambda: PitchConfig())
+    device: DeviceConfig = Field(default_factory=lambda: DeviceConfig())
 
 
 class ApplyRequest(BaseModel):
@@ -141,9 +141,9 @@ PRESET_PROFILES = {
     "clean": AugmentationProfile(
         name="clean",
         description="No augmentation - original audio",
-        noise=NoiseConfig(enabled=False),
-        reverb=ReverbConfig(enabled=False),
-        pitch=PitchConfig(enabled=False),
+        noise=NoiseConfig(enabled=False, type=NoiseType.AMBIENT, snr_min=10, snr_max=30, probability=0.0),
+        reverb=ReverbConfig(enabled=False, room_size=RoomSize.MEDIUM, decay=0.5, wet_dry_mix=0.0),
+        pitch=PitchConfig(enabled=False, pitch_semitones=0.0, speed_percent=0.0),
     ),
     "light": AugmentationProfile(
         name="light",
@@ -399,7 +399,7 @@ async def run_augmentation(job_id: str, request: ApplyRequest, file_count: int) 
 async def preview_augmentation(
     file_path: str,
     profile: AugmentationProfile
-) -> dict:
+) -> Dict[str, Any]:
     """
     Preview augmentation on a single file.
 

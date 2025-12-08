@@ -32,7 +32,7 @@ and test audio generation.
 """
 
 import logging
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, Dict, Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -137,7 +137,7 @@ class TestGenerationResponse(BaseModel):
 
     success: bool = Field(..., description="Whether generation succeeded")
     message: str = Field(..., description="Result message")
-    audio_url: Optional[str] = Field(None, description="URL to play the audio")
+    audio_url: Optional[str] = Field(default=None, description="URL to play the audio")
 
 
 # =============================================================================
@@ -513,7 +513,7 @@ class InstallProviderResponse(BaseModel):
     """Response schema for provider installation."""
     success: bool = Field(..., description="Whether installation succeeded")
     message: str = Field(..., description="Installation result message")
-    output: Optional[str] = Field(None, description="Installation output")
+    output: Optional[str] = Field(default=None, description="Installation output")
 
 
 # Dictionary of special providers that require non-standard installation.
@@ -569,7 +569,7 @@ SPECIAL_PROVIDERS = {
     "/special",
     summary="List special providers requiring manual installation"
 )
-async def list_special_providers():
+async def list_special_providers() -> List[Dict[str, Any]]:
     """
     List providers that require special installation (not in pyproject.toml).
     

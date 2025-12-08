@@ -22,6 +22,10 @@ Reference: https://github.com/2noise/ChatTTS
 
 from __future__ import annotations
 import asyncio
+try:
+    import ChatTTS  # type: ignore
+except ImportError:
+    ChatTTS = None  # type: ignore
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -31,6 +35,7 @@ from wakegen.core.exceptions import ProviderError
 from wakegen.core.types import Gender, ProviderType
 from wakegen.providers.base import BaseProvider
 from wakegen.models.audio import Voice
+from wakegen.models.config import ProviderConfig
 
 
 class ChatTTSProvider(BaseProvider):
@@ -62,6 +67,7 @@ class ChatTTSProvider(BaseProvider):
     
     def __init__(
         self,
+        config: Optional[ProviderConfig] = None,
         use_gpu: bool = True,
         compile_model: bool = False,
     ) -> None:
@@ -69,11 +75,12 @@ class ChatTTSProvider(BaseProvider):
         Initialize the ChatTTS provider.
         
         Args:
+            config: Provider configuration. If None, uses default ProviderConfig.
             use_gpu: Whether to use GPU for inference.
             compile_model: Whether to compile the model with torch.compile
                           (faster but longer startup time).
         """
-        super().__init__()
+        super().__init__(config or ProviderConfig())
         self._model = None
         self._use_gpu = use_gpu
         self._compile_model = compile_model
@@ -194,6 +201,7 @@ class ChatTTSProvider(BaseProvider):
             )
             
             # Generate audio
+            assert self._model is not None
             wavs = await asyncio.to_thread(
                 self._model.infer,
                 [control_text],
@@ -213,10 +221,10 @@ class ChatTTSProvider(BaseProvider):
             audio_int16 = (audio_array * 32767).astype(np.int16)
             
             # Save audio
-            output_path = Path(output_path)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_file = Path(output_path)
+            output_file.parent.mkdir(parents=True, exist_ok=True)
             
-            write_wav(str(output_path), self._sample_rate, audio_int16)
+            write_wav(str(output_file), self._sample_rate, audio_int16)
             
         except Exception as e:
             raise ProviderError(f"ChatTTS generation failed: {e}")
@@ -249,6 +257,7 @@ class ChatTTSProvider(BaseProvider):
         import torch
         torch.manual_seed(seed)
         
+        assert self._model is not None
         speaker = await asyncio.to_thread(
             self._model.sample_random_speaker,
         )
@@ -275,22 +284,24 @@ class ChatTTSProvider(BaseProvider):
             style = preset_name.split("_")[0]
             
             voices.append(Voice(
-                voice_id=preset_name,
+                id=preset_name,
                 name=f"ChatTTS {style.title()} Voice",
                 gender=Gender.NEUTRAL,  # ChatTTS generates varied voices
                 language="multi",  # Supports multiple languages
-                description=f"Conversational {style} speaking style (seed: {seed})",
+                provider=ProviderType.CHATTTS,
+                supports_cloning=False,
             ))
         
         # Add some numeric seed options
         for i in range(5):
             seed = i * 1111
             voices.append(Voice(
-                voice_id=str(seed),
+                id=str(seed),
                 name=f"ChatTTS Random Voice {i + 1}",
                 gender=Gender.NEUTRAL,
                 language="multi",
-                description=f"Random voice with seed {seed}",
+                provider=ProviderType.CHATTTS,
+                supports_cloning=False,
             ))
         
         return voices
@@ -302,6 +313,21 @@ class ChatTTSProvider(BaseProvider):
             return True
         except ImportError:
             return False
+
+    async def validate_config(self) -> None:
+        """
+        Validate the provider configuration.
+        
+        ChatTTS doesn't require API keys or special configuration,
+        so this just verifies the ChatTTS library is available.
+        
+        Raises:
+            ProviderError: If ChatTTS library is not installed.
+        """
+        if not await self.check_availability():
+            raise ProviderError(
+                "ChatTTS is not installed. Install with: pip install chattts"
+            )
     
     def save_speaker_embedding(self, voice_id: str, path: str) -> None:
         """

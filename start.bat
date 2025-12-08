@@ -3,7 +3,7 @@ setlocal
 title WakeGen Starter
 
 REM Check if virtual environment exists
-if not exist ".venv" (
+if not exist "venv" (
     echo [ERROR] Virtual environment not found.
     echo Please run 'install.bat' first.
     pause
@@ -11,7 +11,7 @@ if not exist ".venv" (
 )
 
 REM Activate virtual environment
-call .venv\Scripts\activate.bat
+call venv\Scripts\activate.bat
 
 echo ===============================================================================
 echo  Starting WakeGen Web UI...

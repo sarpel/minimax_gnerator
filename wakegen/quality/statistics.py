@@ -51,25 +51,25 @@ class DatasetStatisticsConfig(BaseModel):
 
     # Quality score ranges for distribution
     quality_ranges: List[float] = Field(
-        [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+        default=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
         description="Quality score range boundaries"
     )
 
     # SNR ranges for distribution
     snr_ranges: List[float] = Field(
-        [0, 10, 20, 30, 40, 50, 100],
+        default=[0, 10, 20, 30, 40, 50, 100],
         description="SNR range boundaries in dB"
     )
 
     # File size ranges for distribution (bytes)
     size_ranges: List[int] = Field(
-        [0, 10000, 50000, 100000, 500000, 1000000],
+        default=[0, 10000, 50000, 100000, 500000, 1000000],
         description="File size range boundaries in bytes"
     )
 
     # Performance optimization
-    max_concurrent_files: int = Field(10, description="Maximum concurrent file processing")
-    batch_size: int = Field(100, description="Batch size for processing")
+    max_concurrent_files: int = Field(default=10, description="Maximum concurrent file processing")
+    batch_size: int = Field(default=100, description="Batch size for processing")
 
 async def calculate_dataset_statistics(
     dataset_path: str | Path,
@@ -101,7 +101,7 @@ async def calculate_dataset_statistics(
         raise StatisticsError(f"Dataset path is not a directory: {dataset_path}")
 
     # Find all audio files
-    audio_files = []
+    audio_files: List[Path] = []
     for ext in ['*.wav', '*.mp3', '*.ogg', '*.flac']:
         audio_files.extend(dataset_path.glob(ext))
 
@@ -321,7 +321,7 @@ def _calculate_statistics_from_results(
         error_message=None if valid_results else "No valid files for statistics"
     )
 
-def _create_distribution(values: List[float], ranges: List[float]) -> Dict[str, int]:
+def _create_distribution(values: List[float] | List[int] | List[Any], ranges: List[float] | List[int]) -> Dict[str, int]:
     """Create distribution histogram from values and ranges.
 
     Args:
@@ -360,7 +360,7 @@ def _count_distribution(values: List[Any]) -> Dict[Any, int]:
     Returns:
         Dictionary with values as keys and counts as values
     """
-    distribution = {}
+    distribution: Dict[str, int] = {}
     for value in values:
         distribution[value] = distribution.get(value, 0) + 1
     return distribution
@@ -489,7 +489,7 @@ def _generate_html_report(stats_result: DatasetStatisticsResult) -> str:
 
     return html_content
 
-def _generate_table_rows(distribution: Dict, total: int) -> str:
+def _generate_table_rows(distribution: Dict[Any, int], total: int) -> str:
     """Generate HTML table rows from distribution data.
 
     Args:

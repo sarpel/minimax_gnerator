@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import sys
 import logging
-from typing import Dict, List, Optional, Type
+from typing import Dict, List, Optional, Type, Any
 from importlib.metadata import entry_points, EntryPoint
 
 from wakegen.plugins.base import (
@@ -331,7 +331,7 @@ def _create_plugin_wrapper_class(plugin: LoadedPlugin) -> type:
             """Delegate to plugin's generate method."""
             await self._plugin.generate(text, voice_id, output_path)
         
-        async def list_voices(self):
+        async def list_voices(self) -> List[Any]:
             """Delegate to plugin's list_voices method."""
             return await self._plugin.list_voices()
         
@@ -355,7 +355,7 @@ def _register_plugin_to_registry(name: str, wrapper_class: type) -> None:
     _plugin_providers[name] = wrapper_class
 
 
-def get_plugin_provider(name: str, config=None):
+def get_plugin_provider(name: str, config: Optional[Any] = None) -> Any:
     """
     Get an instance of a plugin provider by name.
     

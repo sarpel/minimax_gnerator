@@ -249,7 +249,8 @@ class Mimic3Provider(BaseProvider):
                     name=v_name,
                     gender=v_gender,
                     language=v_lang,
-                    provider=self.provider_type
+                    provider=self.provider_type,
+                    supports_cloning=False
                 ))
 
             return voice_list

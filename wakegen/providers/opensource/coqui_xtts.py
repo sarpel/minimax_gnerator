@@ -156,7 +156,7 @@ class CoquiXTTSProvider(BaseProvider):
                 # The reference audio provides the voice characteristics to clone
                 # Issue 7 fix: Language is configurable via config, defaults to 'en'
                 # Supported: en, es, fr, de, it, pt, pl, tr, ru, nl, cs, ar, zh-cn, ja, hu, ko
-                language = getattr(self._config, 'language', 'en')
+                language = getattr(self.config, 'language', 'en')
                 model.tts_to_file(
                     text=text,
                     speaker_wav=reference_audio_path,

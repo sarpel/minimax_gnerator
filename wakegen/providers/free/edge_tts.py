@@ -97,10 +97,11 @@ class EdgeTTSProvider(BaseProvider):
                 voice_list.append(Voice(
                     id=v["ShortName"],
                     # Fallback to DisplayName or ShortName if FriendlyName missing
-                    name=v.get("FriendlyName", v.get("DisplayName", v["ShortName"])),
+                    name=str(v.get("FriendlyName", v.get("DisplayName", v["ShortName"]))),
                     gender=gender,
                     language=v["Locale"],
-                    provider=self.provider_type
+                    provider=self.provider_type,
+                    supports_cloning=False
                 ))
             return voice_list
             

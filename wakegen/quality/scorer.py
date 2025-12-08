@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
+from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 from wakegen.core.exceptions import QualityAssuranceError
@@ -38,20 +39,20 @@ class QualityScoringConfig(BaseModel):
     """Configuration for quality scoring."""
 
     # Weight factors for composite scoring (must sum to 1.0)
-    clarity_weight: float = Field(0.25, description="Weight for clarity score")
-    snr_weight: float = Field(0.20, description="Weight for SNR score")
-    naturalness_weight: float = Field(0.20, description="Weight for naturalness score")
-    diversity_weight: float = Field(0.15, description="Weight for diversity score")
-    technical_weight: float = Field(0.20, description="Weight for technical score")
+    clarity_weight: float = Field(default=0.25, description="Weight for clarity score")
+    snr_weight: float = Field(default=0.20, description="Weight for SNR score")
+    naturalness_weight: float = Field(default=0.20, description="Weight for naturalness score")
+    diversity_weight: float = Field(default=0.15, description="Weight for diversity score")
+    technical_weight: float = Field(default=0.20, description="Weight for technical score")
 
     # Scoring thresholds
-    min_clarity: float = Field(0.7, description="Minimum clarity score (0-1)")
-    min_snr: float = Field(0.6, description="Minimum SNR score (0-1)")
-    min_naturalness: float = Field(0.6, description="Minimum naturalness score (0-1)")
-    min_diversity: float = Field(0.5, description="Minimum diversity score (0-1)")
-    min_technical: float = Field(0.8, description="Minimum technical score (0-1)")
+    min_clarity: float = Field(default=0.7, description="Minimum clarity score (0-1)")
+    min_snr: float = Field(default=0.6, description="Minimum SNR score (0-1)")
+    min_naturalness: float = Field(default=0.6, description="Minimum naturalness score (0-1)")
+    min_diversity: float = Field(default=0.5, description="Minimum diversity score (0-1)")
+    min_technical: float = Field(default=0.8, description="Minimum technical score (0-1)")
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate that weights sum to 1.0."""
         total_weight = (
             self.clarity_weight +
@@ -145,7 +146,7 @@ async def calculate_quality_score(
     except Exception as e:
         raise QualityScoringError(f"Quality scoring failed for {file_path}: {str(e)}") from e
 
-def _calculate_clarity_score(audio_data: np.ndarray, sample_rate: int) -> float:
+def _calculate_clarity_score(audio_data: np.ndarray[Any, Any], sample_rate: int) -> float:
     """Calculate clarity score based on spectral characteristics.
 
     Clarity measures speech intelligibility and lack of distortion.
@@ -185,7 +186,7 @@ def _calculate_clarity_score(audio_data: np.ndarray, sample_rate: int) -> float:
     # Combine metrics (equal weighting)
     clarity_score = (normalized_centroid * 0.6 + flatness_score * 0.4)
 
-    return max(0.0, min(1.0, clarity_score))
+    return float(max(0.0, min(1.0, clarity_score)))
 
 def _calculate_snr_score(snr_db: Optional[float]) -> float:
     """Calculate SNR score from SNR in dB.
@@ -206,9 +207,9 @@ def _calculate_snr_score(snr_db: Optional[float]) -> float:
     normalized_snr = min(snr_db / 40.0, 1.0)
 
     # Apply sigmoid to emphasize middle range
-    return 1.0 / (1.0 + np.exp(-5.0 * (normalized_snr - 0.5)))
+    return float(1.0 / (1.0 + np.exp(-5.0 * (normalized_snr - 0.5))))
 
-def _calculate_naturalness_score(audio_data: np.ndarray, sample_rate: int) -> float:
+def _calculate_naturalness_score(audio_data: np.ndarray[Any, Any], sample_rate: int) -> float:
     """Calculate naturalness score based on temporal characteristics.
 
     Naturalness measures how human-like and smooth the speech sounds.
@@ -255,9 +256,9 @@ def _calculate_naturalness_score(audio_data: np.ndarray, sample_rate: int) -> fl
     # Combine metrics
     naturalness_score = (smoothness * 0.6 + zcr_consistency * 0.4)
 
-    return max(0.0, min(1.0, naturalness_score))
+    return float(max(0.0, min(1.0, naturalness_score)))
 
-def _calculate_diversity_score(audio_data: np.ndarray) -> float:
+def _calculate_diversity_score(audio_data: np.ndarray[Any, Any]) -> float:
     """Calculate spectral diversity score.
 
     Diversity measures the richness and variety of frequency content.
@@ -288,7 +289,7 @@ def _calculate_diversity_score(audio_data: np.ndarray) -> float:
     normalized_entropy = entropy / max_entropy
 
     # Higher entropy = more diverse = better
-    return max(0.0, min(1.0, normalized_entropy))
+    return float(max(0.0, min(1.0, normalized_entropy)))
 
 def _calculate_technical_score(validation_result: SampleValidationResult) -> float:
     """Calculate technical compliance score.
@@ -323,4 +324,4 @@ def _calculate_technical_score(validation_result: SampleValidationResult) -> flo
         rms_bonus = min(validation_result.rms_amplitude * 50.0, 0.1)
         score = min(1.0, score + rms_bonus)
 
-    return max(0.0, min(1.0, score))
+    return float(max(0.0, min(1.0, score)))

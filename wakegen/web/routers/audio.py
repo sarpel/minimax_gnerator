@@ -43,8 +43,8 @@ class AudioFileInfo(BaseModel):
     filename: str = Field(..., description="File name")
     path: str = Field(..., description="Relative path")
     size_bytes: int = Field(..., description="File size in bytes")
-    duration_seconds: Optional[float] = Field(None, description="Duration if available")
-    sample_rate: Optional[int] = Field(None, description="Sample rate if available")
+    duration_seconds: Optional[float] = Field(default=None, description="Duration if available")
+    sample_rate: Optional[int] = Field(default=None, description="Sample rate if available")
 
 
 class AudioFileList(BaseModel):
@@ -242,7 +242,7 @@ async def get_waveform(
             filename=path.name,
             samples=waveform_samples,
             duration_seconds=duration,
-            sample_rate=sr
+            sample_rate=int(sr)
         )
 
     except ImportError:

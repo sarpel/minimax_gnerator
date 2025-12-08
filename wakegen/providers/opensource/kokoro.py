@@ -154,7 +154,8 @@ class KokoroTTSProvider(BaseProvider):
                     name=v_name,
                     gender=v_gender,
                     language=v_lang,
-                    provider=self.provider_type
+                    provider=self.provider_type,
+                    supports_cloning=False
                 ))
 
             return voice_list
@@ -176,7 +177,7 @@ class KokoroTTSProvider(BaseProvider):
 # This line is crucial - without it, the system won't know 'kokoro' exists!
 register_provider(ProviderType.KOKORO, KokoroTTSProvider)
 
-async def test_kokoro_provider():
+async def test_kokoro_provider() -> None:
     """
     Simple test function to verify the Kokoro provider works correctly.
     This can be used for manual testing or integration testing.

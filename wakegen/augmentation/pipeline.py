@@ -217,7 +217,7 @@ class AugmentationPipeline:
             logger.error(f"Augmentation pipeline failed: {str(e)}")
             raise AugmentationError(f"Augmentation pipeline failed: {str(e)}") from e
 
-    async def _apply_background_noise(self, audio: np.ndarray) -> np.ndarray:
+    async def _apply_background_noise(self, audio: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
         """
         Apply background noise augmentation.
 
@@ -254,7 +254,7 @@ class AugmentationPipeline:
         except Exception as e:
             raise AugmentationError(f"Background noise application failed: {str(e)}") from e
 
-    async def _apply_room_simulation(self, audio: np.ndarray) -> np.ndarray:
+    async def _apply_room_simulation(self, audio: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
         """
         Apply room simulation augmentation.
 
@@ -274,7 +274,7 @@ class AugmentationPipeline:
         except Exception as e:
             raise AugmentationError(f"Room simulation failed: {str(e)}") from e
 
-    async def _apply_microphone_simulation(self, audio: np.ndarray) -> np.ndarray:
+    async def _apply_microphone_simulation(self, audio: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
         """
         Apply microphone simulation augmentation.
 
@@ -290,7 +290,7 @@ class AugmentationPipeline:
         except Exception as e:
             raise AugmentationError(f"Microphone simulation failed: {str(e)}") from e
 
-    async def _apply_time_stretch(self, audio: np.ndarray) -> np.ndarray:
+    async def _apply_time_stretch(self, audio: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
         """
         Apply time stretching augmentation.
 
@@ -309,7 +309,7 @@ class AugmentationPipeline:
         except Exception as e:
             raise AugmentationError(f"Time stretching failed: {str(e)}") from e
 
-    async def _apply_pitch_shift(self, audio: np.ndarray) -> np.ndarray:
+    async def _apply_pitch_shift(self, audio: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
         """
         Apply pitch shifting augmentation.
 
@@ -328,7 +328,7 @@ class AugmentationPipeline:
         except Exception as e:
             raise AugmentationError(f"Pitch shifting failed: {str(e)}") from e
 
-    async def _apply_compression(self, audio: np.ndarray) -> np.ndarray:
+    async def _apply_compression(self, audio: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
         """
         Apply dynamics compression augmentation.
 
@@ -356,7 +356,7 @@ class AugmentationPipeline:
         except Exception as e:
             raise AugmentationError(f"Dynamics processing failed: {str(e)}") from e
 
-    async def _apply_degradation(self, audio: np.ndarray) -> np.ndarray:
+    async def _apply_degradation(self, audio: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
         """
         Apply quality degradation augmentation.
 
@@ -371,7 +371,7 @@ class AugmentationPipeline:
                 severity = self.profile.degradation_effects.get("severity", 0.5)
                 return self.audio_degrader.apply_random_degradation(audio, severity)
             else:
-                return self.audio_degrader.apply_degradation(
+                return self.audio_degrader.process(
                     audio,
                     **self.profile.degradation_effects
                 )
@@ -381,7 +381,7 @@ class AugmentationPipeline:
 
     def _save_intermediate(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         directory: str,
         filename_prefix: str
     ) -> str:
@@ -405,7 +405,7 @@ class AugmentationPipeline:
             logger.warning(f"Failed to save intermediate file: {str(e)}")
             return ""
 
-    def _save_audio(self, audio: np.ndarray, filepath: str) -> None:
+    def _save_audio(self, audio: np.ndarray[Any, Any], filepath: str) -> None:
         """
         Save audio to file with proper directory creation.
 

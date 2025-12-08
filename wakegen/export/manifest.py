@@ -38,7 +38,7 @@ async def generate_manifest(
     # rglob('*') searches recursively (in all subfolders)
     for file_path in dir_path.rglob("*"):
         if file_path.suffix.lower() in audio_extensions:
-            file_info = {
+            file_info: Dict[str, Any] = {
                 "path": str(file_path.absolute()),
                 "filename": file_path.name,
                 "relative_path": str(file_path.relative_to(dir_path))

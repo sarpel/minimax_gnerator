@@ -17,6 +17,7 @@ from __future__ import annotations
 import numpy as np
 import librosa
 from typing import Optional, Tuple
+from typing import Any
 from wakegen.core.exceptions import AugmentationError
 from wakegen.utils.audio import load_audio
 import soundfile as sf
@@ -45,10 +46,10 @@ class TimeDomainEffects:
 
     def pitch_shift(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         n_steps: float,
         preserve_formants: bool = True
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Shift the pitch of audio by specified number of semitones.
 
@@ -91,9 +92,9 @@ class TimeDomainEffects:
 
     def time_stretch(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         rate: float
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Stretch or compress audio in time without changing pitch.
 
@@ -125,9 +126,9 @@ class TimeDomainEffects:
 
     def change_speed(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         speed_factor: float
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Change the speed of audio (affects both pitch and duration).
 
@@ -166,10 +167,10 @@ class TimeDomainEffects:
 
     def apply_tempo_variation(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         tempo_factor: float,
         preserve_pitch: bool = True
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Apply tempo variation while optionally preserving pitch.
 
@@ -245,7 +246,7 @@ class TimeDomainEffects:
         except Exception as e:
             raise AugmentationError(f"Failed to apply time effects: {str(e)}") from e
 
-    def get_effect_preset(self, preset_name: str) -> dict:
+    def get_effect_preset(self, preset_name: str) -> dict[str, Any]:
         """
         Get pre-configured effect parameters for common scenarios.
 

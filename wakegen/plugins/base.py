@@ -110,7 +110,7 @@ class PluginMetadata:
     requires_gpu: bool = False
     supported_languages: List[str] = field(default_factory=lambda: ["en"])
     
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate metadata after initialization."""
         if not self.name:
             raise PluginValidationError("Plugin name is required")

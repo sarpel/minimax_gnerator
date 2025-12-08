@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 
 from rich.console import Console
@@ -59,7 +59,7 @@ class ProgressTracker:
         self.config = config or ProgressConfig()
         self.console = Console()
         self.progress = Progress()
-        self.live = Live(auto_refresh=False)
+        self.live = Live(auto_refresh=False, refresh_per_second=1/self.config.refresh_rate)
         self._task_table = Table(show_header=True, expand=True)
         self._setup_ui()
 
@@ -102,7 +102,7 @@ class ProgressTracker:
         )
 
         # Start live display
-        self.live.start(refresh_per_second=1/self.config.refresh_rate)
+        self.live.start()
 
     async def update_task_status(
         self,
@@ -251,11 +251,11 @@ class ProgressTracker:
         else:
             self.console.print(error_panel)
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "ProgressTracker":
         """Async context manager entry."""
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: Optional[type], exc_val: Optional[BaseException], exc_tb: Optional[Any]) -> None:
         """Async context manager exit."""
         if hasattr(self, 'live') and self.live:
             self.live.stop()

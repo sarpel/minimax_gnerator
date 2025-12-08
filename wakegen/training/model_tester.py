@@ -6,7 +6,7 @@ from typing import Dict, List, Any
 import openwakeword
 from openwakeword.model import Model
 import numpy as np
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score # type: ignore
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 # We use 'logging' to print messages to the console in a structured way.
 logger = logging.getLogger(__name__)

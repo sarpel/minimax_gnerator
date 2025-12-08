@@ -7,7 +7,7 @@ for validating, scoring, and analyzing generated audio samples.
 from .validator import (
     validate_sample,
     SampleValidationResult,
-    ValidationError,
+    SampleValidationError,
 )
 from .scorer import (
     calculate_quality_score,
@@ -38,7 +38,7 @@ __all__ = [
     # Validator exports
     "validate_sample",
     "SampleValidationResult",
-    "ValidationError",
+    "SampleValidationError",
     # Scorer exports
     "calculate_quality_score",
     "QualityScoreResult",

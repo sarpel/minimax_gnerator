@@ -30,7 +30,7 @@ in the senior experts (1B/3B) when quality matters most.
 from __future__ import annotations
 import os
 import asyncio
-from typing import List, Any, Optional
+from typing import List, Any, Optional, Dict
 from pathlib import Path
 
 from wakegen.core.types import ProviderType, Gender
@@ -236,7 +236,7 @@ class OrpheusTTSProvider(BaseProvider):
             # Run generation in executor
             loop = asyncio.get_running_loop()
             
-            def _run_inference():
+            def _run_inference() -> Any:
                 """Run the TTS inference."""
                 # Note: Actual API may vary based on orpheus package version
                 return model.synthesize(
@@ -273,6 +273,7 @@ class OrpheusTTSProvider(BaseProvider):
                     gender=v_gender,
                     language=v_lang,
                     provider=self.provider_type,
+                    supports_cloning=False
                 ))
             
             return voices
@@ -298,7 +299,7 @@ class OrpheusTTSProvider(BaseProvider):
         except Exception as e:
             raise ProviderError(f"Orpheus TTS configuration validation failed: {str(e)}") from e
     
-    def get_model_info(self) -> dict:
+    def get_model_info(self) -> Dict[str, Any]:
         """
         Get information about the current model configuration.
         """
@@ -320,7 +321,7 @@ register_provider(ProviderType.ORPHEUS, OrpheusTTSProvider)
 # =============================================================================
 
 
-async def test_orpheus_provider():
+async def test_orpheus_provider() -> None:
     """
     Test function to verify Orpheus TTS provider works correctly.
     Run with: python -m wakegen.providers.opensource.orpheus

@@ -117,7 +117,7 @@ class BarkProvider(BaseProvider):
             fine_use_gpu: Use GPU for fine audio generation.
         """
         super().__init__(config or ProviderConfig())
-        self._model = None
+        self._model: Any = None
         self._use_gpu = use_gpu
         self._use_small_models = use_small_models
         self._text_use_gpu = text_use_gpu
@@ -225,10 +225,10 @@ class BarkProvider(BaseProvider):
             audio_int16 = (audio_array * 32767).astype(np.int16)
             
             # Save audio
-            output_path = Path(output_path)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_file = Path(output_path)
+            output_file.parent.mkdir(parents=True, exist_ok=True)
             
-            write_wav(str(output_path), self._sample_rate, audio_int16)
+            write_wav(str(output_file), self._sample_rate, audio_int16)
             
         except Exception as e:
             raise ProviderError(f"Bark generation failed: {e}")
@@ -264,6 +264,7 @@ class BarkProvider(BaseProvider):
                     gender=gender,
                     language=lang,
                     provider=ProviderType.BARK,
+                    supports_cloning=False,
                 ))
         
         return voices
@@ -275,6 +276,22 @@ class BarkProvider(BaseProvider):
             return True
         except ImportError:
             return False
+
+    async def validate_config(self) -> None:
+        """
+        Validate the provider configuration.
+        
+        Bark doesn't require API keys or special configuration,
+        so this just verifies the bark library is available.
+        
+        Raises:
+            ProviderError: If bark library is not installed.
+        """
+        if not await self.check_availability():
+            raise ProviderError(
+                "Bark is not installed. Install with: "
+                "pip install git+https://github.com/suno-ai/bark.git"
+            )
     
     def get_expressions(self) -> Dict[str, str]:
         """

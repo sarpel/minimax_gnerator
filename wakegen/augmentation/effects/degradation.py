@@ -17,7 +17,7 @@ Key Features:
 from __future__ import annotations
 import numpy as np
 import librosa
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any
 from wakegen.core.exceptions import AugmentationError
 from wakegen.utils.audio import load_audio
 import soundfile as sf
@@ -46,9 +46,9 @@ class AudioDegrader:
 
     def reduce_bit_depth(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         target_bits: int = 16
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Reduce the bit depth of audio to simulate low-quality recordings.
 
@@ -77,17 +77,18 @@ class AudioDegrader:
             quantized = np.clip(quantized, -max_val, max_val)
 
             # Scale back to -1.0 to 1.0 range
-            return quantized / max_val
+            from typing import cast
+            return cast(np.ndarray[Any, Any], quantized / max_val)
 
         except Exception as e:
             raise AugmentationError(f"Failed to reduce bit depth: {str(e)}") from e
 
     def apply_bandwidth_limiting(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         low_cut: float = 300.0,
         high_cut: float = 3400.0
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Apply bandwidth limiting to simulate telephone or low-quality mic.
 
@@ -128,10 +129,10 @@ class AudioDegrader:
 
     def add_transmission_artifacts(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         dropout_probability: float = 0.01,
         dropout_duration_ms: float = 5.0
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Add transmission artifacts like packet loss and dropouts.
 
@@ -172,9 +173,9 @@ class AudioDegrader:
 
     def apply_mp3_artifacts(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         bitrate_kbps: int = 64
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Simulate MP3 compression artifacts.
 
@@ -215,9 +216,9 @@ class AudioDegrader:
 
     def apply_random_degradation(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         severity: float = 0.5
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Apply random degradation effects based on severity level.
 
@@ -269,7 +270,7 @@ class AudioDegrader:
         input_path: str,
         output_path: str,
         degradation_type: str = "random",
-        **effect_params
+        **effect_params: Any
     ) -> None:
         """
         Apply degradation effects to an audio file and save the result.
@@ -293,18 +294,7 @@ class AudioDegrader:
                 audio = librosa.resample(audio, orig_sr=sr, target_sr=self.sample_rate)
 
             # Apply selected degradation
-            if degradation_type == "bit_depth":
-                processed = self.reduce_bit_depth(audio, **effect_params)
-            elif degradation_type == "bandwidth":
-                processed = self.apply_bandwidth_limiting(audio, **effect_params)
-            elif degradation_type == "transmission":
-                processed = self.add_transmission_artifacts(audio, **effect_params)
-            elif degradation_type == "mp3":
-                processed = self.apply_mp3_artifacts(audio, **effect_params)
-            elif degradation_type == "random":
-                processed = self.apply_random_degradation(audio, **effect_params)
-            else:
-                raise AugmentationError(f"Unknown degradation type: {degradation_type}")
+            processed = self.process(audio, degradation_type, **effect_params)
 
             # Save result
             sf.write(output_path, processed, self.sample_rate)
@@ -312,7 +302,37 @@ class AudioDegrader:
         except Exception as e:
             raise AugmentationError(f"Failed to apply degradation effects: {str(e)}") from e
 
-    def get_degradation_preset(self, preset_name: str) -> dict:
+    def process(
+        self,
+        audio: np.ndarray[Any, Any],
+        degradation_type: str = "random",
+        **effect_params: Any
+    ) -> np.ndarray[Any, Any]:
+        """
+        Apply degradation effects to audio in memory.
+
+        Args:
+            audio: Input audio signal.
+            degradation_type: Type of degradation.
+            **effect_params: Parameters specific to the degradation type.
+
+        Returns:
+            Degraded audio.
+        """
+        if degradation_type == "bit_depth":
+            return self.reduce_bit_depth(audio, **effect_params)
+        elif degradation_type == "bandwidth":
+            return self.apply_bandwidth_limiting(audio, **effect_params)
+        elif degradation_type == "transmission":
+            return self.add_transmission_artifacts(audio, **effect_params)
+        elif degradation_type == "mp3":
+            return self.apply_mp3_artifacts(audio, **effect_params)
+        elif degradation_type == "random":
+            return self.apply_random_degradation(audio, **effect_params)
+        else:
+            raise AugmentationError(f"Unknown degradation type: {degradation_type}")
+
+    def get_degradation_preset(self, preset_name: str) -> dict[str, Any]:
         """
         Get pre-configured degradation parameters for common scenarios.
 

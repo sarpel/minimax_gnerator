@@ -62,9 +62,9 @@ class ExportStatus(str, Enum):
 
 class SplitConfig(BaseModel):
     """Train/validation/test split configuration."""
-    train: float = Field(0.8, ge=0, le=1, description="Training set ratio")
-    val: float = Field(0.1, ge=0, le=1, description="Validation set ratio")
-    test: float = Field(0.1, ge=0, le=1, description="Test set ratio")
+    train: float = Field(default=0.8, ge=0, le=1, description="Training set ratio")
+    val: float = Field(default=0.1, ge=0, le=1, description="Validation set ratio")
+    test: float = Field(default=0.1, ge=0, le=1, description="Test set ratio")
 
 
 class FormatInfo(BaseModel):
@@ -82,7 +82,7 @@ class ExportRequest(BaseModel):
     input_dir: str = Field(..., description="Input directory with audio files")
     output_dir: str = Field(..., description="Output directory for export")
     format: ExportFormat = Field(..., description="Export format")
-    split: SplitConfig = Field(default_factory=SplitConfig, description="Data split ratios")
+    split: SplitConfig = Field(default_factory=lambda: SplitConfig(), description="Data split ratios")
     stratify: bool = Field(True, description="Stratify by wake word class")
     generate_manifest: bool = Field(True, description="Generate manifest/metadata files")
     copy_files: bool = Field(False, description="Copy files instead of symlinking")
@@ -104,7 +104,7 @@ class ExportJob(BaseModel):
     input_dir: str
     output_dir: str
     status: ExportStatus
-    progress_percentage: float = 0
+    progress_percentage: float = 0.0
     total_files: int = 0
     processed_files: int = 0
     error_message: Optional[str] = None
@@ -401,7 +401,7 @@ async def run_export(job_id: str, request: ExportRequest) -> None:
                 processed += 1
                 if processed % 10 == 0:
                     job.processed_files = processed
-                    job.progress_percentage = (processed / job.total_files) * 95 # Leave 5% for manifest
+                    job.progress_percentage = float((processed / job.total_files) * 95.0) # Leave 5% for manifest
                     await asyncio.sleep(0.001) # Yield control
 
         # 4. Generate Manifests
@@ -416,10 +416,10 @@ async def run_export(job_id: str, request: ExportRequest) -> None:
                 "classes": sorted(list(set(labels)))
             }
             
-            with open(output_path / "dataset_info.json", "w") as f:
+            with open(Path(output_path) / "dataset_info.json", "w") as f:
                 json.dump(manifest, f, indent=2)
 
-        job.progress_percentage = 100
+        job.progress_percentage = 100.0
         job.processed_files = job.total_files
         job.status = ExportStatus.COMPLETED
         job.completed_at = datetime.now().isoformat()

@@ -54,8 +54,8 @@ class GenerationJob(BaseModel):
     id: str = Field(..., description="Unique job identifier")
     status: JobStatus = Field(..., description="Current job status")
     created_at: datetime = Field(..., description="When job was created")
-    started_at: Optional[datetime] = Field(None, description="When execution started")
-    completed_at: Optional[datetime] = Field(None, description="When job finished")
+    started_at: Optional[datetime] = Field(default=None, description="When execution started")
+    completed_at: Optional[datetime] = Field(default=None, description="When job finished")
 
     # Configuration
     wake_words: List[str] = Field(..., description="Wake words to generate")
@@ -64,11 +64,11 @@ class GenerationJob(BaseModel):
     output_dir: str = Field(..., description="Output directory")
 
     # Progress
-    total_samples: int = Field(0, description="Total samples to generate")
-    completed_samples: int = Field(0, description="Samples generated so far")
-    current_word: Optional[str] = Field(None, description="Current wake word")
-    current_file: Optional[str] = Field(None, description="Current file being generated")
-    error_message: Optional[str] = Field(None, description="Error message if failed")
+    total_samples: int = Field(default=0, description="Total samples to generate")
+    completed_samples: int = Field(default=0, description="Samples generated so far")
+    current_word: Optional[str] = Field(default=None, description="Current wake word")
+    current_file: Optional[str] = Field(default=None, description="Current file being generated")
+    error_message: Optional[str] = Field(default=None, description="Error message if failed")
 
     @property
     def progress_percentage(self) -> float:

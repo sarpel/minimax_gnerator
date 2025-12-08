@@ -19,6 +19,8 @@ from typing import Optional, Tuple
 from wakegen.core.exceptions import AugmentationError
 from wakegen.utils.audio import load_audio
 import soundfile as sf
+import librosa
+from typing import Optional, Tuple, Any
 
 class DynamicsProcessor:
     """
@@ -44,14 +46,14 @@ class DynamicsProcessor:
 
     def apply_compression(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         threshold_db: float = -20.0,
         ratio: float = 4.0,
         attack_ms: float = 10.0,
         release_ms: float = 100.0,
         knee_db: float = 5.0,
         makeup_gain_db: float = 0.0
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Apply compression to audio signal.
 
@@ -172,10 +174,10 @@ class DynamicsProcessor:
 
     def apply_limiting(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         threshold_db: float = -3.0,
         release_ms: float = 50.0
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Apply limiting to prevent audio from exceeding threshold.
 
@@ -229,12 +231,12 @@ class DynamicsProcessor:
 
     def apply_expansion(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         threshold_db: float = -30.0,
         ratio: float = 2.0,
         attack_ms: float = 5.0,
         release_ms: float = 50.0
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, Any]:
         """
         Apply expansion to increase dynamic range (opposite of compression).
 
@@ -302,7 +304,7 @@ class DynamicsProcessor:
         input_path: str,
         output_path: str,
         effect_type: str = "compression",
-        **effect_params
+        **effect_params: Any
     ) -> None:
         """
         Apply dynamics processing to an audio file and save the result.
@@ -340,7 +342,7 @@ class DynamicsProcessor:
         except Exception as e:
             raise AugmentationError(f"Failed to apply dynamics effects: {str(e)}") from e
 
-    def get_dynamics_preset(self, preset_name: str) -> dict:
+    def get_dynamics_preset(self, preset_name: str) -> dict[str, Any]:
         """
         Get pre-configured dynamics parameters for common scenarios.
 

@@ -176,7 +176,7 @@ class StyleTTS2Provider(BaseProvider):
             # Run generation in executor
             loop = asyncio.get_running_loop()
             
-            def _run_inference():
+            def _run_inference() -> Any:
                 """Run the TTS inference."""
                 # StyleTTS 2 inference
                 # Note: Actual API may vary based on styletts2 package version
@@ -215,6 +215,7 @@ class StyleTTS2Provider(BaseProvider):
                     gender=v_gender,
                     language=v_lang,
                     provider=self.provider_type,
+                    supports_cloning=False
                 ))
             
             # Add styled versions
@@ -226,6 +227,7 @@ class StyleTTS2Provider(BaseProvider):
                         gender=Gender.FEMALE,
                         language="en-US",
                         provider=self.provider_type,
+                        supports_cloning=False
                     ))
             
             return voices
@@ -257,7 +259,7 @@ register_provider(ProviderType.STYLETTS2, StyleTTS2Provider)
 # =============================================================================
 
 
-async def test_styletts2_provider():
+async def test_styletts2_provider() -> None:
     """
     Test function to verify StyleTTS 2 provider works correctly.
     Run with: python -m wakegen.providers.opensource.styletts2
