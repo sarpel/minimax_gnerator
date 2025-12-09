@@ -3,8 +3,7 @@ import os
 import asyncio
 import logging
 import time  # Added import for time module
-from typing import List, Dict, Any, Optional
-from typing import TYPE_CHECKING
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
 
 import httpx
 from pydantic import BaseModel, Field, field_validator
@@ -12,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 from wakegen.core.types import ProviderType, Gender
 from wakegen.core.exceptions import ProviderError, ConfigError
 from wakegen.providers.base import BaseProvider
+from wakegen.models.config import ProviderConfig
 from wakegen.providers.registry import register_provider
 from wakegen.models.audio import Voice
 
@@ -53,9 +53,11 @@ class MiniMaxVoiceModify(BaseModel):
     Advanced voice modification settings for MiniMax TTS API.
     These allow fine-tuning of the voice characteristics.
     """
-    pitch: Optional[float] = Field(
+    # ALIGNED WITH voice_setting.pitch: MiniMax API expects pitch as INTEGER
+    # Both voice_setting and voice_modify use the same API pitch field format
+    pitch: Optional[int] = Field(
         None,
-        description="Additional pitch adjustment (semitones)"
+        description="Additional pitch adjustment in semitones (-12 to +12, INTEGER)"
     )
     intensity: Optional[float] = Field(
         None,
@@ -168,7 +170,7 @@ class MiniMaxProvider(BaseProvider):
     This is a commercial TTS provider that supports Turkish voices and advanced features.
     """
 
-    def __init__(self, config: Any):
+    def __init__(self, config: ProviderConfig):
         """
         Initialize the MiniMax provider with configuration.
         """
@@ -379,8 +381,12 @@ class MiniMaxProvider(BaseProvider):
 
             logger.info(f"Successfully generated MiniMax TTS audio: {output_path}")
 
+        except (ConfigError, ProviderError):
+            # Re-raise known errors without wrapping - preserves original error type
+            # This prevents losing useful information like "Unsupported voice_id"
+            raise
         except Exception as e:
-            # Log the error and re-raise as ProviderError
+            # Log the error and re-raise as ProviderError for unknown exceptions
             error_msg = f"MiniMax TTS generation failed: {str(e)}"
             logger.error(error_msg)
             raise ProviderError(error_msg) from e
@@ -457,6 +463,26 @@ class MiniMaxProvider(BaseProvider):
             error_msg = f"MiniMax configuration validation failed: {str(e)}"
             logger.error(error_msg)
             raise ConfigError(error_msg) from e
+
+    async def cleanup(self) -> None:
+        """
+        Release resources held by the MiniMax provider.
+        
+        Currently resets rate-limiting state. If a persistent HTTP client
+        is added in the future, it should be closed here.
+        
+        ELI5: Think of this like cleaning up your desk at the end of the day.
+        We reset our "request counter" so we're ready for a fresh start next time.
+        """
+        # Reset rate-limiting state to initial values
+        self.current_requests = 0
+        self.last_reset_time = time.time()
+        
+        # Future: if using persistent client, close it here:
+        # if hasattr(self, '_client') and self._client:
+        #     await self._client.aclose()
+        
+        logger.debug("MiniMax provider cleanup completed")
 
 # Register the MiniMax provider so the factory knows about it
 register_provider(ProviderType.MINIMAX, MiniMaxProvider)
