@@ -80,6 +80,21 @@ def register_provider(provider_type: ProviderType, provider_class: Type[TTSProvi
         del _PROVIDER_AVAILABILITY_CACHE[provider_type]
 
 
+def clear_availability_cache() -> None:
+    """
+    Clear the entire provider availability cache.
+    
+    This should be called after installing a new provider via pip
+    so that the next availability check will detect the newly installed module.
+    
+    Example:
+        >>> # After running `pip install piper-tts`
+        >>> clear_availability_cache()
+        >>> # Now check_provider_availability will detect piper
+    """
+    _PROVIDER_AVAILABILITY_CACHE.clear()
+
+
 def get_provider(provider_type: ProviderType, config: ProviderConfig) -> TTSProvider:
     """
     Creates and returns an instance of the requested provider.

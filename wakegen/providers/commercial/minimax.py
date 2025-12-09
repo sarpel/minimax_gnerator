@@ -38,11 +38,14 @@ class MiniMaxVoiceSetting(BaseModel):
         ge=0.1,
         le=10.0
     )
-    pitch: float = Field(
-        default=0.0,
+    # CRITICAL: MiniMax API expects pitch as INTEGER, not float!
+    # The API error "Mismatch type int64 with value number" occurs when
+    # sending 0.0 instead of 0. Valid range: -12 to +12 semitones.
+    pitch: int = Field(
+        default=0,
         description="Pitch adjustment in semitones (-12 to +12)",
-        ge=-12.0,
-        le=12.0
+        ge=-12,
+        le=12
     )
 
 class MiniMaxVoiceModify(BaseModel):
@@ -344,7 +347,7 @@ class MiniMaxProvider(BaseProvider):
             request = MiniMaxTTSRequest(
                 text=text,
                 voice_id=voice_id,
-                voice_setting=MiniMaxVoiceSetting(speed=1.0, volume=1.0, pitch=0.0),  # Use defaults explicitly
+                voice_setting=MiniMaxVoiceSetting(speed=1.0, volume=1.0, pitch=0),  # pitch is INTEGER per MiniMax API
                 audio_setting=MiniMaxAudioSetting(sample_rate=16000, format="wav", channel=1),  # Use defaults explicitly
                 language_boost=language_boost
             )
@@ -435,7 +438,7 @@ class MiniMaxProvider(BaseProvider):
             test_request = MiniMaxTTSRequest(
                 text="Test",
                 voice_id="Turkish_CalmWoman",
-                voice_setting=MiniMaxVoiceSetting(speed=1.0, volume=1.0, pitch=0.0),
+                voice_setting=MiniMaxVoiceSetting(speed=1.0, volume=1.0, pitch=0),  # pitch is INTEGER
                 audio_setting=MiniMaxAudioSetting(sample_rate=16000, format="wav", channel=1),
                 voice_modify=None,
                 language_boost="Turkish"

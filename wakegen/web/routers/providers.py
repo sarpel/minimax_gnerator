@@ -562,6 +562,21 @@ SPECIAL_PROVIDERS = {
         "description": "Scalable TTS with multiple model sizes",
         "check_import": "orpheus_tts",
     },
+    # -------------------------------------------------------------------------
+    # NEWLY ADDED PROVIDERS (for GUI installation)
+    # -------------------------------------------------------------------------
+    "piper": {
+        "name": "Piper TTS",
+        "install_command": "pip install piper-tts",
+        "description": "Local, fast, CPU-friendly TTS with Turkish support",
+        "check_import": "piper",
+    },
+    "coqui_xtts": {
+        "name": "Coqui XTTS",
+        "install_command": "pip install TTS",
+        "description": "Zero-shot voice cloning (~2GB VRAM recommended)",
+        "check_import": "TTS",
+    },
 }
 
 
@@ -637,10 +652,30 @@ async def install_special_provider(request: InstallProviderRequest) -> InstallPr
     logger.info(f"Installing special provider {provider_id}: {install_command}")
     
     try:
-        # Run the installation command
-        # We use the same Python interpreter that's running this script
+        # =====================================================================
+        # WINDOWS-COMPATIBLE INSTALLATION
+        # =====================================================================
+        # Using sys.executable ensures we use the SAME Python interpreter
+        # that's running this script, avoiding issues where 'pip' might point
+        # to a different Python installation on Windows.
+        # 
+        # shell=True is required on Windows for commands with special chars
+        # like '+' in git URLs (e.g., git+https://...)
+        
+        # Build command using current Python interpreter
+        if install_command.startswith("pip "):
+            # Replace 'pip' with 'python -m pip' using current interpreter
+            pip_args = install_command[4:]  # Remove 'pip ' prefix
+            full_command = f'"{sys.executable}" -m pip {pip_args}'
+        else:
+            full_command = install_command
+        
+        logger.info(f"Running: {full_command}")
+        
+        # Run with shell=True for Windows compatibility with special characters
         process = subprocess.run(
-            install_command.split(),
+            full_command,
+            shell=True,  # Required for complex commands on Windows
             capture_output=True,
             text=True,
             timeout=600,  # 10 minute timeout for large packages
@@ -648,6 +683,16 @@ async def install_special_provider(request: InstallProviderRequest) -> InstallPr
         
         if process.returncode == 0:
             logger.info(f"Successfully installed {provider_id}")
+            
+            # Clear the provider availability cache so the new install is detected
+            # This is imported at runtime to avoid circular imports
+            try:
+                from wakegen.providers.registry import clear_availability_cache
+                clear_availability_cache()
+                logger.info("Cleared provider availability cache")
+            except ImportError:
+                pass  # Cache clearing is optional
+            
             return InstallProviderResponse(
                 success=True,
                 message=f"Successfully installed {provider_info['name']}! "

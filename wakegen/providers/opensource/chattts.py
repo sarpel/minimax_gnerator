@@ -34,6 +34,7 @@ import numpy as np
 from wakegen.core.exceptions import ProviderError
 from wakegen.core.types import Gender, ProviderType
 from wakegen.providers.base import BaseProvider
+from wakegen.providers.registry import register_provider  # CRITICAL: Required for provider discovery
 from wakegen.models.audio import Voice
 from wakegen.models.config import ProviderConfig
 
@@ -353,3 +354,10 @@ class ChatTTSProvider(BaseProvider):
         """
         import torch
         self._speaker_cache[voice_id] = torch.load(path)
+
+
+# =============================================================================
+# REGISTER PROVIDER
+# =============================================================================
+# This registration is CRITICAL - without it, the system won't discover this provider!
+register_provider(ProviderType.CHATTTS, ChatTTSProvider)

@@ -32,6 +32,7 @@ import numpy as np
 from wakegen.core.exceptions import ProviderError
 from wakegen.core.types import Gender, ProviderType
 from wakegen.providers.base import BaseProvider
+from wakegen.providers.registry import register_provider  # CRITICAL: Required for provider discovery
 from wakegen.models.audio import Voice
 from wakegen.models.config import ProviderConfig
 
@@ -316,3 +317,10 @@ class BarkProvider(BaseProvider):
         if expression in self.EXPRESSIONS:
             return f"{self.EXPRESSIONS[expression]} {text}"
         return text
+
+
+# =============================================================================
+# REGISTER PROVIDER
+# =============================================================================
+# This registration is CRITICAL - without it, the system won't discover this provider!
+register_provider(ProviderType.BARK, BarkProvider)

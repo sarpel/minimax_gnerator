@@ -42,8 +42,9 @@ class PiperTTSProvider(BaseProvider):
         This handles the setup automatically.
         """
         try:
-            # Try to import piper-tts to ensure it's installed
-            import piper_tts  # noqa: F401
+            # Try to import piper to ensure it's installed
+            # NOTE: The package is 'piper-tts' but the import is 'piper'
+            import piper  # noqa: F401
         except ImportError:
             raise ProviderError("Piper TTS library is not installed. Please install with: pip install piper-tts")
 
@@ -73,11 +74,17 @@ class PiperTTSProvider(BaseProvider):
         This is a fallback method to ensure Piper works.
         """
         try:
-            import piper_tts.download
-            # Use the official download method
-            piper_tts.download.ensure_piper_installed()
+            from piper.download import ensure_voice_exists
+            # Use the official download method if available
+            ensure_voice_exists("en_US-lessac-medium")
+        except ImportError:
+            # Fall back to raising a clear error
+            raise ProviderError(
+                "Piper TTS is not installed correctly. "
+                "Install with: pip install piper-tts"
+            ) from None
         except Exception as e:
-            raise ProviderError(f"Failed to download Piper executable: {str(e)}") from e
+            raise ProviderError(f"Failed to ensure Piper is available: {str(e)}") from e
 
     async def generate(self, text: str, voice_id: str, output_path: str) -> None:
         """
@@ -156,8 +163,8 @@ class PiperTTSProvider(BaseProvider):
             output_path: Where to save the audio file
         """
         try:
-            # Import Piper modules
-            from piper_tts import PiperVoice, synthesize
+            # Import Piper modules (correct import is 'piper', not 'piper_tts')
+            from piper.voice import PiperVoice
 
             # Get or download the voice model
             voice = await self._get_piper_voice(voice_id)
@@ -167,16 +174,12 @@ class PiperTTSProvider(BaseProvider):
                 temp_path = temp_audio.name
 
             try:
-                # Synthesize the audio
-                synthesize(
-                    text,
-                    temp_path,
-                    voice,
-                    speaker_id=0,  # Default speaker
-                    length_scale=1.0,  # Normal speed
-                    noise_scale=0.667,  # Default noise
-                    noise_w=0.8  # Default noise weight
-                )
+                # Synthesize the audio using Piper's API
+                wav_data = voice.synthesize(text)
+                
+                # Write WAV data to temp file
+                with open(temp_path, 'wb') as f:
+                    f.write(wav_data)
 
                 # Move the temporary file to the final location
                 os.replace(temp_path, output_path)
@@ -218,7 +221,7 @@ class PiperTTSProvider(BaseProvider):
         The cache will automatically evict least recently used models.
         """
         try:
-            from piper_tts import PiperVoice
+            from piper.voice import PiperVoice
 
             # Create the voice object (this will download if needed)
             voice = PiperVoice.load(voice_id)

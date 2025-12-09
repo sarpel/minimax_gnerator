@@ -57,6 +57,22 @@ class EdgeTTSProvider(BaseProvider):
             ProviderError: If generation fails.
         """
         try:
+            # =====================================================================
+            # INPUT VALIDATION
+            # =====================================================================
+            # Validate inputs to provide clear error messages before calling API
+            
+            # Check voice_id is not empty (causes "No audio received" error)
+            if not voice_id or voice_id.strip() == "":
+                raise ProviderError(
+                    "Edge TTS voice_id cannot be empty. "
+                    "Please provide a valid voice ID like 'en-US-AriaNeural' or 'tr-TR-AhmetNeural'."
+                )
+            
+            # Check text is not empty
+            if not text or text.strip() == "":
+                raise ProviderError("Edge TTS text cannot be empty.")
+            
             # Lazy import for consistency with other providers
             import edge_tts
             
@@ -71,8 +87,19 @@ class EdgeTTSProvider(BaseProvider):
                 f"Edge TTS is not installed. Install with: pip install edge-tts\n"
                 f"Original error: {e}"
             )
+        except ProviderError:
+            # Re-raise our validation errors as-is
+            raise
         except Exception as e:
-            raise ProviderError(f"Edge TTS generation failed: {str(e)}") from e
+            # Provide more helpful error messages for common issues
+            error_msg = str(e)
+            if "No audio was received" in error_msg:
+                raise ProviderError(
+                    f"Edge TTS generation failed: No audio was received. "
+                    f"This usually means the voice_id '{voice_id}' is invalid. "
+                    f"Try using a valid voice like 'en-US-AriaNeural' or 'tr-TR-AhmetNeural'."
+                ) from e
+            raise ProviderError(f"Edge TTS generation failed: {error_msg}") from e
 
     async def list_voices(self) -> List[Voice]:
         """
