@@ -21,12 +21,11 @@ This module provides endpoints for exporting datasets to various training format
 """
 
 import logging
-from typing import List, Optional, Dict
-from pathlib import Path
-from enum import Enum
 import uuid
+from enum import Enum
+from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -39,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 class ExportFormat(str, Enum):
     """Supported export formats."""
+
     OPENWAKEWORD = "openwakeword"
     MYCROFT = "mycroft"
     PICOVOICE = "picovoice"
@@ -49,6 +49,7 @@ class ExportFormat(str, Enum):
 
 class ExportStatus(str, Enum):
     """Status of an export job."""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -62,6 +63,7 @@ class ExportStatus(str, Enum):
 
 class SplitConfig(BaseModel):
     """Train/validation/test split configuration."""
+
     train: float = Field(default=0.8, ge=0, le=1, description="Training set ratio")
     val: float = Field(default=0.1, ge=0, le=1, description="Validation set ratio")
     test: float = Field(default=0.1, ge=0, le=1, description="Test set ratio")
@@ -69,6 +71,7 @@ class SplitConfig(BaseModel):
 
 class FormatInfo(BaseModel):
     """Information about an export format."""
+
     id: str
     name: str
     description: str
@@ -79,17 +82,23 @@ class FormatInfo(BaseModel):
 
 class ExportRequest(BaseModel):
     """Request to start an export job."""
+
     input_dir: str = Field(..., description="Input directory with audio files")
     output_dir: str = Field(..., description="Output directory for export")
     format: ExportFormat = Field(..., description="Export format")
-    split: SplitConfig = Field(default_factory=lambda: SplitConfig(), description="Data split ratios")
+    split: SplitConfig = Field(
+        default_factory=lambda: SplitConfig(), description="Data split ratios"
+    )
     stratify: bool = Field(True, description="Stratify by wake word class")
-    generate_manifest: bool = Field(True, description="Generate manifest/metadata files")
+    generate_manifest: bool = Field(
+        True, description="Generate manifest/metadata files"
+    )
     copy_files: bool = Field(False, description="Copy files instead of symlinking")
 
 
 class ExportResponse(BaseModel):
     """Response from starting an export job."""
+
     job_id: str
     status: ExportStatus
     message: str
@@ -99,6 +108,7 @@ class ExportResponse(BaseModel):
 
 class ExportJob(BaseModel):
     """Export job information."""
+
     id: str
     format: ExportFormat
     input_dir: str
@@ -107,13 +117,14 @@ class ExportJob(BaseModel):
     progress_percentage: float = 0.0
     total_files: int = 0
     processed_files: int = 0
-    error_message: Optional[str] = None
-    started_at: Optional[str] = None
-    completed_at: Optional[str] = None
+    error_message: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
 
 
 class RecentExport(BaseModel):
     """Summary of a recent export."""
+
     id: str
     format: str
     output_dir: str
@@ -127,53 +138,53 @@ class RecentExport(BaseModel):
 # =============================================================================
 
 
-FORMAT_INFO: Dict[ExportFormat, FormatInfo] = {
+FORMAT_INFO: dict[ExportFormat, FormatInfo] = {
     ExportFormat.OPENWAKEWORD: FormatInfo(
         id="openwakeword",
         name="OpenWakeWord",
         description="For openWakeWord training with train/val/test splits",
         icon="🎯",
-        file_structure="output/{split}/{class}/*.wav"
+        file_structure="output/{split}/{class}/*.wav",
     ),
     ExportFormat.MYCROFT: FormatInfo(
         id="mycroft",
         name="Mycroft Precise",
         description="Mycroft's precise wake word engine format",
         icon="🔮",
-        file_structure="output/{wake_word}/*.wav + clips.txt"
+        file_structure="output/{wake_word}/*.wav + clips.txt",
     ),
     ExportFormat.PICOVOICE: FormatInfo(
         id="picovoice",
         name="Picovoice Porcupine",
         description="Format for Picovoice's Porcupine wake word engine",
         icon="🔊",
-        file_structure="output/*.wav + keywords.json"
+        file_structure="output/*.wav + keywords.json",
     ),
     ExportFormat.TENSORFLOW: FormatInfo(
         id="tensorflow",
         name="TensorFlow",
         description="TFRecord format for TensorFlow models",
         icon="🧠",
-        file_structure="output/{split}.tfrecord"
+        file_structure="output/{split}.tfrecord",
     ),
     ExportFormat.PYTORCH: FormatInfo(
         id="pytorch",
         name="PyTorch",
         description="PyTorch Dataset compatible format",
         icon="🔥",
-        file_structure="output/{split}/*.wav + metadata.json"
+        file_structure="output/{split}/*.wav + metadata.json",
     ),
     ExportFormat.HUGGINGFACE: FormatInfo(
         id="huggingface",
         name="HuggingFace",
         description="HuggingFace datasets format for easy sharing",
         icon="🤗",
-        file_structure="output/dataset_dict/ (Arrow format)"
+        file_structure="output/dataset_dict/ (Arrow format)",
     ),
 }
 
 # In-memory job storage (would use database in production)
-_export_jobs: Dict[str, ExportJob] = {}
+_export_jobs: dict[str, ExportJob] = {}
 
 
 # =============================================================================
@@ -184,12 +195,8 @@ _export_jobs: Dict[str, ExportJob] = {}
 router = APIRouter()
 
 
-@router.get(
-    "/formats",
-    response_model=List[FormatInfo],
-    summary="List export formats"
-)
-async def list_formats() -> List[FormatInfo]:
+@router.get("/formats", response_model=list[FormatInfo], summary="List export formats")
+async def list_formats() -> list[FormatInfo]:
     """
     Get information about all supported export formats.
 
@@ -199,9 +206,7 @@ async def list_formats() -> List[FormatInfo]:
 
 
 @router.get(
-    "/formats/{format_id}",
-    response_model=FormatInfo,
-    summary="Get format details"
+    "/formats/{format_id}", response_model=FormatInfo, summary="Get format details"
 )
 async def get_format(format_id: ExportFormat) -> FormatInfo:
     """Get detailed information about a specific export format."""
@@ -210,14 +215,9 @@ async def get_format(format_id: ExportFormat) -> FormatInfo:
     return FORMAT_INFO[format_id]
 
 
-@router.post(
-    "/start",
-    response_model=ExportResponse,
-    summary="Start export"
-)
+@router.post("/start", response_model=ExportResponse, summary="Start export")
 async def start_export(
-    request: ExportRequest,
-    background_tasks: BackgroundTasks
+    request: ExportRequest, background_tasks: BackgroundTasks
 ) -> ExportResponse:
     """
     Start a new export job.
@@ -226,14 +226,15 @@ async def start_export(
     """
     input_path = Path(request.input_dir)
     if not input_path.exists():
-        raise HTTPException(status_code=404, detail=f"Input directory not found: {request.input_dir}")
+        raise HTTPException(
+            status_code=404, detail=f"Input directory not found: {request.input_dir}"
+        )
 
     # Validate split ratios
     total_split = request.split.train + request.split.val + request.split.test
     if abs(total_split - 1.0) > 0.01:
         raise HTTPException(
-            status_code=400,
-            detail=f"Split ratios must sum to 1.0 (got {total_split})"
+            status_code=400, detail=f"Split ratios must sum to 1.0 (got {total_split})"
         )
 
     # Create output directory
@@ -243,7 +244,9 @@ async def start_export(
     # Count input files
     audio_files = list(input_path.rglob("*.wav"))
     if not audio_files:
-        raise HTTPException(status_code=400, detail="No WAV files found in input directory")
+        raise HTTPException(
+            status_code=400, detail="No WAV files found in input directory"
+        )
 
     # Create job
     job_id = str(uuid.uuid4())[:8]
@@ -253,7 +256,7 @@ async def start_export(
         input_dir=request.input_dir,
         output_dir=request.output_dir,
         status=ExportStatus.PENDING,
-        total_files=len(audio_files)
+        total_files=len(audio_files),
     )
     _export_jobs[job_id] = job
 
@@ -265,7 +268,7 @@ async def start_export(
         status=ExportStatus.PENDING,
         message=f"Export job started for {len(audio_files)} files",
         format=request.format,
-        output_dir=request.output_dir
+        output_dir=request.output_dir,
     )
 
 
@@ -274,10 +277,10 @@ async def run_export(job_id: str, request: ExportRequest) -> None:
     Background task to run export.
     """
     import asyncio
-    import shutil
     import json
-    import random
+    import shutil
     from datetime import datetime
+
     import pandas as pd
     from sklearn.model_selection import train_test_split
 
@@ -296,7 +299,7 @@ async def run_export(job_id: str, request: ExportRequest) -> None:
         files = []
         labels = []
         file_paths = list(input_path.rglob("*.wav"))
-        
+
         job.total_files = len(file_paths)
         if job.total_files == 0:
             raise ValueError("No WAV files found to export")
@@ -316,25 +319,31 @@ async def run_export(job_id: str, request: ExportRequest) -> None:
 
         # Normalize test size relative to total
         test_size = request.split.test
-        
+
         # Initial DataFrame
-        df = pd.DataFrame({'path': files, 'label': labels})
+        df = pd.DataFrame({"path": files, "label": labels})
 
         splits = {}
-        
+
         if test_size > 0:
             if request.stratify:
                 fn_train_val, fn_test, param_train_val, param_test = train_test_split(
-                    df['path'], df['label'], test_size=test_size, stratify=df['label'], random_state=42
+                    df["path"],
+                    df["label"],
+                    test_size=test_size,
+                    stratify=df["label"],
+                    random_state=42,
                 )
             else:
                 fn_train_val, fn_test, param_train_val, param_test = train_test_split(
-                    df['path'], df['label'], test_size=test_size, random_state=42
+                    df["path"], df["label"], test_size=test_size, random_state=42
                 )
-            splits['test'] = pd.DataFrame({'path': fn_test, 'label': param_test})
-            df_remaining = pd.DataFrame({'path': fn_train_val, 'label': param_train_val})
+            splits["test"] = pd.DataFrame({"path": fn_test, "label": param_test})
+            df_remaining = pd.DataFrame(
+                {"path": fn_train_val, "label": param_train_val}
+            )
         else:
-            splits['test'] = pd.DataFrame(columns=['path', 'label'])
+            splits["test"] = pd.DataFrame(columns=["path", "label"])
             df_remaining = df
 
         # Now split remaining into Train/Val
@@ -342,34 +351,41 @@ async def run_export(job_id: str, request: ExportRequest) -> None:
         if len(df_remaining) > 0 and request.split.val > 0:
             # val_ratio relative to (train + val)
             val_relative = request.split.val / (request.split.train + request.split.val)
-            
-            if request.stratify and len(df_remaining['label'].unique()) > 1:
+
+            if request.stratify and len(df_remaining["label"].unique()) > 1:
                 # Proper stratification requires at least 2 classes
-                 fn_train, fn_val, param_train, param_val = train_test_split(
-                    df_remaining['path'], df_remaining['label'], test_size=val_relative, stratify=df_remaining['label'], random_state=42
+                fn_train, fn_val, param_train, param_val = train_test_split(
+                    df_remaining["path"],
+                    df_remaining["label"],
+                    test_size=val_relative,
+                    stratify=df_remaining["label"],
+                    random_state=42,
                 )
             else:
-                 fn_train, fn_val, param_train, param_val = train_test_split(
-                    df_remaining['path'], df_remaining['label'], test_size=val_relative, random_state=42
+                fn_train, fn_val, param_train, param_val = train_test_split(
+                    df_remaining["path"],
+                    df_remaining["label"],
+                    test_size=val_relative,
+                    random_state=42,
                 )
-            
-            splits['train'] = pd.DataFrame({'path': fn_train, 'label': param_train})
-            splits['val'] = pd.DataFrame({'path': fn_val, 'label': param_val})
+
+            splits["train"] = pd.DataFrame({"path": fn_train, "label": param_train})
+            splits["val"] = pd.DataFrame({"path": fn_val, "label": param_val})
         else:
-            splits['train'] = df_remaining
-            splits['val'] = pd.DataFrame(columns=['path', 'label'])
+            splits["train"] = df_remaining
+            splits["val"] = pd.DataFrame(columns=["path", "label"])
 
         # 3. Export files
         processed = 0
-        
+
         for split_name, split_df in splits.items():
             if split_df.empty:
                 continue
-                
+
             for _, row in split_df.iterrows():
-                src_file = Path(row['path'])
-                label = row['label']
-                
+                src_file = Path(row["path"])
+                label = row["label"]
+
                 # Determine destination based on format
                 if request.format == ExportFormat.OPENWAKEWORD:
                     # structure: output/{split}/{label}/{filename}
@@ -379,14 +395,14 @@ async def run_export(job_id: str, request: ExportRequest) -> None:
                     # For simplicity, we'll group by label
                     dest_dir = output_path / label
                 elif request.format == ExportFormat.PYTORCH:
-                     dest_dir = output_path / split_name / label
+                    dest_dir = output_path / split_name / label
                 else:
                     # Default flat or label-based
                     dest_dir = output_path / split_name / label
 
                 dest_dir.mkdir(parents=True, exist_ok=True)
                 dest_file = dest_dir / src_file.name
-                
+
                 # Copy or Symlink
                 if request.copy_files:
                     shutil.copy2(src_file, dest_file)
@@ -394,15 +410,18 @@ async def run_export(job_id: str, request: ExportRequest) -> None:
                     # Symlink (requires admin on Windows sometimes, fallback to copy)
                     try:
                         import os
+
                         os.symlink(src_file, dest_file)
                     except OSError:
                         shutil.copy2(src_file, dest_file)
-                
+
                 processed += 1
                 if processed % 10 == 0:
                     job.processed_files = processed
-                    job.progress_percentage = float((processed / job.total_files) * 95.0) # Leave 5% for manifest
-                    await asyncio.sleep(0.001) # Yield control
+                    job.progress_percentage = float(
+                        (processed / job.total_files) * 95.0
+                    )  # Leave 5% for manifest
+                    await asyncio.sleep(0.001)  # Yield control
 
         # 4. Generate Manifests
         if request.generate_manifest:
@@ -411,11 +430,11 @@ async def run_export(job_id: str, request: ExportRequest) -> None:
                 "format": request.format,
                 "stats": {
                     "total_files": job.total_files,
-                    "splits": {k: len(v) for k, v in splits.items()}
+                    "splits": {k: len(v) for k, v in splits.items()},
                 },
-                "classes": sorted(list(set(labels)))
+                "classes": sorted(list(set(labels))),
             }
-            
+
             with open(str(Path(output_path) / "dataset_info.json"), "w") as f:
                 json.dump(manifest, f, indent=2)
 
@@ -427,17 +446,14 @@ async def run_export(job_id: str, request: ExportRequest) -> None:
 
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         job.status = ExportStatus.FAILED
         job.error_message = str(e)
         logger.error(f"Export job {job_id} failed: {e}")
 
 
-@router.get(
-    "/status/{job_id}",
-    response_model=ExportJob,
-    summary="Get job status"
-)
+@router.get("/status/{job_id}", response_model=ExportJob, summary="Get job status")
 async def get_status(job_id: str) -> ExportJob:
     """Get the status of an export job."""
     if job_id not in _export_jobs:
@@ -445,19 +461,13 @@ async def get_status(job_id: str) -> ExportJob:
     return _export_jobs[job_id]
 
 
-@router.get(
-    "/recent",
-    response_model=List[RecentExport],
-    summary="List recent exports"
-)
+@router.get("/recent", response_model=list[RecentExport], summary="List recent exports")
 async def list_recent(
     limit: int = Query(10, ge=1, le=50, description="Maximum number of results")
-) -> List[RecentExport]:
+) -> list[RecentExport]:
     """Get a list of recent export jobs."""
     jobs = sorted(
-        _export_jobs.values(),
-        key=lambda j: j.started_at or "",
-        reverse=True
+        _export_jobs.values(), key=lambda j: j.started_at or "", reverse=True
     )[:limit]
 
     return [
@@ -467,7 +477,7 @@ async def list_recent(
             output_dir=job.output_dir,
             status=job.status.value,
             date=job.completed_at or job.started_at or "Unknown",
-            file_count=job.processed_files
+            file_count=job.processed_files,
         )
         for job in jobs
     ]

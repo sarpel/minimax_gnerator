@@ -4,35 +4,20 @@ This module provides comprehensive quality assurance and analysis capabilities
 for validating, scoring, and analyzing generated audio samples.
 """
 
-from .validator import (
-    validate_sample,
-    SampleValidationResult,
-    SampleValidationError,
-)
-from .scorer import (
-    calculate_quality_score,
-    QualityScoreResult,
-    QualityScoringError,
-)
-from .asr_check import (
-    verify_pronunciation,
-    ASRVerificationResult,
-    ASRVerificationError,
-)
+from .asr_check import ASRVerificationError, ASRVerificationResult, verify_pronunciation
 from .deduplication import (
-    detect_duplicates,
-    DuplicateDetectionResult,
-    DeduplicationError,
+                        DeduplicationError,
+                        DuplicateDetectionResult,
+                        detect_duplicates,
 )
+from .report_generator import ReportGenerationError, generate_report
+from .scorer import QualityScoreResult, QualityScoringError, calculate_quality_score
 from .statistics import (
-    calculate_dataset_statistics,
-    DatasetStatisticsResult,
-    StatisticsError,
+                        DatasetStatisticsResult,
+                        StatisticsError,
+                        calculate_dataset_statistics,
 )
-from .report_generator import (
-    generate_report,
-    ReportGenerationError,
-)
+from .validator import SampleValidationError, SampleValidationResult, validate_sample
 
 __all__ = [
     # Validator exports

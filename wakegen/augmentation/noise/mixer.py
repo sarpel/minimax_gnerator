@@ -13,14 +13,16 @@ Key Features:
 """
 
 from __future__ import annotations
-import asyncio
-import random
-import numpy as np
+
+from typing import Any, cast
+
 import librosa
+import numpy as np
 import soundfile as sf
-from typing import Optional, Tuple, Any, cast
+
 from wakegen.core.exceptions import NoiseError
 from wakegen.utils.audio import load_audio
+
 
 class NoiseMixer:
     """
@@ -47,15 +49,16 @@ class NoiseMixer:
     def _validate_sample_rate(self, sample_rate: int) -> None:
         """Validate that the sample rate is reasonable for audio processing."""
         if not (8000 <= sample_rate <= 48000):
-            raise NoiseError(f"Sample rate {sample_rate}Hz is out of valid range (8000-48000Hz)")
+            raise NoiseError(
+                f"Sample rate {sample_rate}Hz is out of valid range (8000-48000Hz)"
+            )
         if sample_rate % 1000 != 0:
-            raise NoiseError(f"Sample rate {sample_rate}Hz should be a multiple of 1000Hz for compatibility")
+            raise NoiseError(
+                f"Sample rate {sample_rate}Hz should be a multiple of 1000Hz for compatibility"
+            )
 
     def generate_noise(
-        self,
-        duration_seconds: float,
-        noise_type: str = "white",
-        color: float = 1.0
+        self, duration_seconds: float, noise_type: str = "white", color: float = 1.0
     ) -> np.ndarray[Any, Any]:
         """
         Generate synthetic noise of the specified type and duration.
@@ -92,9 +95,11 @@ class NoiseMixer:
             else:
                 raise NoiseError(f"Unknown noise type: {noise_type}")
         except Exception as e:
-            raise NoiseError(f"Failed to generate {noise_type} noise: {str(e)}") from e
+            raise NoiseError(f"Failed to generate {noise_type} noise: {e!s}") from e
 
-    def _generate_colored_noise(self, num_samples: int, beta: float) -> np.ndarray[Any, Any]:
+    def _generate_colored_noise(
+        self, num_samples: int, beta: float
+    ) -> np.ndarray[Any, Any]:
         """
         Generate colored noise using the spectral synthesis method.
 
@@ -113,13 +118,13 @@ class NoiseMixer:
 
         # Create frequency array
         n = len(fft_white)
-        freqs = np.fft.rfftfreq(num_samples, 1.0/self.sample_rate)
+        freqs = np.fft.rfftfreq(num_samples, 1.0 / self.sample_rate)
 
         # Avoid division by zero for DC component
         freqs[0] = 1.0
 
         # Apply coloring (inverse frequency weighting)
-        fft_colored = fft_white * (freqs ** (-beta/2.0))
+        fft_colored = fft_white * (freqs ** (-beta / 2.0))
 
         # Convert back to time domain
         colored = np.fft.irfft(fft_colored, n=num_samples)
@@ -133,7 +138,7 @@ class NoiseMixer:
         self,
         clean_audio: np.ndarray[Any, Any],
         noise_audio: np.ndarray[Any, Any],
-        target_snr_db: float
+        target_snr_db: float,
     ) -> np.ndarray[Any, Any]:
         """
         Mix clean audio with noise at the specified SNR level.
@@ -150,7 +155,9 @@ class NoiseMixer:
             NoiseError: If SNR is invalid or mixing fails.
         """
         if target_snr_db < -10 or target_snr_db > 50:
-            raise NoiseError(f"SNR {target_snr_db}dB is out of valid range (-10 to 50dB)")
+            raise NoiseError(
+                f"SNR {target_snr_db}dB is out of valid range (-10 to 50dB)"
+            )
 
         # Ensure both signals have the same length
         min_len = min(len(clean_audio), len(noise_audio))
@@ -158,8 +165,8 @@ class NoiseMixer:
         noise_audio = noise_audio[:min_len]
 
         # Calculate signal and noise power
-        signal_power = np.mean(clean_audio ** 2)
-        noise_power = np.mean(noise_audio ** 2)
+        signal_power = np.mean(clean_audio**2)
+        noise_power = np.mean(noise_audio**2)
 
         if signal_power == 0:
             raise NoiseError("Clean audio has zero power - cannot compute SNR")
@@ -188,7 +195,7 @@ class NoiseMixer:
         output_path: str,
         noise_type: str = "pink",
         snr_db: float = 15.0,
-        noise_duration: Optional[float] = None
+        noise_duration: float | None = None,
     ) -> None:
         """
         Apply noise augmentation to an audio file and save the result.
@@ -209,7 +216,9 @@ class NoiseMixer:
 
             # Resample if needed
             if sr != self.sample_rate:
-                clean_audio = librosa.resample(clean_audio, orig_sr=sr, target_sr=self.sample_rate)
+                clean_audio = librosa.resample(
+                    clean_audio, orig_sr=sr, target_sr=self.sample_rate
+                )
                 sr = self.sample_rate
 
             # Determine noise duration
@@ -226,4 +235,4 @@ class NoiseMixer:
             sf.write(output_path, mixed_audio, sr)
 
         except Exception as e:
-            raise NoiseError(f"Failed to apply noise augmentation: {str(e)}") from e
+            raise NoiseError(f"Failed to apply noise augmentation: {e!s}") from e

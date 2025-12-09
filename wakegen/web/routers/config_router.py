@@ -21,13 +21,12 @@ It allows the Web UI to create, load, validate, and save YAML configurations.
 
 import logging
 from pathlib import Path
-from typing import Dict, Any, List, Optional
 
+import yaml
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
-import yaml
 
-from wakegen.config.yaml_loader import load_config, get_template_config, WakegenConfig
+from wakegen.config.yaml_loader import get_template_config, load_config
 from wakegen.core.exceptions import ConfigError
 
 logger = logging.getLogger(__name__)
@@ -40,24 +39,30 @@ logger = logging.getLogger(__name__)
 
 class ConfigTemplate(BaseModel):
     """Response containing a blank configuration template."""
+
     yaml_content: str = Field(..., description="YAML template content")
-    sections: List[str] = Field(..., description="Available configuration sections")
+    sections: list[str] = Field(..., description="Available configuration sections")
 
 
 class ConfigValidationRequest(BaseModel):
     """Request to validate configuration content."""
+
     content: str = Field(..., description="YAML content to validate")
 
 
 class ConfigValidationResponse(BaseModel):
     """Response from configuration validation."""
+
     valid: bool = Field(..., description="Whether the configuration is valid")
-    errors: List[str] = Field(default_factory=list, description="List of validation errors")
-    warnings: List[str] = Field(default_factory=list, description="List of warnings")
+    errors: list[str] = Field(
+        default_factory=list, description="List of validation errors"
+    )
+    warnings: list[str] = Field(default_factory=list, description="List of warnings")
 
 
 class ConfigSaveRequest(BaseModel):
     """Request to save configuration to a file."""
+
     content: str = Field(..., description="YAML content to save")
     path: str = Field(..., description="File path to save to")
     overwrite: bool = Field(False, description="Whether to overwrite existing file")
@@ -65,6 +70,7 @@ class ConfigSaveRequest(BaseModel):
 
 class ConfigSaveResponse(BaseModel):
     """Response from saving configuration."""
+
     success: bool = Field(..., description="Whether save was successful")
     path: str = Field(..., description="Path where file was saved")
     message: str = Field(..., description="Result message")
@@ -72,6 +78,7 @@ class ConfigSaveResponse(BaseModel):
 
 class ConfigLoadResponse(BaseModel):
     """Response containing loaded configuration."""
+
     content: str = Field(..., description="YAML content")
     path: str = Field(..., description="Path the file was loaded from")
     valid: bool = Field(..., description="Whether the loaded config is valid")
@@ -79,6 +86,7 @@ class ConfigLoadResponse(BaseModel):
 
 class ConfigPreset(BaseModel):
     """A built-in configuration preset."""
+
     name: str = Field(..., description="Preset name")
     description: str = Field(..., description="What this preset is for")
     filename: str = Field(..., description="Preset filename")
@@ -93,9 +101,7 @@ router = APIRouter()
 
 
 @router.get(
-    "/template",
-    response_model=ConfigTemplate,
-    summary="Get configuration template"
+    "/template", response_model=ConfigTemplate, summary="Get configuration template"
 )
 async def get_template() -> ConfigTemplate:
     """
@@ -108,38 +114,31 @@ async def get_template() -> ConfigTemplate:
         # Get template from existing function
         # get_template_config returns a valid YAML string
         raw_template = get_template_config()
-        
+
         # Parse it to a dict so we can introspect sections
         template_dict = yaml.safe_load(raw_template)
 
         # Convert to YAML with nice formatting
         yaml_content = yaml.dump(
-            template_dict,
-            default_flow_style=False,
-            sort_keys=False,
-            allow_unicode=True
+            template_dict, default_flow_style=False, sort_keys=False, allow_unicode=True
         )
 
         # List of top-level sections
         sections = list(template_dict.keys())
 
-        return ConfigTemplate(
-            yaml_content=yaml_content,
-            sections=sections
-        )
+        return ConfigTemplate(yaml_content=yaml_content, sections=sections)
 
     except Exception as e:
         logger.error(f"Error generating template: {e}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Error generating template: {str(e)}"
+            status_code=500, detail=f"Error generating template: {e!s}"
         )
 
 
 @router.post(
     "/validate",
     response_model=ConfigValidationResponse,
-    summary="Validate configuration"
+    summary="Validate configuration",
 )
 async def validate_config(request: ConfigValidationRequest) -> ConfigValidationResponse:
     """
@@ -156,8 +155,8 @@ async def validate_config(request: ConfigValidationRequest) -> ConfigValidationR
         ========
         ConfigValidationResponse with valid flag and any errors
     """
-    errors: List[str] = []
-    warnings: List[str] = []
+    errors: list[str] = []
+    warnings: list[str] = []
 
     try:
         # Step 1: Parse YAML
@@ -165,16 +164,14 @@ async def validate_config(request: ConfigValidationRequest) -> ConfigValidationR
             config_dict = yaml.safe_load(request.content)
         except yaml.YAMLError as e:
             return ConfigValidationResponse(
-                valid=False,
-                errors=[f"YAML syntax error: {str(e)}"],
-                warnings=[]
+                valid=False, errors=[f"YAML syntax error: {e!s}"], warnings=[]
             )
 
         if not isinstance(config_dict, dict):
             return ConfigValidationResponse(
                 valid=False,
                 errors=["Configuration must be a YAML mapping (dictionary)"],
-                warnings=[]
+                warnings=[],
             )
 
         # Step 2: Check required sections
@@ -207,11 +204,9 @@ async def validate_config(request: ConfigValidationRequest) -> ConfigValidationR
             try:
                 # Save to temp file and load
                 import tempfile
+
                 with tempfile.NamedTemporaryFile(
-                    mode='w',
-                    suffix='.yaml',
-                    delete=False,
-                    encoding='utf-8'
+                    mode="w", suffix=".yaml", delete=False, encoding="utf-8"
                 ) as f:
                     f.write(request.content)
                     temp_path = f.name
@@ -222,30 +217,25 @@ async def validate_config(request: ConfigValidationRequest) -> ConfigValidationR
                     errors.append(str(e))
                 finally:
                     import os
+
                     os.unlink(temp_path)
 
             except Exception as e:
-                errors.append(f"Validation error: {str(e)}")
+                errors.append(f"Validation error: {e!s}")
 
         return ConfigValidationResponse(
-            valid=len(errors) == 0,
-            errors=errors,
-            warnings=warnings
+            valid=len(errors) == 0, errors=errors, warnings=warnings
         )
 
     except Exception as e:
         logger.error(f"Validation error: {e}")
         return ConfigValidationResponse(
-            valid=False,
-            errors=[f"Unexpected error: {str(e)}"],
-            warnings=[]
+            valid=False, errors=[f"Unexpected error: {e!s}"], warnings=[]
         )
 
 
 @router.post(
-    "/save",
-    response_model=ConfigSaveResponse,
-    summary="Save configuration to file"
+    "/save", response_model=ConfigSaveResponse, summary="Save configuration to file"
 )
 async def save_config(request: ConfigSaveRequest) -> ConfigSaveResponse:
     """
@@ -267,7 +257,7 @@ async def save_config(request: ConfigSaveRequest) -> ConfigSaveResponse:
             return ConfigSaveResponse(
                 success=False,
                 path=str(path),
-                message=f"File already exists: {path}. Set overwrite=true to replace."
+                message=f"File already exists: {path}. Set overwrite=true to replace.",
             )
 
         # Validate before saving
@@ -278,34 +268,28 @@ async def save_config(request: ConfigSaveRequest) -> ConfigSaveResponse:
             return ConfigSaveResponse(
                 success=False,
                 path=str(path),
-                message=f"Invalid configuration: {'; '.join(validation.errors)}"
+                message=f"Invalid configuration: {'; '.join(validation.errors)}",
             )
 
         # Create parent directories if needed
         path.parent.mkdir(parents=True, exist_ok=True)
 
         # Write the file
-        path.write_text(request.content, encoding='utf-8')
+        path.write_text(request.content, encoding="utf-8")
 
         return ConfigSaveResponse(
-            success=True,
-            path=str(path),
-            message=f"Configuration saved to {path}"
+            success=True, path=str(path), message=f"Configuration saved to {path}"
         )
 
     except Exception as e:
         logger.error(f"Error saving config: {e}")
         return ConfigSaveResponse(
-            success=False,
-            path=request.path,
-            message=f"Error saving: {str(e)}"
+            success=False, path=request.path, message=f"Error saving: {e!s}"
         )
 
 
 @router.get(
-    "/load",
-    response_model=ConfigLoadResponse,
-    summary="Load configuration from file"
+    "/load", response_model=ConfigLoadResponse, summary="Load configuration from file"
 )
 async def load_config_file(
     path: str = Query(..., description="Path to configuration file")
@@ -321,41 +305,29 @@ async def load_config_file(
         file_path = Path(path)
 
         if not file_path.exists():
-            raise HTTPException(
-                status_code=404,
-                detail=f"File not found: {path}"
-            )
+            raise HTTPException(status_code=404, detail=f"File not found: {path}")
 
         # Read the file
-        content = file_path.read_text(encoding='utf-8')
+        content = file_path.read_text(encoding="utf-8")
 
         # Validate it
-        validation = await validate_config(
-            ConfigValidationRequest(content=content)
-        )
+        validation = await validate_config(ConfigValidationRequest(content=content))
 
         return ConfigLoadResponse(
-            content=content,
-            path=str(file_path.absolute()),
-            valid=validation.valid
+            content=content, path=str(file_path.absolute()), valid=validation.valid
         )
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error loading config: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error loading file: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error loading file: {e!s}")
 
 
 @router.get(
-    "/presets",
-    response_model=List[ConfigPreset],
-    summary="List configuration presets"
+    "/presets", response_model=list[ConfigPreset], summary="List configuration presets"
 )
-async def list_presets() -> List[ConfigPreset]:
+async def list_presets() -> list[ConfigPreset]:
     """
     List available built-in configuration presets.
 
@@ -366,17 +338,17 @@ async def list_presets() -> List[ConfigPreset]:
         ConfigPreset(
             name="Basic English",
             description="Simple configuration for English wake words",
-            filename="basic_english.yaml"
+            filename="basic_english.yaml",
         ),
         ConfigPreset(
             name="Multi-language",
             description="Configuration for multiple languages",
-            filename="multi_language.yaml"
+            filename="multi_language.yaml",
         ),
         ConfigPreset(
             name="High Quality",
             description="Maximum quality with multiple providers and augmentation",
-            filename="high_quality.yaml"
+            filename="high_quality.yaml",
         ),
     ]
 

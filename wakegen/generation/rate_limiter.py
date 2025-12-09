@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Optional
+
 
 class RateLimiter:
     """Token bucket rate limiter for API calls.
@@ -47,7 +47,9 @@ class RateLimiter:
 
         self.max_requests = max_requests
         self.period_seconds = period_seconds
-        self._tokens: float = float(max_requests)  # Start with full bucket (Issue 10: explicit float)
+        self._tokens: float = float(
+            max_requests
+        )  # Start with full bucket (Issue 10: explicit float)
         self._last_refill = time.time()
         self._lock = asyncio.Lock()
 
@@ -66,7 +68,9 @@ class RateLimiter:
             time_since_refill = now - self._last_refill
 
             # Calculate how many tokens to add (fractional tokens based on time)
-            tokens_to_add = time_since_refill * (self.max_requests / self.period_seconds)
+            tokens_to_add = time_since_refill * (
+                self.max_requests / self.period_seconds
+            )
 
             # Refill the bucket
             self._tokens = min(float(self.max_requests), self._tokens + tokens_to_add)

@@ -14,13 +14,16 @@ Key Features:
 """
 
 from __future__ import annotations
+
+from typing import Any
+
+import librosa
 import numpy as np
-from typing import Optional, Tuple, Any, cast
+import soundfile as sf
+
 from wakegen.core.exceptions import AugmentationError
 from wakegen.utils.audio import load_audio
-import soundfile as sf
-import librosa
-from typing import Optional, Tuple, Any
+
 
 class DynamicsProcessor:
     """
@@ -42,7 +45,9 @@ class DynamicsProcessor:
     def _validate_sample_rate(self, sample_rate: int) -> None:
         """Validate sample rate is suitable for dynamics processing."""
         if not (8000 <= sample_rate <= 48000):
-            raise AugmentationError(f"Sample rate {sample_rate}Hz is out of valid range (8000-48000Hz)")
+            raise AugmentationError(
+                f"Sample rate {sample_rate}Hz is out of valid range (8000-48000Hz)"
+            )
 
     def apply_compression(
         self,
@@ -52,7 +57,7 @@ class DynamicsProcessor:
         attack_ms: float = 10.0,
         release_ms: float = 100.0,
         knee_db: float = 5.0,
-        makeup_gain_db: float = 0.0
+        makeup_gain_db: float = 0.0,
     ) -> np.ndarray[Any, Any]:
         """
         Apply compression to audio signal.
@@ -94,13 +99,15 @@ class DynamicsProcessor:
                 # Apply knee smoothing
                 if knee_db > 0:
                     # Soft knee implementation
-                    knee_start = threshold_db - knee_db/2.0
-                    knee_end = threshold_db + knee_db/2.0
+                    knee_start = threshold_db - knee_db / 2.0
+                    knee_end = threshold_db + knee_db / 2.0
 
                     if current_level_db > knee_start and current_level_db < knee_end:
                         # Linear transition through knee
                         knee_position = (current_level_db - knee_start) / knee_db
-                        effective_threshold = threshold_db - (knee_db/2.0) + (knee_position * knee_db)
+                        effective_threshold = (
+                            threshold_db - (knee_db / 2.0) + (knee_position * knee_db)
+                        )
                     else:
                         effective_threshold = threshold_db
                 else:
@@ -111,7 +118,7 @@ class DynamicsProcessor:
                     # Amount over threshold
                     over_db = current_level_db - effective_threshold
                     # Apply compression ratio
-                    gain_reduction_db = over_db * (1.0 - 1.0/ratio)
+                    gain_reduction_db = over_db * (1.0 - 1.0 / ratio)
                     gain_reduction = 10.0 ** (-gain_reduction_db / 20.0)
                 else:
                     gain_reduction = 1.0
@@ -121,11 +128,17 @@ class DynamicsProcessor:
                     envelope[i] = current_level_db
                 else:
                     # Attack: when signal increases
-                    if current_level_db > envelope[i-1]:
-                        envelope[i] = envelope[i-1] + (current_level_db - envelope[i-1]) / attack_samples
+                    if current_level_db > envelope[i - 1]:
+                        envelope[i] = (
+                            envelope[i - 1]
+                            + (current_level_db - envelope[i - 1]) / attack_samples
+                        )
                     # Release: when signal decreases
                     else:
-                        envelope[i] = envelope[i-1] + (current_level_db - envelope[i-1]) / release_samples
+                        envelope[i] = (
+                            envelope[i - 1]
+                            + (current_level_db - envelope[i - 1]) / release_samples
+                        )
 
                 # Apply gain reduction
                 gain[i] = gain_reduction
@@ -142,10 +155,10 @@ class DynamicsProcessor:
             if compressed_peak > original_peak and original_peak > 0:
                 compressed = compressed * (original_peak / compressed_peak)
 
-            return cast(np.ndarray[Any, Any], compressed)
+            return compressed
 
         except Exception as e:
-            raise AugmentationError(f"Failed to apply compression: {str(e)}") from e
+            raise AugmentationError(f"Failed to apply compression: {e!s}") from e
 
     def _validate_compression_parameters(
         self,
@@ -154,11 +167,13 @@ class DynamicsProcessor:
         attack_ms: float,
         release_ms: float,
         knee_db: float,
-        makeup_gain_db: float
+        makeup_gain_db: float,
     ) -> None:
         """Validate compression parameters are reasonable."""
         if threshold_db > 0:
-            raise AugmentationError("Compression threshold must be negative (below 0dB)")
+            raise AugmentationError(
+                "Compression threshold must be negative (below 0dB)"
+            )
         if threshold_db < -60:
             raise AugmentationError("Compression threshold too low (minimum -60dB)")
         if ratio < 1.0:
@@ -176,7 +191,7 @@ class DynamicsProcessor:
         self,
         audio: np.ndarray[Any, Any],
         threshold_db: float = -3.0,
-        release_ms: float = 50.0
+        release_ms: float = 50.0,
     ) -> np.ndarray[Any, Any]:
         """
         Apply limiting to prevent audio from exceeding threshold.
@@ -227,7 +242,7 @@ class DynamicsProcessor:
             return limited
 
         except Exception as e:
-            raise AugmentationError(f"Failed to apply limiting: {str(e)}") from e
+            raise AugmentationError(f"Failed to apply limiting: {e!s}") from e
 
     def apply_expansion(
         self,
@@ -235,7 +250,7 @@ class DynamicsProcessor:
         threshold_db: float = -30.0,
         ratio: float = 2.0,
         attack_ms: float = 5.0,
-        release_ms: float = 50.0
+        release_ms: float = 50.0,
     ) -> np.ndarray[Any, Any]:
         """
         Apply expansion to increase dynamic range (opposite of compression).
@@ -286,10 +301,16 @@ class DynamicsProcessor:
                 if i == 0:
                     envelope[i] = current_level_db
                 else:
-                    if current_level_db < envelope[i-1]:
-                        envelope[i] = envelope[i-1] + (current_level_db - envelope[i-1]) / attack_samples
+                    if current_level_db < envelope[i - 1]:
+                        envelope[i] = (
+                            envelope[i - 1]
+                            + (current_level_db - envelope[i - 1]) / attack_samples
+                        )
                     else:
-                        envelope[i] = envelope[i-1] + (current_level_db - envelope[i-1]) / release_samples
+                        envelope[i] = (
+                            envelope[i - 1]
+                            + (current_level_db - envelope[i - 1]) / release_samples
+                        )
 
                 gain[i] = gain_change
                 expanded[i] = audio[i] * gain_change
@@ -297,14 +318,14 @@ class DynamicsProcessor:
             return expanded
 
         except Exception as e:
-            raise AugmentationError(f"Failed to apply expansion: {str(e)}") from e
+            raise AugmentationError(f"Failed to apply expansion: {e!s}") from e
 
     async def apply_dynamics(
         self,
         input_path: str,
         output_path: str,
         effect_type: str = "compression",
-        **effect_params: Any
+        **effect_params: Any,
     ) -> None:
         """
         Apply dynamics processing to an audio file and save the result.
@@ -340,7 +361,9 @@ class DynamicsProcessor:
             sf.write(output_path, processed, self.sample_rate)
 
         except Exception as e:
-            raise AugmentationError(f"Failed to apply dynamics effects: {str(e)}") from e
+            raise AugmentationError(
+                f"Failed to apply dynamics effects: {e!s}"
+            ) from e
 
     def get_dynamics_preset(self, preset_name: str) -> dict[str, Any]:
         """
@@ -365,13 +388,13 @@ class DynamicsProcessor:
                 "release_ms": 100.0,
                 "knee_db": 3.0,
                 "makeup_gain_db": 6.0,
-                "description": "Gentle compression for voice recordings"
+                "description": "Gentle compression for voice recordings",
             },
             "aggressive_limiting": {
                 "effect_type": "limiting",
                 "threshold_db": -1.0,
                 "release_ms": 20.0,
-                "description": "Aggressive limiting to prevent clipping"
+                "description": "Aggressive limiting to prevent clipping",
             },
             "noise_reduction": {
                 "effect_type": "expansion",
@@ -379,7 +402,7 @@ class DynamicsProcessor:
                 "ratio": 3.0,
                 "attack_ms": 2.0,
                 "release_ms": 50.0,
-                "description": "Expand dynamic range to reduce background noise"
+                "description": "Expand dynamic range to reduce background noise",
             },
             "dynamic_boost": {
                 "effect_type": "compression",
@@ -389,12 +412,14 @@ class DynamicsProcessor:
                 "release_ms": 200.0,
                 "knee_db": 2.0,
                 "makeup_gain_db": 3.0,
-                "description": "Subtle compression to boost quiet passages"
-            }
+                "description": "Subtle compression to boost quiet passages",
+            },
         }
 
         if preset_name not in presets:
             available = list(presets.keys())
-            raise AugmentationError(f"Unknown dynamics preset '{preset_name}'. Available: {available}")
+            raise AugmentationError(
+                f"Unknown dynamics preset '{preset_name}'. Available: {available}"
+            )
 
         return presets[preset_name].copy()

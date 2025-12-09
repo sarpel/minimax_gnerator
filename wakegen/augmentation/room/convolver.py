@@ -13,9 +13,13 @@ Key Features:
 """
 
 from __future__ import annotations
+
+from typing import Any, cast
+
 import numpy as np
-from typing import Optional, Tuple, Any, cast
+
 from wakegen.core.exceptions import RoomSimulationError
+
 
 class RoomConvolver:
     """
@@ -42,13 +46,15 @@ class RoomConvolver:
         if block_size > 16384:
             raise RoomSimulationError("Block size too large (maximum 16384)")
         if not (block_size & (block_size - 1)) == 0:
-            raise RoomSimulationError("Block size must be a power of 2 for FFT efficiency")
+            raise RoomSimulationError(
+                "Block size must be a power of 2 for FFT efficiency"
+            )
 
     def convolve(
         self,
         signal: np.ndarray[Any, Any],
         kernel: np.ndarray[Any, Any],
-        wet_dry_mix: float = 1.0
+        wet_dry_mix: float = 1.0,
     ) -> np.ndarray[Any, Any]:
         """
         Apply convolution using overlap-add method for efficiency.
@@ -75,13 +81,13 @@ class RoomConvolver:
                 return self._overlap_add_convolve(signal, kernel, wet_dry_mix)
 
         except Exception as e:
-            raise RoomSimulationError(f"Convolution failed: {str(e)}") from e
+            raise RoomSimulationError(f"Convolution failed: {e!s}") from e
 
     def _direct_convolve(
         self,
         signal: np.ndarray[Any, Any],
         kernel: np.ndarray[Any, Any],
-        wet_dry_mix: float
+        wet_dry_mix: float,
     ) -> np.ndarray[Any, Any]:
         """
         Direct convolution for short kernels.
@@ -95,14 +101,14 @@ class RoomConvolver:
             Convolved signal.
         """
         # Use numpy's convolve for short kernels
-        result = np.convolve(signal, kernel, mode='full')
+        result = np.convolve(signal, kernel, mode="full")
 
         # Apply wet/dry mix
         dry_level = np.sqrt(1.0 - wet_dry_mix)
         wet_level = np.sqrt(wet_dry_mix)
 
         # Ensure result is same length as input
-        result = result[:len(signal)]
+        result = result[: len(signal)]
 
         mixed = (signal * dry_level) + (result * wet_level)
 
@@ -117,7 +123,7 @@ class RoomConvolver:
         self,
         signal: np.ndarray[Any, Any],
         kernel: np.ndarray[Any, Any],
-        wet_dry_mix: float
+        wet_dry_mix: float,
     ) -> np.ndarray[Any, Any]:
         """
         Overlap-add convolution for long kernels.
@@ -167,7 +173,7 @@ class RoomConvolver:
             output_end = min(block_start + len(result), len(output))
 
             if output_end > output_start:
-                output[output_start:output_end] += result[:output_end - output_start]
+                output[output_start:output_end] += result[: output_end - output_start]
 
         # Apply wet/dry mix
         mixed = (signal * dry_level) + (output * wet_level)
@@ -179,7 +185,9 @@ class RoomConvolver:
 
         return cast(np.ndarray[Any, Any], mixed)
 
-    def _pad_to_length(self, array: np.ndarray[Any, Any], target_length: int) -> np.ndarray[Any, Any]:
+    def _pad_to_length(
+        self, array: np.ndarray[Any, Any], target_length: int
+    ) -> np.ndarray[Any, Any]:
         """
         Pad array to target length with zeros.
 
@@ -194,14 +202,14 @@ class RoomConvolver:
             return array[:target_length]
 
         padded = np.zeros(target_length, dtype=array.dtype)
-        padded[:len(array)] = array
+        padded[: len(array)] = array
         return padded
 
     def batch_convolve(
         self,
         signals: list[np.ndarray[Any, Any]],
         kernel: np.ndarray[Any, Any],
-        wet_dry_mix: float = 1.0
+        wet_dry_mix: float = 1.0,
     ) -> list[np.ndarray[Any, Any]]:
         """
         Apply convolution to multiple signals efficiently.
@@ -220,7 +228,7 @@ class RoomConvolver:
         try:
             return [self.convolve(signal, kernel, wet_dry_mix) for signal in signals]
         except Exception as e:
-            raise RoomSimulationError(f"Batch convolution failed: {str(e)}") from e
+            raise RoomSimulationError(f"Batch convolution failed: {e!s}") from e
 
     def get_optimal_block_size(self, signal_length: int, kernel_length: int) -> int:
         """

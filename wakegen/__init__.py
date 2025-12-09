@@ -5,12 +5,14 @@
 # We use Semantic Versioning (Major.Minor.Patch).
 __version__ = "1.0.0"
 
+
 # Auto-register plugins when wakegen is imported
 # This makes plugins available immediately without explicit initialization
 def _init_plugins() -> None:
     """Initialize the plugin system on first import."""
     try:
         from wakegen.plugins import discovery
+
         discovery.auto_register_plugins()
     except ImportError:
         # Plugins module not available (shouldn't happen but be safe)
@@ -18,6 +20,7 @@ def _init_plugins() -> None:
     except Exception:
         # Don't crash on plugin errors during import
         pass
+
 
 # Call on import (lazy - only when plugins are needed)
 # _init_plugins()  # Uncomment to auto-load plugins at import time

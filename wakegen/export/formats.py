@@ -14,25 +14,26 @@ files required by the target framework.
 """
 
 from __future__ import annotations
-import json
+
 import csv
+import json
+import logging
 import shutil
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
-import logging
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    import numpy as np
+    pass
 
 logger = logging.getLogger(__name__)
 
 
 class ExportFormat(str, Enum):
     """Supported export formats."""
-    
+
     OPENWAKEWORD = "openwakeword"
     MYCROFT_PRECISE = "mycroft_precise"
     PICOVOICE = "picovoice"
@@ -44,57 +45,57 @@ class ExportFormat(str, Enum):
 @dataclass
 class DatasetMetadata:
     """Comprehensive metadata for exported datasets."""
-    
+
     name: str
     wake_word: str
     version: str = "1.0.0"
     created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
-    
+
     # Sample counts
     total_samples: int = 0
     positive_samples: int = 0
     negative_samples: int = 0
-    
+
     # Split information
     train_samples: int = 0
     val_samples: int = 0
     test_samples: int = 0
-    
+
     # Audio specifications
     sample_rate: int = 16000
     channels: int = 1
     bit_depth: int = 16
     format: str = "wav"
-    
+
     # Generation info
-    providers_used: List[str] = field(default_factory=list)
-    voices_used: List[str] = field(default_factory=list)
-    augmentations_applied: List[str] = field(default_factory=list)
-    
+    providers_used: list[str] = field(default_factory=list)
+    voices_used: list[str] = field(default_factory=list)
+    augmentations_applied: list[str] = field(default_factory=list)
+
     # Quality metrics
     average_duration_ms: float = 0.0
     duration_std_ms: float = 0.0
-    average_snr_db: Optional[float] = None
-    
+    average_snr_db: float | None = None
+
     # Additional info
     description: str = ""
     license: str = "MIT"
     author: str = ""
-    tags: List[str] = field(default_factory=list)
-    
-    def to_dict(self) -> Dict[str, Any]:
+    tags: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return asdict(self)
-    
+
     def to_json(self, path: Path) -> None:
         """Save metadata to JSON file."""
         with open(str(path), "w", encoding="utf-8") as f:
             json.dump(self.to_dict(), f, indent=2)
-    
+
     @classmethod
-    def from_json(cls, path: Path) -> "DatasetMetadata":
+    def from_json(cls, path: Path) -> DatasetMetadata:
         """Load metadata from JSON file."""
-        with open(str(path), "r", encoding="utf-8") as f:
+        with open(str(path), encoding="utf-8") as f:
             data = json.load(f)
         return cls(**data)
 
@@ -102,50 +103,50 @@ class DatasetMetadata:
 @dataclass
 class SampleMetadata:
     """Metadata for individual audio samples."""
-    
+
     filename: str
     label: int  # 1 for positive, 0 for negative
     transcript: str
-    
+
     # Source information
-    provider: Optional[str] = None
-    voice_id: Optional[str] = None
-    
+    provider: str | None = None
+    voice_id: str | None = None
+
     # Audio properties
-    duration_ms: Optional[float] = None
-    sample_rate: Optional[int] = None
-    
+    duration_ms: float | None = None
+    sample_rate: int | None = None
+
     # Augmentation info
-    augmentations: List[str] = field(default_factory=list)
-    augmentation_params: Dict[str, Any] = field(default_factory=dict)
-    
+    augmentations: list[str] = field(default_factory=list)
+    augmentation_params: dict[str, Any] = field(default_factory=dict)
+
     # Quality info
-    snr_db: Optional[float] = None
-    quality_score: Optional[float] = None
-    
+    snr_db: float | None = None
+    quality_score: float | None = None
+
     # Split assignment
-    split: Optional[str] = None  # "train", "val", "test"
+    split: str | None = None  # "train", "val", "test"
 
 
 class BaseExporter:
     """Base class for dataset exporters."""
-    
+
     format_name: str = "base"
     output_dir: Path
     source_dir: Path
     wake_word: str
     metadata: DatasetMetadata
-    
+
     def __init__(
         self,
         source_dir: Path | str,
         output_dir: Path | str,
         wake_word: str,
-        metadata: Optional[DatasetMetadata] = None,
+        metadata: DatasetMetadata | None = None,
     ) -> None:
         """
         Initialize the exporter.
-        
+
         Args:
             source_dir: Directory containing generated audio files.
             output_dir: Directory for exported dataset.
@@ -159,48 +160,48 @@ class BaseExporter:
             name=wake_word.replace(" ", "_"),
             wake_word=wake_word,
         )
-    
+
     async def export(
         self,
-        negative_samples_dir: Optional[Path | str] = None,
-        split_ratios: Tuple[float, float, float] = (0.8, 0.1, 0.1),
+        negative_samples_dir: Path | str | None = None,
+        split_ratios: tuple[float, float, float] = (0.8, 0.1, 0.1),
     ) -> Path:
         """
         Export the dataset.
-        
+
         Args:
             negative_samples_dir: Optional directory with negative samples.
             split_ratios: Train/val/test split ratios.
-            
+
         Returns:
             Path to the exported dataset.
         """
         raise NotImplementedError
-    
-    def _collect_audio_files(self, directory: Path) -> List[Path]:
+
+    def _collect_audio_files(self, directory: Path) -> list[Path]:
         """Collect all audio files from a directory."""
         extensions = {".wav", ".mp3", ".flac", ".ogg"}
-        files: List[Path] = []
+        files: list[Path] = []
         for ext in extensions:
             files.extend(directory.glob(f"*{ext}"))
             files.extend(directory.glob(f"**/*{ext}"))
         return sorted(set(files))
-    
+
     def _create_splits(
         self,
-        files: List[Path],
-        ratios: Tuple[float, float, float],
-    ) -> Tuple[List[Path], List[Path], List[Path]]:
+        files: list[Path],
+        ratios: tuple[float, float, float],
+    ) -> tuple[list[Path], list[Path], list[Path]]:
         """Split files into train/val/test sets."""
         import random
-        
+
         shuffled = files.copy()
         random.shuffle(shuffled)
-        
+
         total = len(shuffled)
         train_end = int(total * ratios[0])
         val_end = train_end + int(total * ratios[1])
-        
+
         return (
             shuffled[:train_end],
             shuffled[train_end:val_end],
@@ -211,89 +212,101 @@ class BaseExporter:
 class MycroftPreciseExporter(BaseExporter):
     """
     Export to Mycroft Precise format.
-    
+
     Mycroft Precise expects:
     - wake-word/ directory with positive samples
     - not-wake-word/ directory with negative samples
     - Each in the format: wake-word/category/sample.wav
-    
+
     Reference: https://github.com/MycroftAI/mycroft-precise
     """
-    
+
     format_name = "mycroft_precise"
-    
+
     async def export(
         self,
-        negative_samples_dir: Optional[Path | str] = None,
-        split_ratios: Tuple[float, float, float] = (0.8, 0.1, 0.1),
+        negative_samples_dir: Path | str | None = None,
+        split_ratios: tuple[float, float, float] = (0.8, 0.1, 0.1),
     ) -> Path:
         """Export to Mycroft Precise format."""
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Create directory structure
         wake_word_dir = self.output_dir / "wake-word"
         not_wake_word_dir = self.output_dir / "not-wake-word"
-        
+
         wake_word_dir.mkdir(exist_ok=True)
         not_wake_word_dir.mkdir(exist_ok=True)
-        
+
         # Collect positive samples
         positive_files = self._collect_audio_files(self.source_dir)
         train_pos, val_pos, test_pos = self._create_splits(positive_files, split_ratios)
-        
+
         # Create category subdirectories for positive samples
         categories = {
             "train": (wake_word_dir / "train", train_pos),
             "val": (wake_word_dir / "val", val_pos),
             "test": (wake_word_dir / "test", test_pos),
         }
-        
+
         for category, (dest_dir, files) in categories.items():
             dest_dir.mkdir(exist_ok=True)
             for f in files:
                 shutil.copy2(f, dest_dir / f.name)
-        
+
         # Handle negative samples
         if negative_samples_dir:
             neg_path = Path(negative_samples_dir)
             negative_files = self._collect_audio_files(neg_path)
-            train_neg, val_neg, test_neg = self._create_splits(negative_files, split_ratios)
-            
+            train_neg, val_neg, test_neg = self._create_splits(
+                negative_files, split_ratios
+            )
+
             neg_categories = {
                 "train": (not_wake_word_dir / "train", train_neg),
                 "val": (not_wake_word_dir / "val", val_neg),
                 "test": (not_wake_word_dir / "test", test_neg),
             }
-            
+
             for category, (dest_dir, files) in neg_categories.items():
                 dest_dir.mkdir(exist_ok=True)
                 for f in files:
                     shutil.copy2(f, dest_dir / f.name)
-        
+
         # Update metadata
         self.metadata.positive_samples = len(positive_files)
-        self.metadata.negative_samples = len(negative_files) if negative_samples_dir else 0
-        self.metadata.total_samples = self.metadata.positive_samples + self.metadata.negative_samples
-        self.metadata.train_samples = len(train_pos) + (len(train_neg) if negative_samples_dir else 0)
-        self.metadata.val_samples = len(val_pos) + (len(val_neg) if negative_samples_dir else 0)
-        self.metadata.test_samples = len(test_pos) + (len(test_neg) if negative_samples_dir else 0)
-        
+        self.metadata.negative_samples = (
+            len(negative_files) if negative_samples_dir else 0
+        )
+        self.metadata.total_samples = (
+            self.metadata.positive_samples + self.metadata.negative_samples
+        )
+        self.metadata.train_samples = len(train_pos) + (
+            len(train_neg) if negative_samples_dir else 0
+        )
+        self.metadata.val_samples = len(val_pos) + (
+            len(val_neg) if negative_samples_dir else 0
+        )
+        self.metadata.test_samples = len(test_pos) + (
+            len(test_neg) if negative_samples_dir else 0
+        )
+
         # Save metadata
         self.metadata.to_json(self.output_dir / "metadata.json")
-        
+
         # Create Precise-specific config
         config = {
             "model_name": self.wake_word.replace(" ", "_"),
             "wake_word": self.wake_word,
             "sample_rate": self.metadata.sample_rate,
             "window_size": 0.1,  # 100ms window
-            "hop_size": 0.05,    # 50ms hop
+            "hop_size": 0.05,  # 50ms hop
             "threshold": 0.5,
         }
-        
+
         with open(str(self.output_dir / "precise_config.json"), "w") as config_file:
             json.dump(config, config_file, indent=2)
-        
+
         logger.info(f"Exported to Mycroft Precise format at {self.output_dir}")
         return self.output_dir
 
@@ -301,68 +314,74 @@ class MycroftPreciseExporter(BaseExporter):
 class PicovoiceExporter(BaseExporter):
     """
     Export to Picovoice format.
-    
+
     Picovoice Porcupine expects audio files in specific format with metadata.
     Creates a dataset compatible with Picovoice Console training.
-    
+
     Reference: https://picovoice.ai/docs/porcupine/
     """
-    
+
     format_name = "picovoice"
-    
+
     async def export(
         self,
-        negative_samples_dir: Optional[Path | str] = None,
-        split_ratios: Tuple[float, float, float] = (0.8, 0.1, 0.1),
+        negative_samples_dir: Path | str | None = None,
+        split_ratios: tuple[float, float, float] = (0.8, 0.1, 0.1),
     ) -> Path:
         """Export to Picovoice format."""
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Picovoice structure
         audio_dir = self.output_dir / "audio"
         audio_dir.mkdir(exist_ok=True)
-        
+
         # Collect and copy positive samples
         positive_files = self._collect_audio_files(self.source_dir)
         train_pos, val_pos, test_pos = self._create_splits(positive_files, split_ratios)
-        
+
         manifest_entries = []
-        
+
         for idx, f in enumerate(positive_files):
             new_name = f"positive_{idx:05d}.wav"
             shutil.copy2(f, audio_dir / new_name)
-            
+
             split = "train" if f in train_pos else ("val" if f in val_pos else "test")
-            manifest_entries.append({
-                "audio_filepath": f"audio/{new_name}",
-                "text": self.wake_word,
-                "label": "positive",
-                "split": split,
-            })
-        
+            manifest_entries.append(
+                {
+                    "audio_filepath": f"audio/{new_name}",
+                    "text": self.wake_word,
+                    "label": "positive",
+                    "split": split,
+                }
+            )
+
         # Handle negative samples
         if negative_samples_dir:
             neg_path = Path(negative_samples_dir)
             negative_files = self._collect_audio_files(neg_path)
-            
+
             for idx, f in enumerate(negative_files):
                 new_name = f"negative_{idx:05d}.wav"
                 shutil.copy2(f, audio_dir / new_name)
-                
-                manifest_entries.append({
-                    "audio_filepath": f"audio/{new_name}",
-                    "text": "",
-                    "label": "negative",
-                    "split": "train",  # Usually all negatives go to train
-                })
-        
+
+                manifest_entries.append(
+                    {
+                        "audio_filepath": f"audio/{new_name}",
+                        "text": "",
+                        "label": "negative",
+                        "split": "train",  # Usually all negatives go to train
+                    }
+                )
+
         # Create manifest CSV (Picovoice Console format)
         manifest_path = self.output_dir / "manifest.csv"
         with open(str(manifest_path), "w", newline="", encoding="utf-8") as csv_file:
-            writer = csv.DictWriter(csv_file, fieldnames=["audio_filepath", "text", "label", "split"])
+            writer = csv.DictWriter(
+                csv_file, fieldnames=["audio_filepath", "text", "label", "split"]
+            )
             writer.writeheader()
             writer.writerows(manifest_entries)
-        
+
         # Create Picovoice config
         config = {
             "wake_word": self.wake_word,
@@ -378,16 +397,20 @@ class PicovoiceExporter(BaseExporter):
                 "negative_samples": len(negative_files) if negative_samples_dir else 0,
             },
         }
-        
+
         with open(str(self.output_dir / "picovoice_config.json"), "w") as config_file:
             json.dump(config, config_file, indent=2)
-        
+
         # Save full metadata
         self.metadata.positive_samples = len(positive_files)
-        self.metadata.negative_samples = len(negative_files) if negative_samples_dir else 0
-        self.metadata.total_samples = self.metadata.positive_samples + self.metadata.negative_samples
+        self.metadata.negative_samples = (
+            len(negative_files) if negative_samples_dir else 0
+        )
+        self.metadata.total_samples = (
+            self.metadata.positive_samples + self.metadata.negative_samples
+        )
         self.metadata.to_json(self.output_dir / "metadata.json")
-        
+
         logger.info(f"Exported to Picovoice format at {self.output_dir}")
         return self.output_dir
 
@@ -395,33 +418,33 @@ class PicovoiceExporter(BaseExporter):
 class TensorFlowExporter(BaseExporter):
     """
     Export to TensorFlow/Keras format.
-    
+
     Creates:
     - Directory structure compatible with tf.keras.utils.image_dataset_from_directory
     - TFRecord files for efficient data loading
     - tf.data pipeline configuration
     """
-    
+
     format_name = "tensorflow"
-    
+
     async def export(
         self,
-        negative_samples_dir: Optional[Path | str] = None,
-        split_ratios: Tuple[float, float, float] = (0.8, 0.1, 0.1),
+        negative_samples_dir: Path | str | None = None,
+        split_ratios: tuple[float, float, float] = (0.8, 0.1, 0.1),
         create_tfrecords: bool = True,
     ) -> Path:
         """Export to TensorFlow format."""
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Create directory structure for each split
         for split in ["train", "val", "test"]:
             (self.output_dir / split / "positive").mkdir(parents=True, exist_ok=True)
             (self.output_dir / split / "negative").mkdir(parents=True, exist_ok=True)
-        
+
         # Collect and split positive samples
         positive_files = self._collect_audio_files(self.source_dir)
         train_pos, val_pos, test_pos = self._create_splits(positive_files, split_ratios)
-        
+
         # Copy positive samples
         for f in train_pos:
             shutil.copy2(f, self.output_dir / "train" / "positive" / f.name)
@@ -429,45 +452,55 @@ class TensorFlowExporter(BaseExporter):
             shutil.copy2(f, self.output_dir / "val" / "positive" / f.name)
         for f in test_pos:
             shutil.copy2(f, self.output_dir / "test" / "positive" / f.name)
-        
+
         # Handle negative samples
         negative_files = []
         if negative_samples_dir:
             neg_path = Path(negative_samples_dir)
             negative_files = self._collect_audio_files(neg_path)
-            train_neg, val_neg, test_neg = self._create_splits(negative_files, split_ratios)
-            
+            train_neg, val_neg, test_neg = self._create_splits(
+                negative_files, split_ratios
+            )
+
             for f in train_neg:
                 shutil.copy2(f, self.output_dir / "train" / "negative" / f.name)
             for f in val_neg:
                 shutil.copy2(f, self.output_dir / "val" / "negative" / f.name)
             for f in test_neg:
                 shutil.copy2(f, self.output_dir / "test" / "negative" / f.name)
-        
+
         # Create TFRecords if requested
         if create_tfrecords:
             await self._create_tfrecords()
-        
+
         # Create tf.data pipeline configuration
         pipeline_config = self._create_pipeline_config()
         with open(str(self.output_dir / "tf_data_config.json"), "w") as config_file:
             json.dump(pipeline_config, config_file, indent=2)
-        
+
         # Create example loading script
         self._create_example_script()
-        
+
         # Update and save metadata
         self.metadata.positive_samples = len(positive_files)
         self.metadata.negative_samples = len(negative_files)
-        self.metadata.total_samples = self.metadata.positive_samples + self.metadata.negative_samples
-        self.metadata.train_samples = len(train_pos) + len(train_neg) if negative_samples_dir else len(train_pos)
-        self.metadata.val_samples = len(val_pos) + len(val_neg) if negative_samples_dir else len(val_pos)
-        self.metadata.test_samples = len(test_pos) + len(test_neg) if negative_samples_dir else len(test_pos)
+        self.metadata.total_samples = (
+            self.metadata.positive_samples + self.metadata.negative_samples
+        )
+        self.metadata.train_samples = (
+            len(train_pos) + len(train_neg) if negative_samples_dir else len(train_pos)
+        )
+        self.metadata.val_samples = (
+            len(val_pos) + len(val_neg) if negative_samples_dir else len(val_pos)
+        )
+        self.metadata.test_samples = (
+            len(test_pos) + len(test_neg) if negative_samples_dir else len(test_pos)
+        )
         self.metadata.to_json(self.output_dir / "metadata.json")
-        
+
         logger.info(f"Exported to TensorFlow format at {self.output_dir}")
         return self.output_dir
-    
+
     async def _create_tfrecords(self) -> None:
         """Create TFRecord files for each split."""
         try:
@@ -475,20 +508,20 @@ class TensorFlowExporter(BaseExporter):
         except ImportError:
             logger.warning("TensorFlow not installed, skipping TFRecord creation")
             return
-        
+
         for split in ["train", "val", "test"]:
             split_dir = self.output_dir / split
             tfrecord_path = self.output_dir / f"{split}.tfrecord"
-            
+
             with tf.io.TFRecordWriter(str(tfrecord_path)) as writer:
                 for label_name, label_value in [("positive", 1), ("negative", 0)]:
                     label_dir = split_dir / label_name
                     if not label_dir.exists():
                         continue
-                    
+
                     for audio_file in label_dir.glob("*.wav"):
                         audio_bytes = audio_file.read_bytes()
-                        
+
                         feature = {
                             "audio": tf.train.Feature(
                                 bytes_list=tf.train.BytesList(value=[audio_bytes])
@@ -502,15 +535,15 @@ class TensorFlowExporter(BaseExporter):
                                 )
                             ),
                         }
-                        
+
                         example = tf.train.Example(
                             features=tf.train.Features(feature=feature)
                         )
                         writer.write(example.SerializeToString())
-            
+
             logger.info(f"Created TFRecord: {tfrecord_path}")
-    
-    def _create_pipeline_config(self) -> Dict[str, Any]:
+
+    def _create_pipeline_config(self) -> dict[str, Any]:
         """Create tf.data pipeline configuration."""
         return {
             "batch_size": 32,
@@ -534,7 +567,7 @@ class TensorFlowExporter(BaseExporter):
             "class_names": ["negative", "positive"],
             "num_classes": 2,
         }
-    
+
     def _create_example_script(self) -> None:
         """Create an example TensorFlow data loading script."""
         script = '''"""
@@ -627,7 +660,7 @@ if __name__ == "__main__":
     print(f"Val batches: {len(list(val_ds))}")
     print(f"Test batches: {len(list(test_ds))}")
 '''
-        
+
         with open(str(self.output_dir / "load_tf_dataset.py"), "w") as script_file:
             script_file.write(script)
 
@@ -635,32 +668,32 @@ if __name__ == "__main__":
 class PyTorchExporter(BaseExporter):
     """
     Export to PyTorch format.
-    
+
     Creates:
     - Directory structure for torch.utils.data.DataLoader
     - DataLoader configuration
     - Example Dataset class
     """
-    
+
     format_name = "pytorch"
-    
+
     async def export(
         self,
-        negative_samples_dir: Optional[Path | str] = None,
-        split_ratios: Tuple[float, float, float] = (0.8, 0.1, 0.1),
+        negative_samples_dir: Path | str | None = None,
+        split_ratios: tuple[float, float, float] = (0.8, 0.1, 0.1),
     ) -> Path:
         """Export to PyTorch format."""
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Create directory structure
         for split in ["train", "val", "test"]:
             (self.output_dir / split / "positive").mkdir(parents=True, exist_ok=True)
             (self.output_dir / split / "negative").mkdir(parents=True, exist_ok=True)
-        
+
         # Collect and split positive samples
         positive_files = self._collect_audio_files(self.source_dir)
         train_pos, val_pos, test_pos = self._create_splits(positive_files, split_ratios)
-        
+
         # Copy positive samples
         for f in train_pos:
             shutil.copy2(f, self.output_dir / "train" / "positive" / f.name)
@@ -668,67 +701,81 @@ class PyTorchExporter(BaseExporter):
             shutil.copy2(f, self.output_dir / "val" / "positive" / f.name)
         for f in test_pos:
             shutil.copy2(f, self.output_dir / "test" / "positive" / f.name)
-        
+
         # Handle negative samples
         negative_files = []
         if negative_samples_dir:
             neg_path = Path(negative_samples_dir)
             negative_files = self._collect_audio_files(neg_path)
-            train_neg, val_neg, test_neg = self._create_splits(negative_files, split_ratios)
-            
+            train_neg, val_neg, test_neg = self._create_splits(
+                negative_files, split_ratios
+            )
+
             for f in train_neg:
                 shutil.copy2(f, self.output_dir / "train" / "negative" / f.name)
             for f in val_neg:
                 shutil.copy2(f, self.output_dir / "val" / "negative" / f.name)
             for f in test_neg:
                 shutil.copy2(f, self.output_dir / "test" / "negative" / f.name)
-        
+
         # Create labels file for each split
         await self._create_labels_files()
-        
+
         # Create DataLoader configuration
         dataloader_config = self._create_dataloader_config()
         with open(str(self.output_dir / "dataloader_config.json"), "w") as config_file:
             json.dump(dataloader_config, config_file, indent=2)
-        
+
         # Create example Dataset class
         self._create_dataset_class()
-        
+
         # Update and save metadata
         self.metadata.positive_samples = len(positive_files)
         self.metadata.negative_samples = len(negative_files)
-        self.metadata.total_samples = self.metadata.positive_samples + self.metadata.negative_samples
-        self.metadata.train_samples = len(train_pos) + (len(train_neg) if negative_samples_dir else 0)
-        self.metadata.val_samples = len(val_pos) + (len(val_neg) if negative_samples_dir else 0)
-        self.metadata.test_samples = len(test_pos) + (len(test_neg) if negative_samples_dir else 0)
+        self.metadata.total_samples = (
+            self.metadata.positive_samples + self.metadata.negative_samples
+        )
+        self.metadata.train_samples = len(train_pos) + (
+            len(train_neg) if negative_samples_dir else 0
+        )
+        self.metadata.val_samples = len(val_pos) + (
+            len(val_neg) if negative_samples_dir else 0
+        )
+        self.metadata.test_samples = len(test_pos) + (
+            len(test_neg) if negative_samples_dir else 0
+        )
         self.metadata.to_json(self.output_dir / "metadata.json")
-        
+
         logger.info(f"Exported to PyTorch format at {self.output_dir}")
         return self.output_dir
-    
+
     async def _create_labels_files(self) -> None:
         """Create CSV labels file for each split."""
         for split in ["train", "val", "test"]:
             split_dir = self.output_dir / split
             labels = []
-            
+
             for label_name, label_value in [("positive", 1), ("negative", 0)]:
                 label_dir = split_dir / label_name
                 if label_dir.exists():
                     for audio_file in label_dir.glob("*.wav"):
-                        labels.append({
-                            "filename": f"{label_name}/{audio_file.name}",
-                            "label": label_value,
-                            "label_name": label_name,
-                        })
-            
+                        labels.append(
+                            {
+                                "filename": f"{label_name}/{audio_file.name}",
+                                "label": label_value,
+                                "label_name": label_name,
+                            }
+                        )
+
             labels_path = split_dir / "labels.csv"
             with open(str(labels_path), "w", newline="", encoding="utf-8") as csv_file:
-                writer = csv.DictWriter(csv_file, fieldnames=["filename", "label", "label_name"])
+                writer = csv.DictWriter(
+                    csv_file, fieldnames=["filename", "label", "label_name"]
+                )
                 writer.writeheader()
                 writer.writerows(labels)
-    
-    def _create_dataloader_config(self) -> Dict[str, Any]:
+
+    def _create_dataloader_config(self) -> dict[str, Any]:
         """Create DataLoader configuration."""
         return {
             "batch_size": 32,
@@ -746,7 +793,7 @@ class PyTorchExporter(BaseExporter):
             "class_names": ["negative", "positive"],
             "num_classes": 2,
         }
-    
+
     def _create_dataset_class(self) -> None:
         """Create an example PyTorch Dataset class."""
         script = '''"""
@@ -897,7 +944,7 @@ if __name__ == "__main__":
         if batch_idx >= 2:
             break
 '''
-        
+
         with open(self.output_dir / "wake_word_dataset.py", "w") as f:
             f.write(script)
 
@@ -905,112 +952,118 @@ if __name__ == "__main__":
 class HuggingFaceExporter(BaseExporter):
     """
     Export to Hugging Face datasets format.
-    
+
     Creates a dataset compatible with the Hugging Face datasets library,
     including a dataset card and loading script.
     """
-    
+
     format_name = "huggingface"
-    
+
     async def export(
         self,
-        negative_samples_dir: Optional[Path | str] = None,
-        split_ratios: Tuple[float, float, float] = (0.8, 0.1, 0.1),
+        negative_samples_dir: Path | str | None = None,
+        split_ratios: tuple[float, float, float] = (0.8, 0.1, 0.1),
     ) -> Path:
         """Export to Hugging Face datasets format."""
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Create data directory
         data_dir = self.output_dir / "data"
         data_dir.mkdir(exist_ok=True)
-        
+
         # Collect positive samples
         positive_files = self._collect_audio_files(self.source_dir)
         train_pos, val_pos, test_pos = self._create_splits(positive_files, split_ratios)
-        
+
         # Collect negative samples
         negative_files = []
-        train_neg: List[Path] = []
-        val_neg: List[Path] = []
-        test_neg: List[Path] = []
+        train_neg: list[Path] = []
+        val_neg: list[Path] = []
+        test_neg: list[Path] = []
         if negative_samples_dir:
             neg_path = Path(negative_samples_dir)
             negative_files = self._collect_audio_files(neg_path)
-            train_neg, val_neg, test_neg = self._create_splits(negative_files, split_ratios)
-        
+            train_neg, val_neg, test_neg = self._create_splits(
+                negative_files, split_ratios
+            )
+
         # Create JSON Lines files for each split
         for split_name, pos_files, neg_files in [
             ("train", train_pos, train_neg),
             ("validation", val_pos, val_neg),
             ("test", test_pos, test_neg),
         ]:
-            await self._create_split_files(
-                split_name, pos_files, neg_files, data_dir
-            )
-        
+            await self._create_split_files(split_name, pos_files, neg_files, data_dir)
+
         # Create dataset loading script
         self._create_loading_script()
-        
+
         # Create dataset card (README.md)
         self._create_dataset_card()
-        
+
         # Update and save metadata
         self.metadata.positive_samples = len(positive_files)
         self.metadata.negative_samples = len(negative_files)
-        self.metadata.total_samples = self.metadata.positive_samples + self.metadata.negative_samples
+        self.metadata.total_samples = (
+            self.metadata.positive_samples + self.metadata.negative_samples
+        )
         self.metadata.train_samples = len(train_pos) + len(train_neg)
         self.metadata.val_samples = len(val_pos) + len(val_neg)
         self.metadata.test_samples = len(test_pos) + len(test_neg)
         self.metadata.to_json(self.output_dir / "metadata.json")
-        
+
         logger.info(f"Exported to Hugging Face format at {self.output_dir}")
         return self.output_dir
-    
+
     async def _create_split_files(
         self,
         split_name: str,
-        pos_files: List[Path],
-        neg_files: List[Path],
+        pos_files: list[Path],
+        neg_files: list[Path],
         data_dir: Path,
     ) -> None:
         """Create audio files and metadata for a split."""
         split_audio_dir = data_dir / split_name
         split_audio_dir.mkdir(exist_ok=True)
-        
+
         metadata_entries = []
-        
+
         # Copy positive samples
         for idx, f in enumerate(pos_files):
             new_name = f"positive_{idx:05d}.wav"
             dest_path = split_audio_dir / new_name
             shutil.copy2(f, dest_path)
-            
-            metadata_entries.append({
-                "file_name": f"{split_name}/{new_name}",
-                "label": 1,
-                "label_name": "positive",
-                "transcript": self.wake_word,
-            })
-        
+
+            metadata_entries.append(
+                {
+                    "file_name": f"{split_name}/{new_name}",
+                    "label": 1,
+                    "label_name": "positive",
+                    "transcript": self.wake_word,
+                }
+            )
+
         # Copy negative samples
         for idx, f in enumerate(neg_files):
             new_name = f"negative_{idx:05d}.wav"
             dest_path = split_audio_dir / new_name
             shutil.copy2(f, dest_path)
-            
-            metadata_entries.append({
-                "file_name": f"{split_name}/{new_name}",
-                "label": 0,
-                "label_name": "negative",
-                "transcript": "",
-            })
-        
+
+            metadata_entries.append(
+                {
+                    "file_name": f"{split_name}/{new_name}",
+                    "label": 0,
+                    "label_name": "negative",
+                    "transcript": "",
+                }
+            )
+
         # Write metadata JSON Lines file
         metadata_path = data_dir / f"{split_name}.jsonl"
         with open(str(metadata_path), "w", encoding="utf-8") as meta_file:
             for entry in metadata_entries:
                 meta_file.write(json.dumps(entry) + "\n")
-    
+
     def _create_loading_script(self) -> None:
         """Create Hugging Face dataset loading script."""
         script = f'''"""
@@ -1090,13 +1143,13 @@ class WakeWordDataset(datasets.GeneratorBasedBuilder):
                     "transcript": entry["transcript"],
                 }}
 '''
-        
+
         with open(self.output_dir / f"{self.metadata.name}.py", "w") as f:
             f.write(script)
-    
+
     def _create_dataset_card(self) -> None:
         """Create dataset card (README.md)."""
-        card = f'''---
+        card = f"""---
 language:
 - en
 license: {self.metadata.license}
@@ -1196,15 +1249,15 @@ for example in train_data:
 ## License
 
 {self.metadata.license}
-'''
-        
+"""
+
         with open(self.output_dir / "README.md", "w") as f:
             f.write(card)
 
 
-from typing import Type
+
 # Export format registry
-EXPORTERS: Dict[ExportFormat, Type[BaseExporter]] = {
+EXPORTERS: dict[ExportFormat, type[BaseExporter]] = {
     ExportFormat.MYCROFT_PRECISE: MycroftPreciseExporter,
     ExportFormat.PICOVOICE: PicovoiceExporter,
     ExportFormat.TENSORFLOW: TensorFlowExporter,
@@ -1218,14 +1271,14 @@ async def export_to_format(
     source_dir: Path | str,
     output_dir: Path | str,
     wake_word: str,
-    negative_samples_dir: Optional[Path | str] = None,
-    split_ratios: Tuple[float, float, float] = (0.8, 0.1, 0.1),
-    metadata: Optional[DatasetMetadata] = None,
+    negative_samples_dir: Path | str | None = None,
+    split_ratios: tuple[float, float, float] = (0.8, 0.1, 0.1),
+    metadata: DatasetMetadata | None = None,
     **kwargs: Any,
 ) -> Path:
     """
     Export a dataset to the specified format.
-    
+
     Args:
         format_type: The target export format.
         source_dir: Directory containing generated audio files.
@@ -1235,24 +1288,24 @@ async def export_to_format(
         split_ratios: Train/val/test split ratios.
         metadata: Optional dataset metadata.
         **kwargs: Additional format-specific arguments.
-        
+
     Returns:
         Path to the exported dataset.
     """
     if isinstance(format_type, str):
         format_type = ExportFormat(format_type)
-    
+
     exporter_class = EXPORTERS.get(format_type)
     if not exporter_class:
         raise ValueError(f"Unsupported export format: {format_type}")
-    
+
     exporter = exporter_class(
         source_dir=source_dir,
         output_dir=output_dir,
         wake_word=wake_word,
         metadata=metadata,
     )
-    
+
     return await exporter.export(
         negative_samples_dir=negative_samples_dir,
         split_ratios=split_ratios,
@@ -1260,13 +1313,15 @@ async def export_to_format(
     )
 
 
-def list_export_formats() -> List[Dict[str, str]]:
+def list_export_formats() -> list[dict[str, str]]:
     """List all available export formats."""
     return [
         {
             "format": fmt.value,
             "name": fmt.name,
-            "description": (EXPORTERS[fmt].__doc__ or "").strip().split("\n")[0] if fmt in EXPORTERS else "",
+            "description": (EXPORTERS[fmt].__doc__ or "").strip().split("\n")[0]
+            if fmt in EXPORTERS
+            else "",
         }
         for fmt in ExportFormat
     ]

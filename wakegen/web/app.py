@@ -39,9 +39,9 @@ a configured application instance.
 """
 
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional, AsyncGenerator, Dict
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -62,7 +62,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Issue M-001 Fix: Use modern lifespan context manager instead of deprecated
 # @app.on_event("startup") and @app.on_event("shutdown") decorators.
-# 
+#
 # The lifespan pattern is the recommended approach in FastAPI 0.100+:
 # - Code before `yield` runs on startup
 # - Code after `yield` runs on shutdown
@@ -71,10 +71,10 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Lifespan context manager for FastAPI startup and shutdown events.
-    
-    This replaces the deprecated @app.on_event("startup") and 
+
+    This replaces the deprecated @app.on_event("startup") and
     @app.on_event("shutdown") decorators.
-    
+
     Everything before `yield` runs BEFORE the app starts accepting requests.
     Everything after `yield` runs AFTER the app stops accepting requests.
     """
@@ -84,17 +84,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("=" * 60)
     logger.info("🎤 WakeGen Web UI starting up...")
     logger.info("=" * 60)
-    
+
     # Yield control to the application - it runs here until shutdown
     yield
-    
+
     # -------------------------------------------------------------------------
     # SHUTDOWN LOGIC
     # -------------------------------------------------------------------------
     logger.info("🎤 WakeGen Web UI shutting down...")
 
 
-def create_app(config: Optional[WebConfig] = None) -> FastAPI:
+def create_app(config: WebConfig | None = None) -> FastAPI:
     """
     Create and configure the FastAPI application.
 
@@ -146,7 +146,6 @@ def create_app(config: Optional[WebConfig] = None) -> FastAPI:
     app = FastAPI(
         # Title appears at the top of the API docs page
         title="WakeGen Web UI",
-
         # Description shown in the API docs - supports Markdown!
         description="""
 ## Wake Word Dataset Generator
@@ -160,22 +159,16 @@ wake word audio datasets using multiple TTS providers.
 - 📦 **Export** - OpenWakeWord, Mycroft, Picovoice formats
 - 📊 **Quality Assurance** - Validate and analyze your dataset
         """,
-
         # Version of our API - should match pyproject.toml
         version="1.0.0",
-
         # URL where API docs are served (default is /docs)
         docs_url="/api/docs",
-
         # URL for alternative ReDoc documentation
         redoc_url="/api/redoc",
-
         # OpenAPI JSON schema URL
         openapi_url="/api/openapi.json",
-
         # Debug mode enables more detailed error responses
         debug=settings.debug,
-        
         # Issue M-001 Fix: Use lifespan context manager for startup/shutdown
         lifespan=lifespan,
     )
@@ -199,13 +192,10 @@ wake word audio datasets using multiple TTS providers.
         # Which origins (websites) can make requests
         # ["*"] means "any website" - okay for local development
         allow_origins=["*"],
-
         # Allow cookies and authentication headers
         allow_credentials=True,
-
         # Which HTTP methods are allowed (GET, POST, PUT, DELETE, etc.)
         allow_methods=["*"],
-
         # Which request headers are allowed
         allow_headers=["*"],
     )
@@ -231,11 +221,7 @@ wake word audio datasets using multiple TTS providers.
 
     # Mount the static files directory at the /static URL path
     # name="static" allows us to reference it in templates with url_for("static", ...)
-    app.mount(
-        "/static",
-        StaticFiles(directory=str(static_dir)),
-        name="static"
-    )
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     # =========================================================================
     # SET UP JINJA2 TEMPLATES
@@ -297,158 +283,152 @@ wake word audio datasets using multiple TTS providers.
             {
                 "request": request,
                 "page_title": "Dashboard",
-            }
+            },
         )
 
     @app.get("/providers", response_class=HTMLResponse)
     async def providers_page(request: Request) -> HTMLResponse:
         """
         Serve the providers management page.
-        
+
         Displays a dashboard showing all available TTS providers, their
         installation status, voice counts, and configuration options.
         Users can enable/disable providers and view available voices.
-        
+
         Args:
             request: FastAPI Request object containing session and app state.
-            
+
         Returns:
             HTMLResponse: Rendered providers.html template.
         """
         templates: Jinja2Templates = request.app.state.templates
         return templates.TemplateResponse(
-            "pages/providers.html",
-            {"request": request, "page_title": "Providers"}
+            "pages/providers.html", {"request": request, "page_title": "Providers"}
         )
 
     @app.get("/generate", response_class=HTMLResponse)
     async def generate_page(request: Request) -> HTMLResponse:
         """
         Serve the audio generation page.
-        
+
         Provides the main interface for generating wake word audio samples.
         Users can specify wake words, select providers and voices, configure
         sample count, and start batch generation jobs.
-        
+
         Args:
             request: FastAPI Request object containing session and app state.
-            
+
         Returns:
             HTMLResponse: Rendered generate.html template.
         """
         templates: Jinja2Templates = request.app.state.templates
         return templates.TemplateResponse(
-            "pages/generate.html",
-            {"request": request, "page_title": "Generate"}
+            "pages/generate.html", {"request": request, "page_title": "Generate"}
         )
 
     @app.get("/config", response_class=HTMLResponse)
     async def config_page(request: Request) -> HTMLResponse:
         """
         Serve the configuration editor page.
-        
+
         Provides a form-based interface for editing wakegen.yaml settings.
         Users can modify generation parameters, provider settings, output
         directories, and export configurations.
-        
+
         Args:
             request: FastAPI Request object containing session and app state.
-            
+
         Returns:
             HTMLResponse: Rendered config.html template.
         """
         templates: Jinja2Templates = request.app.state.templates
         return templates.TemplateResponse(
-            "pages/config.html",
-            {"request": request, "page_title": "Configuration"}
+            "pages/config.html", {"request": request, "page_title": "Configuration"}
         )
 
     @app.get("/augmentation", response_class=HTMLResponse)
     async def augmentation_page(request: Request) -> HTMLResponse:
         """
         Serve the augmentation settings page.
-        
+
         Provides controls for audio augmentation effects including noise
         injection, room simulation, microphone simulation, and time/pitch
         stretching. Users can create and manage augmentation profiles.
-        
+
         Args:
             request: FastAPI Request object containing session and app state.
-            
+
         Returns:
             HTMLResponse: Rendered augmentation.html template.
         """
         templates: Jinja2Templates = request.app.state.templates
         return templates.TemplateResponse(
             "pages/augmentation.html",
-            {"request": request, "page_title": "Augmentation"}
+            {"request": request, "page_title": "Augmentation"},
         )
 
     @app.get("/quality", response_class=HTMLResponse)
     async def quality_page(request: Request) -> HTMLResponse:
         """
         Serve the quality dashboard page.
-        
+
         Displays quality metrics for generated audio samples including
         ASR verification results, SNR scores, and validation statistics.
         Users can review and filter samples by quality thresholds.
-        
+
         Args:
             request: FastAPI Request object containing session and app state.
-            
+
         Returns:
             HTMLResponse: Rendered quality.html template.
         """
         templates: Jinja2Templates = request.app.state.templates
         return templates.TemplateResponse(
-            "pages/quality.html",
-            {"request": request, "page_title": "Quality"}
+            "pages/quality.html", {"request": request, "page_title": "Quality"}
         )
 
     @app.get("/export", response_class=HTMLResponse)
     async def export_page(request: Request) -> HTMLResponse:
         """
         Serve the dataset export page.
-        
+
         Provides options for exporting datasets to various training formats
         including OpenWakeWord, Mycroft Precise, Picovoice, TensorFlow,
         PyTorch, and HuggingFace. Users can configure train/val/test splits.
-        
+
         Args:
             request: FastAPI Request object containing session and app state.
-            
+
         Returns:
             HTMLResponse: Rendered export.html template.
         """
         templates: Jinja2Templates = request.app.state.templates
         return templates.TemplateResponse(
-            "pages/export.html",
-            {"request": request, "page_title": "Export"}
+            "pages/export.html", {"request": request, "page_title": "Export"}
         )
 
     @app.get("/system", response_class=HTMLResponse)
     async def system_page(request: Request) -> HTMLResponse:
         """
         Serve the system status page.
-        
+
         Displays system health information including GPU availability,
         memory usage, provider status, and active generation jobs.
         Useful for monitoring and troubleshooting.
-        
+
         Args:
             request: FastAPI Request object containing session and app state.
-            
+
         Returns:
             HTMLResponse: Rendered system.html template.
         """
         templates: Jinja2Templates = request.app.state.templates
         return templates.TemplateResponse(
-            "pages/system.html",
-            {"request": request, "page_title": "System"}
+            "pages/system.html", {"request": request, "page_title": "System"}
         )
 
     @app.get("/api/health")
-    async def health_check() -> Dict[str, str]:
+    async def health_check() -> dict[str, str]:
         """
         Health check endpoint.
 
@@ -468,11 +448,7 @@ wake word audio datasets using multiple TTS providers.
             The return type `dict` is implicit here, but we could use
             Pydantic models for more complex responses.
         """
-        return {
-            "status": "ok",
-            "service": "wakegen-web",
-            "version": "1.0.0"
-        }
+        return {"status": "ok", "service": "wakegen-web", "version": "1.0.0"}
 
     # =========================================================================
     # REGISTER API ROUTERS
@@ -487,108 +463,96 @@ wake word audio datasets using multiple TTS providers.
 
     # Import and register routers (we'll create these files next)
     try:
-        from wakegen.web.routers import providers, config_router, generation
+        from wakegen.web.routers import config_router, generation, providers
 
         # Provider management endpoints
         app.include_router(
             providers.router,
             prefix="/api/providers",
-            tags=["Providers"]  # Groups endpoints in API docs
+            tags=["Providers"],  # Groups endpoints in API docs
         )
 
         # Configuration endpoints
         app.include_router(
-            config_router.router,
-            prefix="/api/config",
-            tags=["Configuration"]
+            config_router.router, prefix="/api/config", tags=["Configuration"]
         )
 
         # Generation endpoints
         app.include_router(
-            generation.router,
-            prefix="/api/generate",
-            tags=["Generation"]
+            generation.router, prefix="/api/generate", tags=["Generation"]
         )
 
         logger.info("All API routers registered successfully")
 
     except ImportError as e:
         # Issue 13 fix: Better error messages with module name and install instructions
-        module_name = getattr(e, 'name', 'unknown')
+        module_name = getattr(e, "name", "unknown")
         logger.warning(
             f"Router import failed - missing module: {module_name}. "
-            f"Error: {str(e)}. This may indicate missing dependencies."
+            f"Error: {e!s}. This may indicate missing dependencies."
         )
 
     # Register audio router separately (optional feature)
     try:
         from wakegen.web.routers import audio
 
-        app.include_router(
-            audio.router,
-            prefix="/api/audio",
-            tags=["Audio"]
-        )
+        app.include_router(audio.router, prefix="/api/audio", tags=["Audio"])
         logger.info("Audio router registered")
     except ImportError as e:
-        module_name = getattr(e, 'name', 'unknown')
-        logger.warning(f"Audio router import failed - module: {module_name}. Error: {str(e)}")
+        module_name = getattr(e, "name", "unknown")
+        logger.warning(
+            f"Audio router import failed - module: {module_name}. Error: {e!s}"
+        )
 
     # Register augmentation router
     try:
         from wakegen.web.routers import augmentation
 
         app.include_router(
-            augmentation.router,
-            prefix="/api/augmentation",
-            tags=["Augmentation"]
+            augmentation.router, prefix="/api/augmentation", tags=["Augmentation"]
         )
         logger.info("Augmentation router registered")
     except ImportError as e:
-        module_name = getattr(e, 'name', 'unknown')
-        logger.warning(f"Augmentation router import failed - module: {module_name}. Error: {str(e)}")
+        module_name = getattr(e, "name", "unknown")
+        logger.warning(
+            f"Augmentation router import failed - module: {module_name}. Error: {e!s}"
+        )
 
     # Register quality router
     try:
         from wakegen.web.routers import quality
 
-        app.include_router(
-            quality.router,
-            prefix="/api/quality",
-            tags=["Quality"]
-        )
+        app.include_router(quality.router, prefix="/api/quality", tags=["Quality"])
         logger.info("Quality router registered")
     except ImportError as e:
-        module_name = getattr(e, 'name', 'unknown')
-        logger.warning(f"Quality router import failed - module: {module_name}. Error: {str(e)}")
+        module_name = getattr(e, "name", "unknown")
+        logger.warning(
+            f"Quality router import failed - module: {module_name}. Error: {e!s}"
+        )
 
     # Register export router
     try:
         from wakegen.web.routers import export
 
-        app.include_router(
-            export.router,
-            prefix="/api/export",
-            tags=["Export"]
-        )
+        app.include_router(export.router, prefix="/api/export", tags=["Export"])
         logger.info("Export router registered")
     except ImportError as e:
-        module_name = getattr(e, 'name', 'unknown')
-        logger.warning(f"Export router import failed - module: {module_name}. Error: {str(e)}")
+        module_name = getattr(e, "name", "unknown")
+        logger.warning(
+            f"Export router import failed - module: {module_name}. Error: {e!s}"
+        )
 
     # Register system router
     try:
         from wakegen.web.routers import system
 
-        app.include_router(
-            system.router,
-            prefix="/api/system",
-            tags=["System"]
-        )
+        app.include_router(system.router, prefix="/api/system", tags=["System"])
         logger.info("System router registered")
     except ImportError as e:
-        module_name = getattr(e, 'name', 'unknown')
-        logger.warning(f"System router import failed - module: {module_name}. Error: {str(e)}")
+        module_name = getattr(e, "name", "unknown")
+        logger.warning(
+            f"System router import failed - module: {module_name}. Error: {e!s}"
+        )
 
     # =========================================================================
     # WEBSOCKET ROUTES
@@ -598,14 +562,12 @@ wake word audio datasets using multiple TTS providers.
     try:
         from wakegen.web import websocket
 
-        app.include_router(
-            websocket.router,
-            prefix="/ws",
-            tags=["WebSocket"]
-        )
+        app.include_router(websocket.router, prefix="/ws", tags=["WebSocket"])
         logger.info("WebSocket router registered")
     except ImportError as e:
-        module_name = getattr(e, 'name', 'unknown')
-        logger.warning(f"WebSocket router import failed - module: {module_name}. Error: {str(e)}")
+        module_name = getattr(e, "name", "unknown")
+        logger.warning(
+            f"WebSocket router import failed - module: {module_name}. Error: {e!s}"
+        )
 
     return app

@@ -52,10 +52,12 @@ dependencies = [
     "torchaudio>=2.0.0",        # Audio processing with PyTorch
     "onnxruntime>=1.16.0",      # ONNX runtime for efficient CPU model inference
     
-    # ===== TTS Providers (Reliable Cross-Platform) =====
+    # ===== TTS Providers (Windows 11 Compatible) =====
     "edge-tts>=6.1.0",          # Microsoft Edge TTS (free, cloud-based, no GPU)
-    "piper-tts>=1.2.0",         # Piper TTS - fast CPU inference with Turkish support
+    "piper-tts>=1.2.0",         # Piper TTS - fast CPU inference, uses onnxruntime
     "coqui-tts>=0.24.0",        # Coqui XTTS - voice cloning, multilingual (~2GB VRAM)
+    "kokoro-onnx>=0.4.9",       # Kokoro TTS - fast CPU inference, uses onnxruntime
+    "f5-tts>=1.1.10",           # F5 TTS - voice cloning, uses torch/torchaudio
 ]
 
 [project.optional-dependencies]

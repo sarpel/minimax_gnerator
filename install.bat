@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal EnableDelayedExpansion
 title WakeGen Installer
 
 echo ===============================================================================
@@ -8,7 +8,7 @@ echo ===========================================================================
 
 REM Check if Python is installed
 python --version >nul 2>&1
-if %errorlevel% neq 0 (
+if !ERRORLEVEL! neq 0 (
     echo [ERROR] Python is not installed or not in your PATH.
     echo Please install Python 3.10+ from python.org and try again.
     echo Make sure to check "Add Python to PATH" during installation.
@@ -20,7 +20,7 @@ REM Create virtual environment if it doesn't exist
 if not exist "venv" (
     echo [INFO] Creating virtual environment...
     python -m venv venv
-    if %errorlevel% neq 0 (
+    if !ERRORLEVEL! neq 0 (
         echo [ERROR] Failed to create virtual environment.
         pause
         exit /b 1
@@ -33,9 +33,10 @@ if not exist "venv" (
 REM Activate virtual environment and install dependencies
 echo [INFO] Installing dependencies...
 call venv\Scripts\activate.bat
+set PYTHONUTF8=1
 pip install -e .[web]
 
-if %errorlevel% neq 0 (
+if !ERRORLEVEL! neq 0 (
     echo [ERROR] Failed to install dependencies.
     pause
     exit /b 1

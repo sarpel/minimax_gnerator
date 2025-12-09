@@ -15,32 +15,34 @@ Key Features:
 """
 
 from __future__ import annotations
-import asyncio
+
+import logging
 import os
+import random
 import tempfile
 import uuid
-from typing import Optional, List, Dict, Any, Tuple
-from pathlib import Path
-from wakegen.core.types import EnvironmentProfile, AugmentationType
-from wakegen.core.exceptions import AugmentationError
-from wakegen.augmentation.profiles import AugmentationProfile, get_profile
-from wakegen.augmentation.noise.mixer import NoiseMixer
-from wakegen.augmentation.noise.events import NoiseEventGenerator
-from wakegen.augmentation.noise.profiles import NoiseProfileManager
-from wakegen.augmentation.room.simulator import RoomSimulator
-from wakegen.augmentation.microphone.simulator import MicrophoneSimulator
-from wakegen.augmentation.effects.time_domain import TimeDomainEffects
-from wakegen.augmentation.effects.dynamics import DynamicsProcessor
-from wakegen.augmentation.effects.degradation import AudioDegrader
-from wakegen.utils.audio import load_audio
-import soundfile as sf
-import numpy as np
+from typing import Any
+
 import librosa
-import logging
-import random
+import numpy as np
+import soundfile as sf
+
+from wakegen.augmentation.effects.degradation import AudioDegrader
+from wakegen.augmentation.effects.dynamics import DynamicsProcessor
+from wakegen.augmentation.effects.time_domain import TimeDomainEffects
+from wakegen.augmentation.microphone.simulator import MicrophoneSimulator
+from wakegen.augmentation.noise.events import NoiseEventGenerator
+from wakegen.augmentation.noise.mixer import NoiseMixer
+from wakegen.augmentation.noise.profiles import NoiseProfileManager
+from wakegen.augmentation.profiles import AugmentationProfile, get_profile
+from wakegen.augmentation.room.simulator import RoomSimulator
+from wakegen.core.exceptions import AugmentationError
+from wakegen.core.types import AugmentationType, EnvironmentProfile
+from wakegen.utils.audio import load_audio
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
 
 class AugmentationPipeline:
     """
@@ -55,7 +57,7 @@ class AugmentationPipeline:
         self,
         profile: AugmentationProfile,
         sample_rate: int = 16000,
-        temp_dir: Optional[str] = None
+        temp_dir: str | None = None,
     ):
         """
         Initialize the augmentation pipeline.
@@ -91,7 +93,9 @@ class AugmentationPipeline:
     def _validate_profile(self) -> None:
         """Validate that the augmentation profile is valid."""
         if not self.profile.augmentation_types:
-            raise AugmentationError("Augmentation profile must specify at least one augmentation type")
+            raise AugmentationError(
+                "Augmentation profile must specify at least one augmentation type"
+            )
 
         # Validate that all specified augmentation types are supported
         supported_types = {
@@ -101,7 +105,7 @@ class AugmentationPipeline:
             AugmentationType.TIME_STRETCH,
             AugmentationType.PITCH_SHIFT,
             AugmentationType.COMPRESSION,
-            AugmentationType.DEGRADATION
+            AugmentationType.DEGRADATION,
         }
 
         for aug_type in self.profile.augmentation_types:
@@ -109,10 +113,7 @@ class AugmentationPipeline:
                 raise AugmentationError(f"Unsupported augmentation type: {aug_type}")
 
     async def apply(
-        self,
-        input_path: str,
-        output_path: str,
-        intermediate_dir: Optional[str] = None
+        self, input_path: str, output_path: str, intermediate_dir: str | None = None
     ) -> str:
         """
         Apply the full augmentation pipeline to an audio file.
@@ -139,11 +140,11 @@ class AugmentationPipeline:
             # Resample to target sample rate if needed
             if original_sr != self.sample_rate:
                 original_audio = librosa.resample(
-                    original_audio,
-                    orig_sr=original_sr,
-                    target_sr=self.sample_rate
+                    original_audio, orig_sr=original_sr, target_sr=self.sample_rate
                 )
-                logger.debug(f"Resampled audio from {original_sr}Hz to {self.sample_rate}Hz")
+                logger.debug(
+                    f"Resampled audio from {original_sr}Hz to {self.sample_rate}Hz"
+                )
 
             # Apply augmentations in sequence
             processed_audio = original_audio
@@ -155,30 +156,40 @@ class AugmentationPipeline:
             for aug_type in self.profile.augmentation_types:
                 try:
                     if aug_type == AugmentationType.BACKGROUND_NOISE:
-                        processed_audio = await self._apply_background_noise(processed_audio)
+                        processed_audio = await self._apply_background_noise(
+                            processed_audio
+                        )
                         if intermediate_dir:
                             intermediate_files["noise"] = self._save_intermediate(
                                 processed_audio, intermediate_dir, "after_noise"
                             )
 
                     elif aug_type == AugmentationType.ROOM_SIMULATION:
-                        processed_audio = await self._apply_room_simulation(processed_audio)
+                        processed_audio = await self._apply_room_simulation(
+                            processed_audio
+                        )
                         if intermediate_dir:
                             intermediate_files["room"] = self._save_intermediate(
                                 processed_audio, intermediate_dir, "after_room"
                             )
 
                     elif aug_type == AugmentationType.MICROPHONE_SIMULATION:
-                        processed_audio = await self._apply_microphone_simulation(processed_audio)
+                        processed_audio = await self._apply_microphone_simulation(
+                            processed_audio
+                        )
                         if intermediate_dir:
                             intermediate_files["mic"] = self._save_intermediate(
                                 processed_audio, intermediate_dir, "after_mic"
                             )
 
                     elif aug_type == AugmentationType.TIME_STRETCH:
-                        processed_audio = await self._apply_time_stretch(processed_audio)
+                        processed_audio = await self._apply_time_stretch(
+                            processed_audio
+                        )
                         if intermediate_dir:
-                            intermediate_files["time_stretch"] = self._save_intermediate(
+                            intermediate_files[
+                                "time_stretch"
+                            ] = self._save_intermediate(
                                 processed_audio, intermediate_dir, "after_time_stretch"
                             )
 
@@ -204,8 +215,10 @@ class AugmentationPipeline:
                             )
 
                 except Exception as e:
-                    logger.error(f"Failed to apply {aug_type}: {str(e)}")
-                    raise AugmentationError(f"Augmentation failed at {aug_type} stage: {str(e)}") from e
+                    logger.error(f"Failed to apply {aug_type}: {e!s}")
+                    raise AugmentationError(
+                        f"Augmentation failed at {aug_type} stage: {e!s}"
+                    ) from e
 
             # Save the final result
             self._save_audio(processed_audio, output_path)
@@ -214,10 +227,12 @@ class AugmentationPipeline:
             return output_path
 
         except Exception as e:
-            logger.error(f"Augmentation pipeline failed: {str(e)}")
-            raise AugmentationError(f"Augmentation pipeline failed: {str(e)}") from e
+            logger.error(f"Augmentation pipeline failed: {e!s}")
+            raise AugmentationError(f"Augmentation pipeline failed: {e!s}") from e
 
-    async def _apply_background_noise(self, audio: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
+    async def _apply_background_noise(
+        self, audio: np.ndarray[Any, Any]
+    ) -> np.ndarray[Any, Any]:
         """
         Apply background noise augmentation.
 
@@ -235,8 +250,7 @@ class AugmentationPipeline:
             # Generate base noise
             noise_duration = len(audio) / self.sample_rate
             base_noise = self.noise_mixer.generate_noise(
-                noise_duration,
-                self.profile.noise_profile.base_noise_type
+                noise_duration, self.profile.noise_profile.base_noise_type
             )
 
             # Add noise events if this profile has them
@@ -244,17 +258,23 @@ class AugmentationPipeline:
                 events = self.noise_event_gen.generate_random_events(
                     noise_duration,
                     self.profile.noise_profile.event_density,
-                    self.profile.noise_profile.typical_events
+                    self.profile.noise_profile.typical_events,
                 )
-                base_noise = self.noise_event_gen.apply_events_to_noise(base_noise, events)
+                base_noise = self.noise_event_gen.apply_events_to_noise(
+                    base_noise, events
+                )
 
             # Mix with original audio
             return self.noise_mixer.mix_with_noise(audio, base_noise, snr_db)
 
         except Exception as e:
-            raise AugmentationError(f"Background noise application failed: {str(e)}") from e
+            raise AugmentationError(
+                f"Background noise application failed: {e!s}"
+            ) from e
 
-    async def _apply_room_simulation(self, audio: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
+    async def _apply_room_simulation(
+        self, audio: np.ndarray[Any, Any]
+    ) -> np.ndarray[Any, Any]:
         """
         Apply room simulation augmentation.
 
@@ -266,15 +286,21 @@ class AugmentationPipeline:
         """
         try:
             # Generate room impulse response
-            rir = self.room_simulator.create_room_impulse_response(self.profile.room_params)
+            rir = self.room_simulator.create_room_impulse_response(
+                self.profile.room_params
+            )
 
             # Apply room simulation with moderate wet/dry mix
-            return self.room_simulator.apply_room_simulation(audio, rir, wet_dry_mix=0.6)
+            return self.room_simulator.apply_room_simulation(
+                audio, rir, wet_dry_mix=0.6
+            )
 
         except Exception as e:
-            raise AugmentationError(f"Room simulation failed: {str(e)}") from e
+            raise AugmentationError(f"Room simulation failed: {e!s}") from e
 
-    async def _apply_microphone_simulation(self, audio: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
+    async def _apply_microphone_simulation(
+        self, audio: np.ndarray[Any, Any]
+    ) -> np.ndarray[Any, Any]:
         """
         Apply microphone simulation augmentation.
 
@@ -285,12 +311,16 @@ class AugmentationPipeline:
             Audio with microphone effects applied.
         """
         try:
-            return self.mic_simulator.apply_microphone_effect(audio, self.profile.microphone_profile)
+            return self.mic_simulator.apply_microphone_effect(
+                audio, self.profile.microphone_profile
+            )
 
         except Exception as e:
-            raise AugmentationError(f"Microphone simulation failed: {str(e)}") from e
+            raise AugmentationError(f"Microphone simulation failed: {e!s}") from e
 
-    async def _apply_time_stretch(self, audio: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
+    async def _apply_time_stretch(
+        self, audio: np.ndarray[Any, Any]
+    ) -> np.ndarray[Any, Any]:
         """
         Apply time stretching augmentation.
 
@@ -307,9 +337,11 @@ class AugmentationPipeline:
             return audio
 
         except Exception as e:
-            raise AugmentationError(f"Time stretching failed: {str(e)}") from e
+            raise AugmentationError(f"Time stretching failed: {e!s}") from e
 
-    async def _apply_pitch_shift(self, audio: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
+    async def _apply_pitch_shift(
+        self, audio: np.ndarray[Any, Any]
+    ) -> np.ndarray[Any, Any]:
         """
         Apply pitch shifting augmentation.
 
@@ -326,9 +358,11 @@ class AugmentationPipeline:
             return audio
 
         except Exception as e:
-            raise AugmentationError(f"Pitch shifting failed: {str(e)}") from e
+            raise AugmentationError(f"Pitch shifting failed: {e!s}") from e
 
-    async def _apply_compression(self, audio: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
+    async def _apply_compression(
+        self, audio: np.ndarray[Any, Any]
+    ) -> np.ndarray[Any, Any]:
         """
         Apply dynamics compression augmentation.
 
@@ -342,21 +376,29 @@ class AugmentationPipeline:
             if self.profile.dynamics_effects.get("effect_type") == "compression":
                 return self.dynamics_processor.apply_compression(
                     audio,
-                    **{k: v for k, v in self.profile.dynamics_effects.items()
-                       if k != "effect_type"}
+                    **{
+                        k: v
+                        for k, v in self.profile.dynamics_effects.items()
+                        if k != "effect_type"
+                    },
                 )
             elif self.profile.dynamics_effects.get("effect_type") == "limiting":
                 return self.dynamics_processor.apply_limiting(
                     audio,
-                    **{k: v for k, v in self.profile.dynamics_effects.items()
-                       if k != "effect_type"}
+                    **{
+                        k: v
+                        for k, v in self.profile.dynamics_effects.items()
+                        if k != "effect_type"
+                    },
                 )
             return audio
 
         except Exception as e:
-            raise AugmentationError(f"Dynamics processing failed: {str(e)}") from e
+            raise AugmentationError(f"Dynamics processing failed: {e!s}") from e
 
-    async def _apply_degradation(self, audio: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
+    async def _apply_degradation(
+        self, audio: np.ndarray[Any, Any]
+    ) -> np.ndarray[Any, Any]:
         """
         Apply quality degradation augmentation.
 
@@ -372,18 +414,14 @@ class AugmentationPipeline:
                 return self.audio_degrader.apply_random_degradation(audio, severity)
             else:
                 return self.audio_degrader.process(
-                    audio,
-                    **self.profile.degradation_effects
+                    audio, **self.profile.degradation_effects
                 )
 
         except Exception as e:
-            raise AugmentationError(f"Audio degradation failed: {str(e)}") from e
+            raise AugmentationError(f"Audio degradation failed: {e!s}") from e
 
     def _save_intermediate(
-        self,
-        audio: np.ndarray[Any, Any],
-        directory: str,
-        filename_prefix: str
+        self, audio: np.ndarray[Any, Any], directory: str, filename_prefix: str
     ) -> str:
         """
         Save intermediate audio file for debugging.
@@ -402,7 +440,7 @@ class AugmentationPipeline:
             self._save_audio(audio, filepath)
             return filepath
         except Exception as e:
-            logger.warning(f"Failed to save intermediate file: {str(e)}")
+            logger.warning(f"Failed to save intermediate file: {e!s}")
             return ""
 
     def _save_audio(self, audio: np.ndarray[Any, Any], filepath: str) -> None:
@@ -427,16 +465,18 @@ class AugmentationPipeline:
             sf.write(filepath, audio, self.sample_rate)
 
         except Exception as e:
-            raise AugmentationError(f"Failed to save audio to {filepath}: {str(e)}") from e
+            raise AugmentationError(
+                f"Failed to save audio to {filepath}: {e!s}"
+            ) from e
 
     async def batch_augment(
         self,
-        input_paths: List[str],
+        input_paths: list[str],
         output_dir: str,
         prefix: str = "augmented_",
         suffix: str = "",
-        intermediate_dir: Optional[str] = None
-    ) -> List[str]:
+        intermediate_dir: str | None = None,
+    ) -> list[str]:
         """
         Apply augmentation to multiple files in batch.
 
@@ -467,20 +507,26 @@ class AugmentationPipeline:
                     output_path = os.path.join(output_dir, output_name)
 
                     # Apply augmentation
-                    result_path = await self.apply(input_path, output_path, intermediate_dir)
+                    result_path = await self.apply(
+                        input_path, output_path, intermediate_dir
+                    )
                     results.append(result_path)
 
-                    logger.info(f"Processed {i+1}/{len(input_paths)}: {input_path} -> {output_path}")
+                    logger.info(
+                        f"Processed {i+1}/{len(input_paths)}: {input_path} -> {output_path}"
+                    )
 
                 except Exception as e:
                     # Issue M-005 Fix: Track failed files instead of silently continuing
-                    logger.error(f"Failed to process {input_path}: {str(e)}")
+                    logger.error(f"Failed to process {input_path}: {e!s}")
                     failed_files.append((input_path, str(e)))
                     continue
 
             # Report failures if any occurred
             if failed_files:
-                failed_summary = "; ".join([f"{path}: {err}" for path, err in failed_files])
+                failed_summary = "; ".join(
+                    [f"{path}: {err}" for path, err in failed_files]
+                )
                 logger.warning(
                     f"Batch augmentation completed with {len(failed_files)} failures: {failed_summary}"
                 )
@@ -488,9 +534,9 @@ class AugmentationPipeline:
             return results
 
         except Exception as e:
-            raise AugmentationError(f"Batch augmentation failed: {str(e)}") from e
+            raise AugmentationError(f"Batch augmentation failed: {e!s}") from e
 
-    def get_augmentation_summary(self) -> Dict[str, Any]:
+    def get_augmentation_summary(self) -> dict[str, Any]:
         """
         Get a summary of the augmentation pipeline configuration.
 
@@ -506,18 +552,18 @@ class AugmentationPipeline:
             "room_parameters": {
                 "size": f"{self.profile.room_params.length}x{self.profile.room_params.width}x{self.profile.room_params.height}m",
                 "rt60": f"{self.profile.room_params.rt60}s",
-                "absorption": self.profile.room_params.absorption
+                "absorption": self.profile.room_params.absorption,
             },
             "microphone_profile": self.profile.microphone_profile.name,
             "time_effects": self.profile.time_effects,
             "dynamics_effects": self.profile.dynamics_effects,
-            "degradation_effects": self.profile.degradation_effects
+            "degradation_effects": self.profile.degradation_effects,
         }
+
 
 # Convenience function for easy pipeline creation
 def create_pipeline(
-    profile_id: EnvironmentProfile,
-    sample_rate: int = 16000
+    profile_id: EnvironmentProfile, sample_rate: int = 16000
 ) -> AugmentationPipeline:
     """
     Create an augmentation pipeline with the specified environment profile.

@@ -38,14 +38,13 @@ clients can connect to a WebSocket and receive push notifications.
 
 import asyncio
 import logging
-from typing import Dict, Set, Optional, Any
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
 
 # Import job management from generation router
-from wakegen.web.routers.generation import get_job, JobStatus
+from wakegen.web.routers.generation import JobStatus, get_job
 
 logger = logging.getLogger(__name__)
 
@@ -84,10 +83,10 @@ class ConnectionManager:
     def __init__(self) -> None:
         """Initialize the connection manager with empty tracking dictionaries."""
         # Maps job_id -> set of active WebSocket connections
-        self.active_connections: Dict[str, Set[WebSocket]] = {}
+        self.active_connections: dict[str, set[WebSocket]] = {}
 
         # Track when each connection was established (for debugging/timeouts)
-        self.connection_times: Dict[WebSocket, datetime] = {}
+        self.connection_times: dict[WebSocket, datetime] = {}
 
     async def connect(self, websocket: WebSocket, job_id: str) -> None:
         """
@@ -138,7 +137,7 @@ class ConnectionManager:
 
         logger.info(f"WebSocket disconnected for job {job_id}")
 
-    async def send_progress(self, job_id: str, data: Dict[str, Any]) -> None:
+    async def send_progress(self, job_id: str, data: dict[str, Any]) -> None:
         """
         Send a progress update to all clients watching a job.
 
@@ -164,7 +163,7 @@ class ConnectionManager:
                 logger.warning(f"Failed to send to WebSocket: {e}")
                 self.disconnect(websocket, job_id)
 
-    async def broadcast_all(self, data: Dict[str, Any]) -> None:
+    async def broadcast_all(self, data: dict[str, Any]) -> None:
         """
         Send a message to ALL connected clients (all jobs).
 
@@ -173,7 +172,7 @@ class ConnectionManager:
         for job_id in list(self.active_connections.keys()):
             await self.send_progress(job_id, data)
 
-    def get_connection_count(self, job_id: Optional[str] = None) -> int:
+    def get_connection_count(self, job_id: str | None = None) -> int:
         """
         Get the number of active connections.
 
@@ -234,32 +233,35 @@ async def websocket_progress(websocket: WebSocket, job_id: str) -> None:
 
     try:
         # Send initial connection confirmation
-        await websocket.send_json({
-            "type": "connected",
-            "job_id": job_id,
-            "message": "Connected to progress stream"
-        })
+        await websocket.send_json(
+            {
+                "type": "connected",
+                "job_id": job_id,
+                "message": "Connected to progress stream",
+            }
+        )
 
         # Check if job exists
         job = get_job(job_id)
         if not job:
-            await websocket.send_json({
-                "type": "error",
-                "message": f"Job not found: {job_id}"
-            })
+            await websocket.send_json(
+                {"type": "error", "message": f"Job not found: {job_id}"}
+            )
             return
 
         # Send current status immediately
-        await websocket.send_json({
-            "type": "progress",
-            "job_id": job.id,
-            "status": job.status.value,
-            "progress_percentage": job.progress_percentage,
-            "completed_samples": job.completed_samples,
-            "total_samples": job.total_samples,
-            "current_word": job.current_word,
-            "current_file": job.current_file
-        })
+        await websocket.send_json(
+            {
+                "type": "progress",
+                "job_id": job.id,
+                "status": job.status.value,
+                "progress_percentage": job.progress_percentage,
+                "completed_samples": job.completed_samples,
+                "total_samples": job.total_samples,
+                "current_word": job.current_word,
+                "current_file": job.current_file,
+            }
+        )
 
         # Keep connection alive and send updates
         # We poll the job status and push updates
@@ -270,34 +272,41 @@ async def websocket_progress(websocket: WebSocket, job_id: str) -> None:
             # Get latest job status
             job = get_job(job_id)
             if not job:
-                await websocket.send_json({
-                    "type": "error",
-                    "message": "Job no longer exists"
-                })
+                await websocket.send_json(
+                    {"type": "error", "message": "Job no longer exists"}
+                )
                 break
 
             # Send progress update
-            await websocket.send_json({
-                "type": "progress",
-                "job_id": job.id,
-                "status": job.status.value,
-                "progress_percentage": job.progress_percentage,
-                "completed_samples": job.completed_samples,
-                "total_samples": job.total_samples,
-                "current_word": job.current_word,
-                "current_file": job.current_file
-            })
+            await websocket.send_json(
+                {
+                    "type": "progress",
+                    "job_id": job.id,
+                    "status": job.status.value,
+                    "progress_percentage": job.progress_percentage,
+                    "completed_samples": job.completed_samples,
+                    "total_samples": job.total_samples,
+                    "current_word": job.current_word,
+                    "current_file": job.current_file,
+                }
+            )
 
             # Check if job is done
-            if job.status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]:
+            if job.status in [
+                JobStatus.COMPLETED,
+                JobStatus.FAILED,
+                JobStatus.CANCELLED,
+            ]:
                 # Send final status
-                await websocket.send_json({
-                    "type": job.status.value,
-                    "job_id": job.id,
-                    "message": f"Job {job.status.value}",
-                    "completed_samples": job.completed_samples,
-                    "error_message": job.error_message
-                })
+                await websocket.send_json(
+                    {
+                        "type": job.status.value,
+                        "job_id": job.id,
+                        "message": f"Job {job.status.value}",
+                        "completed_samples": job.completed_samples,
+                        "error_message": job.error_message,
+                    }
+                )
                 break
 
     except WebSocketDisconnect:
@@ -307,10 +316,7 @@ async def websocket_progress(websocket: WebSocket, job_id: str) -> None:
     except Exception as e:
         logger.error(f"WebSocket error for job {job_id}: {e}")
         try:
-            await websocket.send_json({
-                "type": "error",
-                "message": str(e)
-            })
+            await websocket.send_json({"type": "error", "message": str(e)})
         except:
             pass
 
@@ -334,11 +340,13 @@ async def websocket_stats(websocket: WebSocket) -> None:
             # Send stats every 5 seconds
             await asyncio.sleep(5)
 
-            await websocket.send_json({
-                "type": "stats",
-                "active_connections": manager.get_connection_count(),
-                "timestamp": datetime.now().isoformat()
-            })
+            await websocket.send_json(
+                {
+                    "type": "stats",
+                    "active_connections": manager.get_connection_count(),
+                    "timestamp": datetime.now().isoformat(),
+                }
+            )
 
     except WebSocketDisconnect:
         pass
@@ -349,7 +357,7 @@ async def websocket_stats(websocket: WebSocket) -> None:
 # =============================================================================
 
 
-async def notify_job_progress(job_id: str, progress_data: Dict[str, Any]) -> None:
+async def notify_job_progress(job_id: str, progress_data: dict[str, Any]) -> None:
     """
     Utility function to notify all WebSocket clients about job progress.
 

@@ -22,41 +22,44 @@ Reference: https://github.com/suno-ai/bark
 """
 
 from __future__ import annotations
+
 import asyncio
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 
 from wakegen.core.exceptions import ProviderError
 from wakegen.core.types import Gender, ProviderType
-from wakegen.providers.base import BaseProvider
-from wakegen.providers.registry import register_provider  # CRITICAL: Required for provider discovery
 from wakegen.models.audio import Voice
 from wakegen.models.config import ProviderConfig
+from wakegen.providers.base import BaseProvider
+from wakegen.providers.registry import (
+    register_provider,  # CRITICAL: Required for provider discovery
+)
 
 
 class BarkProvider(BaseProvider):
     """
     Bark TTS Provider - Expressive speech synthesis from Suno.
-    
+
     Bark can generate highly expressive speech including emotions,
     non-speech sounds (laughter, sighs), and even music. It's particularly
     good for natural-sounding wake words with varied expressions.
-    
+
     Speaker presets are identified by language and speaker number:
     - v2/en_speaker_0 through v2/en_speaker_9 (English)
     - v2/zh_speaker_0 through v2/zh_speaker_9 (Chinese)
     - etc.
-    
+
     You can also add expressions using text markers:
     - [laughs], [clears throat], [sighs], [music]
     - ♪ for singing, ... for hesitation
     """
-    
+
     # Speaker presets organized by language
-    SPEAKER_PRESETS: Dict[str, List[str]] = {
+    SPEAKER_PRESETS: dict[str, list[str]] = {
         "en": [f"v2/en_speaker_{i}" for i in range(10)],
         "zh": [f"v2/zh_speaker_{i}" for i in range(10)],
         "de": [f"v2/de_speaker_{i}" for i in range(10)],
@@ -71,9 +74,9 @@ class BarkProvider(BaseProvider):
         "ru": [f"v2/ru_speaker_{i}" for i in range(10)],
         "tr": [f"v2/tr_speaker_{i}" for i in range(10)],
     }
-    
+
     # Known speaker characteristics (approximate - Bark speakers vary)
-    SPEAKER_GENDERS: Dict[str, Gender] = {
+    SPEAKER_GENDERS: dict[str, Gender] = {
         "v2/en_speaker_0": Gender.MALE,
         "v2/en_speaker_1": Gender.MALE,
         "v2/en_speaker_2": Gender.FEMALE,
@@ -85,7 +88,7 @@ class BarkProvider(BaseProvider):
         "v2/en_speaker_8": Gender.MALE,
         "v2/en_speaker_9": Gender.FEMALE,
     }
-    
+
     # Expression markers that can be added to text
     EXPRESSIONS = {
         "laugh": "[laughs]",
@@ -96,10 +99,10 @@ class BarkProvider(BaseProvider):
         "hesitate": "...",
         "sing": "♪",
     }
-    
+
     def __init__(
         self,
-        config: Optional[ProviderConfig] = None,
+        config: ProviderConfig | None = None,
         use_gpu: bool = True,
         use_small_models: bool = False,
         text_use_gpu: bool = True,
@@ -108,7 +111,7 @@ class BarkProvider(BaseProvider):
     ) -> None:
         """
         Initialize the Bark provider.
-        
+
         Args:
             config: Provider configuration. If None, uses default ProviderConfig.
             use_gpu: Whether to use GPU for inference.
@@ -125,38 +128,34 @@ class BarkProvider(BaseProvider):
         self._coarse_use_gpu = coarse_use_gpu
         self._fine_use_gpu = fine_use_gpu
         self._sample_rate = 24000  # Bark outputs 24kHz audio
-    
+
     @property
     def provider_type(self) -> ProviderType:
         """Return the provider type."""
         return ProviderType.BARK
-    
+
     @property
     def requires_api_key(self) -> bool:
         """Bark does not require an API key."""
         return False
-    
+
     @property
     def supports_streaming(self) -> bool:
         """Bark does not support streaming."""
         return False
-    
+
     async def initialize(self) -> None:
         """Initialize the Bark model."""
         if self._model is not None:
             return
-        
+
         try:
-            from bark import preload_models, SAMPLE_RATE
-            from bark.generation import (
-                COARSE_MODEL,
-                FINE_MODEL,
-                TEXT_MODEL,
-            )
-            
+            from bark import SAMPLE_RATE, preload_models
+            from bark.generation import COARSE_MODEL, FINE_MODEL, TEXT_MODEL
+
             # Set environment variables for model configuration
             os.environ["SUNO_USE_SMALL_MODELS"] = "1" if self._use_small_models else "0"
-            
+
             # Preload models
             await asyncio.to_thread(
                 preload_models,
@@ -164,10 +163,10 @@ class BarkProvider(BaseProvider):
                 coarse_use_gpu=self._coarse_use_gpu and self._use_gpu,
                 fine_use_gpu=self._fine_use_gpu and self._use_gpu,
             )
-            
+
             self._sample_rate = SAMPLE_RATE
             self._model = True  # Mark as initialized
-            
+
         except ImportError as e:
             raise ProviderError(
                 f"Bark is not installed. Install with: pip install git+https://github.com/suno-ai/bark.git\n"
@@ -175,7 +174,7 @@ class BarkProvider(BaseProvider):
             )
         except Exception as e:
             raise ProviderError(f"Failed to initialize Bark: {e}")
-    
+
     async def generate(
         self,
         text: str,
@@ -185,7 +184,7 @@ class BarkProvider(BaseProvider):
     ) -> None:
         """
         Generate speech using Bark.
-        
+
         Args:
             text: Text to synthesize.
             voice_id: Speaker preset (e.g., "v2/en_speaker_0").
@@ -194,25 +193,25 @@ class BarkProvider(BaseProvider):
                 - expression: Add expression marker (laugh, sigh, etc.)
                 - text_temp: Text generation temperature (default: 0.7)
                 - waveform_temp: Waveform generation temperature (default: 0.7)
-                
+
         Raises:
             ProviderError: If generation fails.
         """
         await self.initialize()
-        
+
         try:
             from bark import generate_audio
             from scipy.io.wavfile import write as write_wav
-            
+
             # Handle expression marker
             expression = kwargs.get("expression")
             if expression and expression in self.EXPRESSIONS:
                 text = f"{self.EXPRESSIONS[expression]} {text}"
-            
+
             # Get generation parameters
             text_temp = kwargs.get("text_temp", 0.7)
             waveform_temp = kwargs.get("waveform_temp", 0.7)
-            
+
             # Generate audio
             audio_array = await asyncio.to_thread(
                 generate_audio,
@@ -221,59 +220,62 @@ class BarkProvider(BaseProvider):
                 text_temp=text_temp,
                 waveform_temp=waveform_temp,
             )
-            
+
             # Convert to int16 for WAV output
             audio_int16 = (audio_array * 32767).astype(np.int16)
-            
+
             # Save audio
             output_file = Path(output_path)
             output_file.parent.mkdir(parents=True, exist_ok=True)
-            
+
             write_wav(str(output_file), self._sample_rate, audio_int16)
-            
+
         except Exception as e:
             raise ProviderError(f"Bark generation failed: {e}")
-    
-    async def list_voices(self, language: Optional[str] = None) -> List[Voice]:
+
+    async def list_voices(self, language: str | None = None) -> list[Voice]:
         """
         List available speaker presets.
-        
+
         Args:
             language: Filter by language code (e.g., "en", "zh").
-            
+
         Returns:
             List of available voices.
         """
         voices = []
-        
+
         languages = [language] if language else self.SPEAKER_PRESETS.keys()
-        
+
         for lang in languages:
             if lang not in self.SPEAKER_PRESETS:
                 continue
-                
+
             for preset in self.SPEAKER_PRESETS[lang]:
                 # Determine gender (default to neutral if unknown)
                 gender = self.SPEAKER_GENDERS.get(preset, Gender.NEUTRAL)
-                
+
                 # Extract speaker number for name
                 speaker_num = preset.split("_")[-1]
-                
-                voices.append(Voice(
-                    id=preset,
-                    name=f"Bark {lang.upper()} Speaker {speaker_num}",
-                    gender=gender,
-                    language=lang,
-                    provider=ProviderType.BARK,
-                    supports_cloning=False,
-                ))
-        
+
+                voices.append(
+                    Voice(
+                        id=preset,
+                        name=f"Bark {lang.upper()} Speaker {speaker_num}",
+                        gender=gender,
+                        language=lang,
+                        provider=ProviderType.BARK,
+                        supports_cloning=False,
+                    )
+                )
+
         return voices
-    
+
     async def check_availability(self) -> bool:
         """Check if Bark is available."""
         try:
             import bark
+
             return True
         except ImportError:
             return False
@@ -281,10 +283,10 @@ class BarkProvider(BaseProvider):
     async def validate_config(self) -> None:
         """
         Validate the provider configuration.
-        
+
         Bark doesn't require API keys or special configuration,
         so this just verifies the bark library is available.
-        
+
         Raises:
             ProviderError: If bark library is not installed.
         """
@@ -293,24 +295,24 @@ class BarkProvider(BaseProvider):
                 "Bark is not installed. Install with: "
                 "pip install git+https://github.com/suno-ai/bark.git"
             )
-    
-    def get_expressions(self) -> Dict[str, str]:
+
+    def get_expressions(self) -> dict[str, str]:
         """
         Get available expression markers.
-        
+
         Returns:
             Dictionary of expression names to markers.
         """
         return self.EXPRESSIONS.copy()
-    
+
     def add_expression_to_text(self, text: str, expression: str) -> str:
         """
         Add an expression marker to text.
-        
+
         Args:
             text: Original text.
             expression: Expression name (laugh, sigh, etc.).
-            
+
         Returns:
             Text with expression marker prepended.
         """

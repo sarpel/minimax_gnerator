@@ -28,21 +28,18 @@ wakegen generate --provider my-plugin --text "hello"
 
 from __future__ import annotations
 
-import sys
 import logging
-from typing import Dict, List, Optional, Type, Any
-from importlib.metadata import entry_points, EntryPoint
+import sys
+from importlib.metadata import EntryPoint, entry_points
+from typing import Any
 
+from wakegen.core.exceptions import ConfigError
 from wakegen.plugins.base import (
-    TTSPlugin,
-    PluginMetadata,
     LoadedPlugin,
     PluginLoadError,
-    PluginValidationError,
+    PluginMetadata,
+    TTSPlugin,
 )
-from wakegen.core.types import ProviderType
-from wakegen.core.exceptions import ConfigError
-
 
 # =============================================================================
 # MODULE STATE
@@ -56,7 +53,7 @@ logger = logging.getLogger(__name__)
 PLUGIN_ENTRY_POINT_GROUP = "wakegen.plugins"
 
 # Cache of loaded plugins: {plugin_name: LoadedPlugin}
-_loaded_plugins: Dict[str, LoadedPlugin] = {}
+_loaded_plugins: dict[str, LoadedPlugin] = {}
 
 # Flag to track if initial discovery has been done
 _discovery_done: bool = False
@@ -67,23 +64,23 @@ _discovery_done: bool = False
 # =============================================================================
 
 
-def discover_plugins(force_reload: bool = False) -> List[LoadedPlugin]:
+def discover_plugins(force_reload: bool = False) -> list[LoadedPlugin]:
     """
     Discover and load all installed wakegen plugins.
-    
+
     This scans the Python environment for packages that registered entry points
     under the "wakegen.plugins" group. Each discovered plugin is loaded and
     made available for use.
-    
+
     Results are cached - subsequent calls return the cached list unless
     force_reload=True is passed.
-    
+
     Args:
         force_reload: If True, re-scan for plugins even if already done.
-    
+
     Returns:
         List of LoadedPlugin objects for all discovered plugins.
-    
+
     Example:
         plugins = discover_plugins()
         for plugin in plugins:
@@ -91,20 +88,24 @@ def discover_plugins(force_reload: bool = False) -> List[LoadedPlugin]:
                 print(f"Found: {plugin.name} v{plugin.metadata.version}")
     """
     global _discovery_done, _loaded_plugins
-    
+
     # Return cached results if already discovered
     if _discovery_done and not force_reload:
         return list(_loaded_plugins.values())
-    
+
     # Clear cache if reloading
     if force_reload:
         _loaded_plugins.clear()
-    
+
     logger.info(
         "Discovering plugins from entry point group",
-        extra={"component": "plugin_discovery", "action": "discover", "group": PLUGIN_ENTRY_POINT_GROUP}
+        extra={
+            "component": "plugin_discovery",
+            "action": "discover",
+            "group": PLUGIN_ENTRY_POINT_GROUP,
+        },
     )
-    
+
     # Get all entry points in our group
     # Issue 17 fix: Explicit version check instead of try/except
     # Python 3.10+ changed entry_points() API to accept group parameter
@@ -114,7 +115,7 @@ def discover_plugins(force_reload: bool = False) -> List[LoadedPlugin]:
     else:
         all_eps = entry_points()
         eps = all_eps.get(PLUGIN_ENTRY_POINT_GROUP, [])
-    
+
     # Load each discovered plugin
     for ep in eps:
         try:
@@ -123,48 +124,62 @@ def discover_plugins(force_reload: bool = False) -> List[LoadedPlugin]:
                 _loaded_plugins[loaded.name] = loaded
                 logger.info(
                     "Plugin loaded successfully",
-                    extra={"component": "plugin_discovery", "action": "load", "plugin_name": loaded.name, "version": loaded.metadata.version}
+                    extra={
+                        "component": "plugin_discovery",
+                        "action": "load",
+                        "plugin_name": loaded.name,
+                        "version": loaded.metadata.version,
+                    },
                 )
         except Exception as e:
             logger.warning(
                 "Failed to load plugin from entry point",
-                extra={"component": "plugin_discovery", "action": "load_failed", "entry_point": ep.name, "error": str(e)}
+                extra={
+                    "component": "plugin_discovery",
+                    "action": "load_failed",
+                    "entry_point": ep.name,
+                    "error": str(e),
+                },
             )
-    
+
     _discovery_done = True
     logger.info(
         "Plugin discovery complete",
-        extra={"component": "plugin_discovery", "action": "complete", "plugins_found": len(_loaded_plugins)}
+        extra={
+            "component": "plugin_discovery",
+            "action": "complete",
+            "plugins_found": len(_loaded_plugins),
+        },
     )
-    
+
     return list(_loaded_plugins.values())
 
 
-def load_plugin(entry_point: EntryPoint) -> Optional[LoadedPlugin]:
+def load_plugin(entry_point: EntryPoint) -> LoadedPlugin | None:
     """
     Load a single plugin from an entry point.
-    
+
     This:
     1. Loads the plugin class from the entry point
     2. Instantiates the plugin
     3. Validates it implements the TTSPlugin protocol
     4. Wraps it in a LoadedPlugin object
-    
+
     Args:
         entry_point: The entry point to load from.
-    
+
     Returns:
         LoadedPlugin if successful, None if loading failed.
-    
+
     Raises:
         PluginLoadError: If the plugin fails to load or validate.
     """
     logger.debug(f"Loading plugin from entry point: {entry_point.name}")
-    
+
     try:
         # Load the plugin class
         plugin_class = entry_point.load()
-        
+
         # Instantiate the plugin
         # Some plugins might need config, so we try with no args first
         try:
@@ -172,26 +187,28 @@ def load_plugin(entry_point: EntryPoint) -> Optional[LoadedPlugin]:
         except TypeError:
             # Plugin might need config argument
             plugin_instance = plugin_class(config=None)
-        
+
         # Verify it implements TTSPlugin protocol
         if not isinstance(plugin_instance, TTSPlugin):
             raise PluginLoadError(
                 f"Plugin '{entry_point.name}' does not implement TTSPlugin protocol. "
                 f"Make sure it has: metadata property, generate(), list_voices(), validate_config()"
             )
-        
+
         # Get metadata
         try:
             metadata = plugin_instance.metadata
         except Exception as e:
-            raise PluginLoadError(f"Failed to get metadata from plugin '{entry_point.name}': {e}")
-        
+            raise PluginLoadError(
+                f"Failed to get metadata from plugin '{entry_point.name}': {e}"
+            )
+
         # Validate metadata
         if not isinstance(metadata, PluginMetadata):
             raise PluginLoadError(
                 f"Plugin '{entry_point.name}' metadata must be a PluginMetadata instance"
             )
-        
+
         # Create LoadedPlugin wrapper
         loaded = LoadedPlugin(
             instance=plugin_instance,
@@ -199,9 +216,9 @@ def load_plugin(entry_point: EntryPoint) -> Optional[LoadedPlugin]:
             entry_point=entry_point.name,
             is_enabled=True,
         )
-        
+
         return loaded
-        
+
     except PluginLoadError:
         raise
     except Exception as e:
@@ -213,12 +230,12 @@ def load_plugin(entry_point: EntryPoint) -> Optional[LoadedPlugin]:
 # =============================================================================
 
 
-def get_loaded_plugins() -> Dict[str, LoadedPlugin]:
+def get_loaded_plugins() -> dict[str, LoadedPlugin]:
     """
     Get all currently loaded plugins.
-    
+
     If plugins haven't been discovered yet, this will trigger discovery.
-    
+
     Returns:
         Dictionary mapping plugin names to LoadedPlugin objects.
     """
@@ -227,13 +244,13 @@ def get_loaded_plugins() -> Dict[str, LoadedPlugin]:
     return _loaded_plugins.copy()
 
 
-def get_plugin(name: str) -> Optional[LoadedPlugin]:
+def get_plugin(name: str) -> LoadedPlugin | None:
     """
     Get a specific loaded plugin by name.
-    
+
     Args:
         name: The plugin name (from metadata.name).
-    
+
     Returns:
         LoadedPlugin if found, None otherwise.
     """
@@ -242,13 +259,13 @@ def get_plugin(name: str) -> Optional[LoadedPlugin]:
     return _loaded_plugins.get(name)
 
 
-def reload_plugins() -> List[LoadedPlugin]:
+def reload_plugins() -> list[LoadedPlugin]:
     """
     Force reload all plugins.
-    
+
     This clears the cache and re-discovers all plugins. Useful after
     installing new plugins without restarting the application.
-    
+
     Returns:
         List of newly loaded plugins.
     """
@@ -263,42 +280,50 @@ def reload_plugins() -> List[LoadedPlugin]:
 def register_plugin_provider(plugin: LoadedPlugin) -> bool:
     """
     Register a loaded plugin as a provider in the wakegen registry.
-    
+
     This creates a wrapper that adapts the plugin to the TTSProvider interface
     used by the main wakegen system, then registers it so it can be used
     just like built-in providers.
-    
+
     Args:
         plugin: The loaded plugin to register.
-    
+
     Returns:
         True if registration succeeded, False otherwise.
     """
-    from wakegen.providers.registry import register_provider, _PROVIDER_REGISTRY
-    
+
     try:
         # Create a dynamic ProviderType for this plugin
         # We'll use a string-based type for plugins
         plugin_type_name = f"plugin:{plugin.name}"
-        
+
         # Create a wrapper class that adapts TTSPlugin to TTSProvider
         wrapper_class = _create_plugin_wrapper_class(plugin)
-        
+
         # For plugins, we need to handle them differently since they're not
         # in the ProviderType enum. We'll store them in a separate dict.
         # Register in a plugins-specific registry
         _register_plugin_to_registry(plugin.name, wrapper_class)
-        
+
         logger.info(
             "Plugin provider registered",
-            extra={"component": "plugin_registry", "action": "register", "plugin_name": plugin.name}
+            extra={
+                "component": "plugin_registry",
+                "action": "register",
+                "plugin_name": plugin.name,
+            },
         )
         return True
-        
+
     except Exception as e:
         logger.error(
             "Failed to register plugin as provider",
-            extra={"component": "plugin_registry", "action": "register_failed", "plugin_name": plugin.name, "error": str(e)}
+            extra={
+                "component": "plugin_registry",
+                "action": "register_failed",
+                "plugin_name": plugin.name,
+                "error": str(e),
+            },
         )
         return False
 
@@ -306,48 +331,48 @@ def register_plugin_provider(plugin: LoadedPlugin) -> bool:
 def _create_plugin_wrapper_class(plugin: LoadedPlugin) -> type:
     """
     Create a wrapper class that adapts a TTSPlugin to the TTSProvider interface.
-    
+
     This is needed because plugins use a slightly different interface than
     built-in providers, and we need to bridge the gap.
     """
-    from wakegen.core.types import ProviderType
     from wakegen.models.config import ProviderConfig
-    
+
     class PluginProviderWrapper:
         """
         Wrapper that adapts a TTSPlugin to work as a TTSProvider.
         """
+
         def __init__(self, config: ProviderConfig):
             self._plugin = plugin.instance
             self._config = config
             self._metadata = plugin.metadata
-        
+
         @property
         def provider_type(self) -> str:
             """Return a string type since plugins aren't in the enum."""
             return f"plugin:{self._metadata.name}"
-        
+
         async def generate(self, text: str, voice_id: str, output_path: str) -> None:
             """Delegate to plugin's generate method."""
             await self._plugin.generate(text, voice_id, output_path)
-        
-        async def list_voices(self) -> List[Any]:
+
+        async def list_voices(self) -> list[Any]:
             """Delegate to plugin's list_voices method."""
             return await self._plugin.list_voices()
-        
+
         async def validate_config(self) -> None:
             """Delegate to plugin's validate_config method."""
             await self._plugin.validate_config()
-    
+
     # Name the class after the plugin for better debugging
     PluginProviderWrapper.__name__ = f"{plugin.name.replace('-', '_')}_wrapper"
     PluginProviderWrapper.__qualname__ = PluginProviderWrapper.__name__
-    
+
     return PluginProviderWrapper
 
 
 # Plugin provider registry (separate from main registry since they're not enum-based)
-_plugin_providers: Dict[str, type] = {}
+_plugin_providers: dict[str, type] = {}
 
 
 def _register_plugin_to_registry(name: str, wrapper_class: type) -> None:
@@ -355,30 +380,30 @@ def _register_plugin_to_registry(name: str, wrapper_class: type) -> None:
     _plugin_providers[name] = wrapper_class
 
 
-def get_plugin_provider(name: str, config: Optional[Any] = None) -> Any:
+def get_plugin_provider(name: str, config: Any | None = None) -> Any:
     """
     Get an instance of a plugin provider by name.
-    
+
     Args:
         name: The plugin name.
         config: Optional provider config.
-    
+
     Returns:
         Instance of the plugin provider wrapper.
-    
+
     Raises:
         ConfigError: If the plugin is not found.
     """
     from wakegen.models.config import ProviderConfig
-    
+
     if name not in _plugin_providers:
         raise ConfigError(f"Plugin provider not found: {name}")
-    
+
     wrapper_class = _plugin_providers[name]
     return wrapper_class(config or ProviderConfig())
 
 
-def list_plugin_providers() -> List[str]:
+def list_plugin_providers() -> list[str]:
     """Get list of registered plugin provider names."""
     return list(_plugin_providers.keys())
 
@@ -391,24 +416,24 @@ def list_plugin_providers() -> List[str]:
 def auto_register_plugins() -> int:
     """
     Discover and register all plugins as providers.
-    
+
     This is a convenience function that:
     1. Discovers all installed plugins
     2. Registers each as a provider
-    
+
     Call this once at startup to make all plugins available.
-    
+
     Returns:
         Number of successfully registered plugins.
     """
     plugins = discover_plugins()
     registered = 0
-    
+
     for plugin in plugins:
         if plugin.is_enabled:
             if register_plugin_provider(plugin):
                 registered += 1
-    
+
     return registered
 
 

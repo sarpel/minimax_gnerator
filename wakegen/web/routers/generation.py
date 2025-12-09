@@ -20,14 +20,12 @@ real-time progress updates via WebSocket.
         - wakegen.providers.registry (provider instances)
 """
 
-import asyncio
 import logging
 import uuid
 from datetime import datetime
-from typing import Dict, List, Optional
 from enum import Enum
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -42,23 +40,29 @@ logger = logging.getLogger(__name__)
 
 class JobStatus(str, Enum):
     """Possible states for a generation job."""
-    PENDING = "pending"      # Job created, waiting to start
-    RUNNING = "running"      # Generation in progress
+
+    PENDING = "pending"  # Job created, waiting to start
+    RUNNING = "running"  # Generation in progress
     COMPLETED = "completed"  # Finished successfully
-    FAILED = "failed"        # Error occurred
+    FAILED = "failed"  # Error occurred
     CANCELLED = "cancelled"  # User cancelled
 
 
 class GenerationJob(BaseModel):
     """Represents a generation job and its current state."""
+
     id: str = Field(..., description="Unique job identifier")
     status: JobStatus = Field(..., description="Current job status")
     created_at: datetime = Field(..., description="When job was created")
-    started_at: Optional[datetime] = Field(default=None, description="When execution started")
-    completed_at: Optional[datetime] = Field(default=None, description="When job finished")
+    started_at: datetime | None = Field(
+        default=None, description="When execution started"
+    )
+    completed_at: datetime | None = Field(
+        default=None, description="When job finished"
+    )
 
     # Configuration
-    wake_words: List[str] = Field(..., description="Wake words to generate")
+    wake_words: list[str] = Field(..., description="Wake words to generate")
     count: int = Field(..., description="Samples per word")
     provider: str = Field(..., description="TTS provider to use")
     output_dir: str = Field(..., description="Output directory")
@@ -66,9 +70,13 @@ class GenerationJob(BaseModel):
     # Progress
     total_samples: int = Field(default=0, description="Total samples to generate")
     completed_samples: int = Field(default=0, description="Samples generated so far")
-    current_word: Optional[str] = Field(default=None, description="Current wake word")
-    current_file: Optional[str] = Field(default=None, description="Current file being generated")
-    error_message: Optional[str] = Field(default=None, description="Error message if failed")
+    current_word: str | None = Field(default=None, description="Current wake word")
+    current_file: str | None = Field(
+        default=None, description="Current file being generated"
+    )
+    error_message: str | None = Field(
+        default=None, description="Error message if failed"
+    )
 
     @property
     def progress_percentage(self) -> float:
@@ -80,10 +88,10 @@ class GenerationJob(BaseModel):
 
 # In-memory job storage
 # Maps job_id -> GenerationJob
-_jobs: Dict[str, GenerationJob] = {}
+_jobs: dict[str, GenerationJob] = {}
 
 
-def get_job(job_id: str) -> Optional[GenerationJob]:
+def get_job(job_id: str) -> GenerationJob | None:
     """Get a job by ID."""
     return _jobs.get(job_id)
 
@@ -93,7 +101,7 @@ def save_job(job: GenerationJob) -> None:
     _jobs[job.id] = job
 
 
-def list_jobs(limit: int = 10) -> List[GenerationJob]:
+def list_jobs(limit: int = 10) -> list[GenerationJob]:
     """List recent jobs, newest first."""
     jobs = list(_jobs.values())
     jobs.sort(key=lambda j: j.created_at, reverse=True)
@@ -107,16 +115,18 @@ def list_jobs(limit: int = 10) -> List[GenerationJob]:
 
 class GenerationRequest(BaseModel):
     """Request to start a new generation job."""
-    wake_words: List[str] = Field(..., description="Words to generate samples for")
+
+    wake_words: list[str] = Field(..., description="Words to generate samples for")
     count: int = Field(10, ge=1, le=1000, description="Samples per wake word")
     provider: str = Field("edge_tts", description="TTS provider ID")
-    voice_id: Optional[str] = Field(None, description="Specific voice to use")
+    voice_id: str | None = Field(None, description="Specific voice to use")
     output_dir: str = Field("./output", description="Where to save files")
-    languages: Optional[List[str]] = Field(None, description="Language filter")
+    languages: list[str] | None = Field(None, description="Language filter")
 
 
 class GenerationResponse(BaseModel):
     """Response when starting a generation job."""
+
     job_id: str = Field(..., description="Unique job identifier")
     status: JobStatus = Field(..., description="Initial job status")
     message: str = Field(..., description="Status message")
@@ -125,23 +135,25 @@ class GenerationResponse(BaseModel):
 
 class JobStatusResponse(BaseModel):
     """Detailed status of a generation job."""
+
     id: str
     status: JobStatus
     progress_percentage: float
     completed_samples: int
     total_samples: int
-    current_word: Optional[str]
-    current_file: Optional[str]
-    error_message: Optional[str]
+    current_word: str | None
+    current_file: str | None
+    error_message: str | None
     created_at: datetime
-    started_at: Optional[datetime]
-    completed_at: Optional[datetime]
+    started_at: datetime | None
+    completed_at: datetime | None
 
 
 class RecentJobSummary(BaseModel):
     """Brief summary of a job for the dashboard."""
+
     id: str
-    wake_words: List[str]
+    wake_words: list[str]
     status: JobStatus
     completed_samples: int
     total_samples: int
@@ -180,10 +192,11 @@ async def run_generation_job(job_id: str) -> None:
         save_job(job)
 
         # Import generation dependencies
-        from wakegen.providers.registry import get_provider, check_provider_availability
-        from wakegen.core.types import ProviderType
-        from wakegen.config.settings import get_provider_config, get_generation_config
         import os
+
+        from wakegen.config.settings import get_provider_config
+        from wakegen.core.types import ProviderType
+        from wakegen.providers.registry import check_provider_availability, get_provider
 
         # Validate provider
         try:
@@ -198,7 +211,9 @@ async def run_generation_job(job_id: str) -> None:
         availability = check_provider_availability(provider_type)
         if not availability.is_available:
             job.status = JobStatus.FAILED
-            job.error_message = f"Provider not available: {availability.missing_dependencies}"
+            job.error_message = (
+                f"Provider not available: {availability.missing_dependencies}"
+            )
             job.completed_at = datetime.now()
             save_job(job)
             return
@@ -220,7 +235,7 @@ async def run_generation_job(job_id: str) -> None:
         # We use multiple voices to create variation in the output
         english_voices = [v for v in voices if v.language.startswith("en-")]
         available_voices = english_voices if english_voices else voices
-        
+
         # Log how many voices we have for variation
         logger.info(f"Using {len(available_voices)} voices for variation")
 
@@ -237,21 +252,20 @@ async def run_generation_job(job_id: str) -> None:
             job.current_word = wake_word
 
             # Create subdirectory for this wake word
-            word_dir = os.path.join(
-                job.output_dir,
-                wake_word.replace(" ", "_").lower()
-            )
+            word_dir = os.path.join(job.output_dir, wake_word.replace(" ", "_").lower())
             os.makedirs(word_dir, exist_ok=True)
 
             for i in range(job.count):
                 sample_index += 1
-                
+
                 # VOICE ROTATION: Cycle through available voices to create variation
                 # This prevents all samples from having the same audio (identical hash)
                 voice_index = (sample_index - 1) % len(available_voices)
                 voice = available_voices[voice_index]
-                
-                filename = f"{wake_word.replace(' ', '_').lower()}_{sample_index:04d}.wav"
+
+                filename = (
+                    f"{wake_word.replace(' ', '_').lower()}_{sample_index:04d}.wav"
+                )
                 file_path = os.path.join(word_dir, filename)
 
                 job.current_file = filename
@@ -272,7 +286,9 @@ async def run_generation_job(job_id: str) -> None:
         job.current_file = None
         save_job(job)
 
-        logger.info(f"Job {job_id} completed: {job.completed_samples}/{job.total_samples} samples")
+        logger.info(
+            f"Job {job_id} completed: {job.completed_samples}/{job.total_samples} samples"
+        )
 
     except Exception as e:
         logger.error(f"Job {job_id} failed: {e}")
@@ -291,13 +307,10 @@ router = APIRouter()
 
 
 @router.post(
-    "/start",
-    response_model=GenerationResponse,
-    summary="Start generation job"
+    "/start", response_model=GenerationResponse, summary="Start generation job"
 )
 async def start_generation(
-    request: GenerationRequest,
-    background_tasks: BackgroundTasks
+    request: GenerationRequest, background_tasks: BackgroundTasks
 ) -> GenerationResponse:
     """
     Start a new audio generation job.
@@ -324,7 +337,7 @@ async def start_generation(
         count=request.count,
         provider=request.provider,
         output_dir=request.output_dir,
-        total_samples=len(request.wake_words) * request.count
+        total_samples=len(request.wake_words) * request.count,
     )
     save_job(job)
 
@@ -335,14 +348,12 @@ async def start_generation(
         job_id=job_id,
         status=JobStatus.PENDING,
         message=f"Generation job started for {len(request.wake_words)} wake words",
-        websocket_url=f"/ws/progress/{job_id}"
+        websocket_url=f"/ws/progress/{job_id}",
     )
 
 
 @router.get(
-    "/status/{job_id}",
-    response_model=JobStatusResponse,
-    summary="Get job status"
+    "/status/{job_id}", response_model=JobStatusResponse, summary="Get job status"
 )
 async def get_job_status(job_id: str) -> JobStatusResponse:
     """
@@ -365,14 +376,11 @@ async def get_job_status(job_id: str) -> JobStatusResponse:
         error_message=job.error_message,
         created_at=job.created_at,
         started_at=job.started_at,
-        completed_at=job.completed_at
+        completed_at=job.completed_at,
     )
 
 
-@router.post(
-    "/cancel/{job_id}",
-    summary="Cancel running job"
-)
+@router.post("/cancel/{job_id}", summary="Cancel running job")
 async def cancel_job(job_id: str) -> dict[str, str]:
     """
     Cancel a running generation job.
@@ -394,13 +402,9 @@ async def cancel_job(job_id: str) -> dict[str, str]:
 
 
 @router.get(
-    "/recent",
-    response_model=List[RecentJobSummary],
-    summary="List recent jobs"
+    "/recent", response_model=list[RecentJobSummary], summary="List recent jobs"
 )
-async def get_recent_jobs(
-    limit: int = 10
-) -> List[RecentJobSummary]:
+async def get_recent_jobs(limit: int = 10) -> list[RecentJobSummary]:
     """
     Get a list of recent generation jobs for the dashboard.
 
@@ -415,7 +419,7 @@ async def get_recent_jobs(
             status=job.status,
             completed_samples=job.completed_samples,
             total_samples=job.total_samples,
-            created_at=job.created_at
+            created_at=job.created_at,
         )
         for job in jobs
     ]

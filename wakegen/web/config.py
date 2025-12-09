@@ -28,8 +28,8 @@ and automatic validation.
         WAKEGEN_WEB_RELOAD=true         # Enable auto-reload
 """
 
+
 from pydantic_settings import BaseSettings
-from typing import Optional
 
 
 class WebConfig(BaseSettings):
@@ -130,6 +130,7 @@ class WebConfig(BaseSettings):
         case_sensitive: Environment variable names are case-insensitive
                        So WAKEGEN_WEB_PORT and wakegen_web_port both work.
         """
+
         env_prefix = "WAKEGEN_WEB_"
         case_sensitive = False
 
@@ -137,7 +138,7 @@ class WebConfig(BaseSettings):
 # Create a global instance with default settings
 # This can be imported and used directly: from wakegen.web.config import settings
 # Or you can create a new WebConfig() with custom values
-_settings: Optional[WebConfig] = None
+_settings: WebConfig | None = None
 
 
 def get_settings() -> WebConfig:

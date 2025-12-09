@@ -6,14 +6,11 @@ for dataset quality analysis using Plotly and Jinja2 templating.
 
 from __future__ import annotations
 
-import asyncio
-import json
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Any
 
-import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -21,13 +18,18 @@ from jinja2 import Environment, FileSystemLoader
 from pydantic import BaseModel, Field
 
 from wakegen.core.exceptions import QualityAssuranceError
-from wakegen.quality.statistics import calculate_dataset_statistics, DatasetStatisticsResult
+from wakegen.quality.statistics import (
+    DatasetStatisticsResult,
+    calculate_dataset_statistics,
+)
 
 # Suppress plotly warnings for cleaner output
 warnings.filterwarnings("ignore", category=UserWarning, module="plotly")
 
+
 class ReportGenerationError(QualityAssuranceError):
     """Custom exception for report generation failures."""
+
 
 @dataclass
 class ReportGenerationResult:
@@ -36,29 +38,43 @@ class ReportGenerationResult:
     report_path: Path
     statistics: DatasetStatisticsResult
     generation_time_seconds: float
-    error_message: Optional[str] = None
+    error_message: str | None = None
+
 
 class ReportGenerationConfig(BaseModel):
     """Configuration for report generation."""
 
     # Visualization settings
-    plotly_theme: str = Field(default="plotly_white", description="Plotly theme for visualizations")
+    plotly_theme: str = Field(
+        default="plotly_white", description="Plotly theme for visualizations"
+    )
     color_scheme: str = Field(default="viridis", description="Color scheme for charts")
-    interactive_charts: bool = Field(default=True, description="Enable interactive charts")
+    interactive_charts: bool = Field(
+        default=True, description="Enable interactive charts"
+    )
 
     # Content settings
-    include_detailed_tables: bool = Field(default=True, description="Include detailed data tables")
-    include_sample_analysis: bool = Field(default=True, description="Include individual sample analysis")
-    max_samples_in_report: int = Field(default=50, description="Maximum samples to include in detailed analysis")
+    include_detailed_tables: bool = Field(
+        default=True, description="Include detailed data tables"
+    )
+    include_sample_analysis: bool = Field(
+        default=True, description="Include individual sample analysis"
+    )
+    max_samples_in_report: int = Field(
+        default=50, description="Maximum samples to include in detailed analysis"
+    )
 
     # Template settings
-    template_name: str = Field(default="default_report.html", description="Jinja2 template name")
-    custom_css: Optional[str] = Field(default=None, description="Custom CSS for report")
+    template_name: str = Field(
+        default="default_report.html", description="Jinja2 template name"
+    )
+    custom_css: str | None = Field(default=None, description="Custom CSS for report")
+
 
 async def generate_report(
     dataset_path: str | Path,
     output_path: str | Path,
-    config: Optional[ReportGenerationConfig] = None
+    config: ReportGenerationConfig | None = None,
 ) -> ReportGenerationResult:
     """Generate comprehensive HTML report with interactive visualizations.
 
@@ -76,6 +92,7 @@ async def generate_report(
         ReportGenerationError: If report generation fails
     """
     import time
+
     start_time = time.time()
 
     if config is None:
@@ -106,15 +123,15 @@ async def generate_report(
             report_path=output_path,
             statistics=stats_result,
             generation_time_seconds=generation_time,
-            error_message=None
+            error_message=None,
         )
 
     except Exception as e:
-        raise ReportGenerationError(f"Report generation failed: {str(e)}") from e
+        raise ReportGenerationError(f"Report generation failed: {e!s}") from e
+
 
 async def _generate_report_content(
-    stats_result: DatasetStatisticsResult,
-    config: ReportGenerationConfig
+    stats_result: DatasetStatisticsResult, config: ReportGenerationConfig
 ) -> str:
     """Generate complete HTML report content.
 
@@ -127,6 +144,7 @@ async def _generate_report_content(
     """
     # Set up Plotly theme
     import plotly.io as pio
+
     pio.templates.default = config.plotly_theme
 
     # Generate all visualizations
@@ -143,16 +161,16 @@ async def _generate_report_content(
         "visualizations": visualizations,
         "data_tables": data_tables,
         "config": config,
-        "metadata": _format_metadata_for_report(stats_result.metadata)
+        "metadata": _format_metadata_for_report(stats_result.metadata),
     }
 
     # Generate HTML using Jinja2 template
     return _render_jinja2_template(context, config)
 
+
 async def _generate_visualizations(
-    stats_result: DatasetStatisticsResult,
-    config: ReportGenerationConfig
-) -> Dict[str, str]:
+    stats_result: DatasetStatisticsResult, config: ReportGenerationConfig
+) -> dict[str, str]:
     """Generate all interactive visualizations for the report.
 
     Args:
@@ -165,38 +183,41 @@ async def _generate_visualizations(
     visualizations = {}
 
     # Duration distribution histogram
-    if hasattr(stats_result.detailed_stats, 'duration'):
+    if hasattr(stats_result.detailed_stats, "duration"):
         visualizations["duration_histogram"] = _create_duration_histogram(
             stats_result.detailed_stats, config
         )
 
     # Quality score distribution
-    if hasattr(stats_result.detailed_stats, 'quality_score'):
+    if hasattr(stats_result.detailed_stats, "quality_score"):
         visualizations["quality_distribution"] = _create_quality_distribution(
             stats_result.detailed_stats, config
         )
 
     # SNR vs Quality scatter plot
-    if (hasattr(stats_result.detailed_stats, 'snr_db') and
-        hasattr(stats_result.detailed_stats, 'quality_score')):
+    if hasattr(stats_result.detailed_stats, "snr_db") and hasattr(
+        stats_result.detailed_stats, "quality_score"
+    ):
         visualizations["snr_quality_scatter"] = _create_snr_quality_scatter(
             stats_result.detailed_stats, config
         )
 
     # Component scores breakdown
-    if (hasattr(stats_result.detailed_stats, 'clarity_score') and
-        hasattr(stats_result.detailed_stats, 'naturalness_score')):
+    if hasattr(stats_result.detailed_stats, "clarity_score") and hasattr(
+        stats_result.detailed_stats, "naturalness_score"
+    ):
         visualizations["component_scores"] = _create_component_scores_chart(
             stats_result.detailed_stats, config
         )
 
     # File size distribution
-    if hasattr(stats_result.detailed_stats, 'file_size'):
+    if hasattr(stats_result.detailed_stats, "file_size"):
         visualizations["file_size_distribution"] = _create_file_size_distribution(
             stats_result.detailed_stats, config
         )
 
     return visualizations
+
 
 def _create_duration_histogram(df: pd.DataFrame, config: ReportGenerationConfig) -> str:
     """Create duration distribution histogram.
@@ -214,18 +235,19 @@ def _create_duration_histogram(df: pd.DataFrame, config: ReportGenerationConfig)
         nbins=50,
         title="Duration Distribution",
         labels={"duration": "Duration (seconds)", "count": "Frequency"},
-        color_discrete_sequence=[px.colors.qualitative.Plotly[0]]
+        color_discrete_sequence=[px.colors.qualitative.Plotly[0]],
     )
 
     fig.update_layout(
-        showlegend=False,
-        hovermode="x unified",
-        template=config.plotly_theme
+        showlegend=False, hovermode="x unified", template=config.plotly_theme
     )
 
     return str(fig.to_html(full_html=False, include_plotlyjs="cdn"))
 
-def _create_quality_distribution(df: pd.DataFrame, config: ReportGenerationConfig) -> str:
+
+def _create_quality_distribution(
+    df: pd.DataFrame, config: ReportGenerationConfig
+) -> str:
     """Create quality score distribution chart.
 
     Args:
@@ -241,7 +263,7 @@ def _create_quality_distribution(df: pd.DataFrame, config: ReportGenerationConfi
         nbins=20,
         title="Quality Score Distribution",
         labels={"quality_score": "Quality Score", "count": "Frequency"},
-        color_discrete_sequence=[px.colors.qualitative.Plotly[1]]
+        color_discrete_sequence=[px.colors.qualitative.Plotly[1]],
     )
 
     # Add vertical line for average
@@ -250,18 +272,19 @@ def _create_quality_distribution(df: pd.DataFrame, config: ReportGenerationConfi
         x=avg_quality,
         line_dash="dash",
         line_color="red",
-        annotation_text=f"Avg: {avg_quality:.3f}"
+        annotation_text=f"Avg: {avg_quality:.3f}",
     )
 
     fig.update_layout(
-        showlegend=False,
-        hovermode="x unified",
-        template=config.plotly_theme
+        showlegend=False, hovermode="x unified", template=config.plotly_theme
     )
 
     return str(fig.to_html(full_html=False, include_plotlyjs="cdn"))
 
-def _create_snr_quality_scatter(df: pd.DataFrame, config: ReportGenerationConfig) -> str:
+
+def _create_snr_quality_scatter(
+    df: pd.DataFrame, config: ReportGenerationConfig
+) -> str:
     """Create SNR vs Quality scatter plot.
 
     Args:
@@ -279,17 +302,17 @@ def _create_snr_quality_scatter(df: pd.DataFrame, config: ReportGenerationConfig
         labels={"snr_db": "SNR (dB)", "quality_score": "Quality Score"},
         color="quality_score",
         color_continuous_scale=config.color_scheme,
-        opacity=0.6
+        opacity=0.6,
     )
 
-    fig.update_layout(
-        hovermode="closest",
-        template=config.plotly_theme
-    )
+    fig.update_layout(hovermode="closest", template=config.plotly_theme)
 
     return str(fig.to_html(full_html=False, include_plotlyjs="cdn"))
 
-def _create_component_scores_chart(df: pd.DataFrame, config: ReportGenerationConfig) -> str:
+
+def _create_component_scores_chart(
+    df: pd.DataFrame, config: ReportGenerationConfig
+) -> str:
     """Create component scores breakdown chart.
 
     Args:
@@ -305,30 +328,35 @@ def _create_component_scores_chart(df: pd.DataFrame, config: ReportGenerationCon
         "Naturalness": df["naturalness_score"].mean(),
         "Diversity": df["diversity_score"].mean(),
         "Technical": df["technical_score"].mean(),
-        "Overall": df["quality_score"].mean()
+        "Overall": df["quality_score"].mean(),
     }
 
     fig = go.Figure()
 
-    fig.add_trace(go.Bar(
-        x=list(component_scores.keys()),
-        y=list(component_scores.values()),
-        marker_color=px.colors.qualitative.Plotly,
-        text=[f"{v:.3f}" for v in component_scores.values()],
-        textposition="auto"
-    ))
+    fig.add_trace(
+        go.Bar(
+            x=list(component_scores.keys()),
+            y=list(component_scores.values()),
+            marker_color=px.colors.qualitative.Plotly,
+            text=[f"{v:.3f}" for v in component_scores.values()],
+            textposition="auto",
+        )
+    )
 
     fig.update_layout(
         title="Average Component Scores",
         xaxis_title="Component",
         yaxis_title="Score",
         yaxis_range=[0, 1],
-        template=config.plotly_theme
+        template=config.plotly_theme,
     )
 
     return str(fig.to_html(full_html=False, include_plotlyjs="cdn"))
 
-def _create_file_size_distribution(df: pd.DataFrame, config: ReportGenerationConfig) -> str:
+
+def _create_file_size_distribution(
+    df: pd.DataFrame, config: ReportGenerationConfig
+) -> str:
     """Create file size distribution chart.
 
     Args:
@@ -347,21 +375,19 @@ def _create_file_size_distribution(df: pd.DataFrame, config: ReportGenerationCon
         nbins=30,
         title="File Size Distribution",
         labels={"size_kb": "File Size (KB)", "count": "Frequency"},
-        color_discrete_sequence=[px.colors.qualitative.Plotly[2]]
+        color_discrete_sequence=[px.colors.qualitative.Plotly[2]],
     )
 
     fig.update_layout(
-        showlegend=False,
-        hovermode="x unified",
-        template=config.plotly_theme
+        showlegend=False, hovermode="x unified", template=config.plotly_theme
     )
 
     return str(fig.to_html(full_html=False, include_plotlyjs="cdn"))
 
+
 def _generate_data_tables(
-    stats_result: DatasetStatisticsResult,
-    config: ReportGenerationConfig
-) -> Dict[str, str]:
+    stats_result: DatasetStatisticsResult, config: ReportGenerationConfig
+) -> dict[str, str]:
     """Generate HTML data tables for the report.
 
     Args:
@@ -374,57 +400,82 @@ def _generate_data_tables(
     tables = {}
 
     # Sample rate distribution table
-    sample_rate_df = pd.DataFrame([
-        {"Sample Rate (Hz)": k, "Count": v, "Percentage": f"{(v/stats_result.file_count*100):.1f}%"}
-        for k, v in stats_result.sample_rate_distribution.items()
-    ])
+    sample_rate_df = pd.DataFrame(
+        [
+            {
+                "Sample Rate (Hz)": k,
+                "Count": v,
+                "Percentage": f"{(v/stats_result.file_count*100):.1f}%",
+            }
+            for k, v in stats_result.sample_rate_distribution.items()
+        ]
+    )
 
     tables["sample_rate_table"] = sample_rate_df.to_html(
-        index=False,
-        classes="table table-striped table-hover"
+        index=False, classes="table table-striped table-hover"
     )
 
     # Quality distribution table
-    quality_df = pd.DataFrame([
-        {"Quality Range": k, "Count": v, "Percentage": f"{(v/stats_result.file_count*100):.1f}%"}
-        for k, v in stats_result.quality_score_distribution.items()
-    ])
+    quality_df = pd.DataFrame(
+        [
+            {
+                "Quality Range": k,
+                "Count": v,
+                "Percentage": f"{(v/stats_result.file_count*100):.1f}%",
+            }
+            for k, v in stats_result.quality_score_distribution.items()
+        ]
+    )
 
     tables["quality_table"] = quality_df.to_html(
-        index=False,
-        classes="table table-striped table-hover"
+        index=False, classes="table table-striped table-hover"
     )
 
     # SNR distribution table
-    snr_df = pd.DataFrame([
-        {"SNR Range (dB)": k, "Count": v, "Percentage": f"{(v/stats_result.file_count*100):.1f}%"}
-        for k, v in stats_result.snr_distribution.items()
-    ])
+    snr_df = pd.DataFrame(
+        [
+            {
+                "SNR Range (dB)": k,
+                "Count": v,
+                "Percentage": f"{(v/stats_result.file_count*100):.1f}%",
+            }
+            for k, v in stats_result.snr_distribution.items()
+        ]
+    )
 
     tables["snr_table"] = snr_df.to_html(
-        index=False,
-        classes="table table-striped table-hover"
+        index=False, classes="table table-striped table-hover"
     )
 
     # File size distribution table
-    size_df = pd.DataFrame([
-        {"Size Range (bytes)": k, "Count": v, "Percentage": f"{(v/stats_result.file_count*100):.1f}%"}
-        for k, v in stats_result.file_size_distribution.items()
-    ])
+    size_df = pd.DataFrame(
+        [
+            {
+                "Size Range (bytes)": k,
+                "Count": v,
+                "Percentage": f"{(v/stats_result.file_count*100):.1f}%",
+            }
+            for k, v in stats_result.file_size_distribution.items()
+        ]
+    )
 
     tables["size_table"] = size_df.to_html(
-        index=False,
-        classes="table table-striped table-hover"
+        index=False, classes="table table-striped table-hover"
     )
 
     # Sample analysis table (limited)
-    if (config.include_sample_analysis and stats_result.detailed_stats is not None and
-        len(stats_result.detailed_stats) > 0):
-
-        sample_df = stats_result.detailed_stats[[
-            "file_name", "duration", "quality_score",
-            "snr_db", "is_valid"
-        ]].head(config.max_samples_in_report).copy()
+    if (
+        config.include_sample_analysis
+        and stats_result.detailed_stats is not None
+        and len(stats_result.detailed_stats) > 0
+    ):
+        sample_df = (
+            stats_result.detailed_stats[
+                ["file_name", "duration", "quality_score", "snr_db", "is_valid"]
+            ]
+            .head(config.max_samples_in_report)
+            .copy()
+        )
 
         # Format values
         sample_df["duration"] = sample_df["duration"].round(2)
@@ -433,13 +484,13 @@ def _generate_data_tables(
         sample_df["is_valid"] = sample_df["is_valid"].apply(lambda x: "✓" if x else "✗")
 
         tables["sample_table"] = sample_df.to_html(
-            index=False,
-            classes="table table-striped table-hover table-sm"
+            index=False, classes="table table-striped table-hover table-sm"
         )
 
     return tables
 
-def _format_metadata_for_report(metadata: Dict[str, Any]) -> Dict[str, str]:
+
+def _format_metadata_for_report(metadata: dict[str, Any]) -> dict[str, str]:
     """Format metadata for report display.
 
     Args:
@@ -460,7 +511,10 @@ def _format_metadata_for_report(metadata: Dict[str, Any]) -> Dict[str, str]:
 
     return formatted
 
-def _render_jinja2_template(context: Dict[str, Any], config: ReportGenerationConfig) -> str:
+
+def _render_jinja2_template(
+    context: dict[str, Any], config: ReportGenerationConfig
+) -> str:
     """Render HTML report using Jinja2 template.
 
     Args:
@@ -482,6 +536,7 @@ def _render_jinja2_template(context: Dict[str, Any], config: ReportGenerationCon
         template = env.from_string(template_content)
 
     return template.render(**context)
+
 
 def _get_default_template() -> str:
     """Get default HTML template for report.

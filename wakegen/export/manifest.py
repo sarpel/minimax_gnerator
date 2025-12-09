@@ -1,16 +1,16 @@
 from __future__ import annotations
+
 import json
-from pathlib import Path
-from typing import List, Dict, Any
 import logging
+from pathlib import Path
+from typing import Any
 
 # We use 'logging' to print messages to the console in a structured way.
 logger = logging.getLogger(__name__)
 
+
 async def generate_manifest(
-    directory: str,
-    output_file: str,
-    include_metadata: bool = True
+    directory: str, output_file: str, include_metadata: bool = True
 ) -> None:
     """
     Generates a generic JSON manifest for a directory of audio files.
@@ -33,15 +33,15 @@ async def generate_manifest(
 
     # We look for common audio extensions
     audio_extensions = {".wav", ".mp3", ".flac", ".ogg"}
-    files_data: List[Dict[str, Any]] = []
+    files_data: list[dict[str, Any]] = []
 
     # rglob('*') searches recursively (in all subfolders)
     for file_path in dir_path.rglob("*"):
         if file_path.suffix.lower() in audio_extensions:
-            file_info: Dict[str, Any] = {
+            file_info: dict[str, Any] = {
                 "path": str(file_path.absolute()),
                 "filename": file_path.name,
-                "relative_path": str(file_path.relative_to(dir_path))
+                "relative_path": str(file_path.relative_to(dir_path)),
             }
 
             if include_metadata:

@@ -1,20 +1,20 @@
 from __future__ import annotations
+
+import asyncio
 import os
 import tempfile
-import subprocess
-import asyncio
-from typing import List, Any, Optional
-from pathlib import Path
 from functools import lru_cache
+from typing import Any
 
-from wakegen.core.types import ProviderType, Gender
 from wakegen.core.exceptions import ProviderError
+from wakegen.core.types import Gender, ProviderType
+from wakegen.models.audio import Voice
 from wakegen.providers.base import BaseProvider
 from wakegen.providers.registry import register_provider
-from wakegen.models.audio import Voice
 
 # We implement the 'BaseProvider' class to create our Piper TTS provider.
 # Piper is a CPU-friendly, fast inference TTS engine with Turkish language support.
+
 
 class PiperTTSProvider(BaseProvider):
     """
@@ -30,7 +30,7 @@ class PiperTTSProvider(BaseProvider):
         super().__init__(config)
         # Issue 16 fix: No longer using unbounded dict cache
         # Voice caching is now handled by @lru_cache decorator on _load_voice_model
-        self._piper_executable: Optional[str] = None
+        self._piper_executable: str | None = None
 
     @property
     def provider_type(self) -> ProviderType:
@@ -46,15 +46,18 @@ class PiperTTSProvider(BaseProvider):
             # NOTE: The package is 'piper-tts' but the import is 'piper'
             import piper  # noqa: F401
         except ImportError:
-            raise ProviderError("Piper TTS library is not installed. Please install with: pip install piper-tts")
+            raise ProviderError(
+                "Piper TTS library is not installed. Please install with: pip install piper-tts"
+            )
 
         # Check if we can find the piper executable
         # Issue 6 fix: Using async subprocess instead of blocking subprocess.run
         try:
             proc = await asyncio.create_subprocess_exec(
-                "piper", "--help",
+                "piper",
+                "--help",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             try:
                 await asyncio.wait_for(proc.communicate(), timeout=5.0)
@@ -75,6 +78,7 @@ class PiperTTSProvider(BaseProvider):
         """
         try:
             from piper.download import ensure_voice_exists
+
             # Use the official download method if available
             ensure_voice_exists("en_US-lessac-medium")
         except ImportError:
@@ -84,7 +88,7 @@ class PiperTTSProvider(BaseProvider):
                 "Install with: pip install piper-tts"
             ) from None
         except Exception as e:
-            raise ProviderError(f"Failed to ensure Piper is available: {str(e)}") from e
+            raise ProviderError(f"Failed to ensure Piper is available: {e!s}") from e
 
     async def generate(self, text: str, voice_id: str, output_path: str) -> None:
         """
@@ -110,12 +114,16 @@ class PiperTTSProvider(BaseProvider):
                     return
                 except ProviderError as python_api_error:
                     # If both methods fail, raise the subprocess error as it's more likely to be the primary issue
-                    raise ProviderError(f"Piper TTS generation failed with both methods. Subprocess error: {str(subprocess_error)}, Python API error: {str(python_api_error)}")
+                    raise ProviderError(
+                        f"Piper TTS generation failed with both methods. Subprocess error: {subprocess_error!s}, Python API error: {python_api_error!s}"
+                    )
 
         except Exception as e:
-            raise ProviderError(f"Piper TTS generation failed: {str(e)}") from e
+            raise ProviderError(f"Piper TTS generation failed: {e!s}") from e
 
-    async def _generate_with_subprocess(self, text: str, voice_id: str, output_path: str) -> None:
+    async def _generate_with_subprocess(
+        self, text: str, voice_id: str, output_path: str
+    ) -> None:
         """
         Generate audio using Piper CLI directly (primary method).
 
@@ -126,18 +134,14 @@ class PiperTTSProvider(BaseProvider):
         """
         try:
             # Build the Piper CLI command - exactly as requested
-            cmd = [
-                "piper",
-                "--model", voice_id,
-                "--output_file", output_path
-            ]
+            cmd = ["piper", "--model", voice_id, "--output_file", output_path]
 
             # Run Piper CLI as a subprocess
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
 
             # Send the text to Piper via stdin and get the result
@@ -149,11 +153,15 @@ class PiperTTSProvider(BaseProvider):
                 raise ProviderError(f"Piper failed: {error_msg}")
 
         except FileNotFoundError:
-            raise ProviderError("Piper executable not found. Please ensure Piper is installed correctly.")
+            raise ProviderError(
+                "Piper executable not found. Please ensure Piper is installed correctly."
+            )
         except Exception as e:
-            raise ProviderError(f"Piper subprocess generation failed: {str(e)}") from e
+            raise ProviderError(f"Piper subprocess generation failed: {e!s}") from e
 
-    async def _generate_with_python_api(self, text: str, voice_id: str, output_path: str) -> None:
+    async def _generate_with_python_api(
+        self, text: str, voice_id: str, output_path: str
+    ) -> None:
         """
         Generate audio using Piper Python API (fallback method).
 
@@ -164,7 +172,6 @@ class PiperTTSProvider(BaseProvider):
         """
         try:
             # Import Piper modules (correct import is 'piper', not 'piper_tts')
-            from piper.voice import PiperVoice
 
             # Get or download the voice model
             voice = await self._get_piper_voice(voice_id)
@@ -176,9 +183,9 @@ class PiperTTSProvider(BaseProvider):
             try:
                 # Synthesize the audio using Piper's API
                 wav_data = voice.synthesize(text)
-                
+
                 # Write WAV data to temp file
-                with open(temp_path, 'wb') as f:
+                with open(temp_path, "wb") as f:
                     f.write(wav_data)
 
                 # Move the temporary file to the final location
@@ -188,10 +195,12 @@ class PiperTTSProvider(BaseProvider):
                 # Clean up temp file if synthesis failed
                 if os.path.exists(temp_path):
                     os.unlink(temp_path)
-                raise ProviderError(f"Piper TTS synthesis failed: {str(synth_error)}") from synth_error
+                raise ProviderError(
+                    f"Piper TTS synthesis failed: {synth_error!s}"
+                ) from synth_error
 
         except Exception as e:
-            raise ProviderError(f"Piper Python API generation failed: {str(e)}") from e
+            raise ProviderError(f"Piper Python API generation failed: {e!s}") from e
 
     async def _get_piper_voice(self, voice_id: str) -> Any:
         """
@@ -202,7 +211,7 @@ class PiperTTSProvider(BaseProvider):
 
         Returns:
             The PiperVoice object ready for synthesis
-            
+
         Note:
             Issue 16: Voice models are cached using @lru_cache (maxsize=5)
             to prevent unlimited memory growth. Least recently used models
@@ -210,13 +219,13 @@ class PiperTTSProvider(BaseProvider):
         """
         # Delegate to cached loader
         return await self._load_voice_model(voice_id)
-    
+
     @staticmethod
     @lru_cache(maxsize=5)
     def _load_voice_model(voice_id: str) -> Any:
         """
         Load and cache a Piper voice model (LRU cache with max 5 models).
-        
+
         This is a static method so @lru_cache works properly.
         The cache will automatically evict least recently used models.
         """
@@ -228,9 +237,11 @@ class PiperTTSProvider(BaseProvider):
             return voice
 
         except Exception as e:
-            raise ProviderError(f"Failed to load Piper voice {voice_id}: {str(e)}") from e
+            raise ProviderError(
+                f"Failed to load Piper voice {voice_id}: {e!s}"
+            ) from e
 
-    async def list_voices(self) -> List[Voice]:
+    async def list_voices(self) -> list[Voice]:
         """
         Lists available voices from Piper TTS.
         Returns a list of voices with Turkish support highlighted.
@@ -244,35 +255,35 @@ class PiperTTSProvider(BaseProvider):
                     "name": "Turkish Female (DFKI Medium)",
                     "gender": "female",
                     "language": "tr-TR",
-                    "provider": self.provider_type
+                    "provider": self.provider_type,
                 },
                 {
                     "id": "tr_TR-dfki-x_low",
                     "name": "Turkish Female (DFKI X-Low)",
                     "gender": "female",
                     "language": "tr-TR",
-                    "provider": self.provider_type
+                    "provider": self.provider_type,
                 },
                 {
                     "id": "tr_TR-dfki-x_high",
                     "name": "Turkish Female (DFKI X-High)",
                     "gender": "female",
                     "language": "tr-TR",
-                    "provider": self.provider_type
+                    "provider": self.provider_type,
                 },
                 {
                     "id": "tr_TR-dfki-low",
                     "name": "Turkish Female (DFKI Low)",
                     "gender": "female",
                     "language": "tr-TR",
-                    "provider": self.provider_type
+                    "provider": self.provider_type,
                 },
                 {
                     "id": "tr_TR-dfki-high",
                     "name": "Turkish Female (DFKI High)",
                     "gender": "female",
                     "language": "tr-TR",
-                    "provider": self.provider_type
+                    "provider": self.provider_type,
                 },
                 # Additional Turkish voice models added for enhanced support
                 {
@@ -280,34 +291,36 @@ class PiperTTSProvider(BaseProvider):
                     "name": "Turkish Female (DFKI Fast)",
                     "gender": "female",
                     "language": "tr-TR",
-                    "provider": self.provider_type
+                    "provider": self.provider_type,
                 },
                 {
                     "id": "tr_TR-dfki-slow",
                     "name": "Turkish Female (DFKI Slow)",
                     "gender": "female",
                     "language": "tr-TR",
-                    "provider": self.provider_type
-                }
+                    "provider": self.provider_type,
+                },
             ]
 
             # Convert to our Voice model
             voice_list = []
             for v in turkish_voices:
                 gender = Gender.FEMALE if v["gender"] == "female" else Gender.MALE
-                voice_list.append(Voice(
-                    id=v["id"],
-                    name=v["name"],
-                    gender=gender,
-                    language=v["language"],
-                    provider=self.provider_type,
-                    supports_cloning=False
-                ))
+                voice_list.append(
+                    Voice(
+                        id=v["id"],
+                        name=v["name"],
+                        gender=gender,
+                        language=v["language"],
+                        provider=self.provider_type,
+                        supports_cloning=False,
+                    )
+                )
 
             return voice_list
 
         except Exception as e:
-            raise ProviderError(f"Failed to list Piper voices: {str(e)}") from e
+            raise ProviderError(f"Failed to list Piper voices: {e!s}") from e
 
     async def validate_config(self) -> None:
         """
@@ -317,7 +330,10 @@ class PiperTTSProvider(BaseProvider):
         try:
             await self._ensure_piper_available()
         except Exception as e:
-            raise ProviderError(f"Piper TTS configuration validation failed: {str(e)}") from e
+            raise ProviderError(
+                f"Piper TTS configuration validation failed: {e!s}"
+            ) from e
+
 
 # Register this provider so the factory knows about it
 register_provider(ProviderType.PIPER, PiperTTSProvider)

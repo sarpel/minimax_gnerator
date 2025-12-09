@@ -23,11 +23,9 @@ It enables audio playback, waveform data generation, and file management.
 import logging
 import os
 from pathlib import Path
-from typing import List, Optional
-import base64
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -40,37 +38,47 @@ logger = logging.getLogger(__name__)
 
 class AudioFileInfo(BaseModel):
     """Information about an audio file."""
+
     filename: str = Field(..., description="File name")
     path: str = Field(..., description="Relative path")
     size_bytes: int = Field(..., description="File size in bytes")
-    duration_seconds: Optional[float] = Field(default=None, description="Duration if available")
-    sample_rate: Optional[int] = Field(default=None, description="Sample rate if available")
+    duration_seconds: float | None = Field(
+        default=None, description="Duration if available"
+    )
+    sample_rate: int | None = Field(
+        default=None, description="Sample rate if available"
+    )
 
 
 class AudioFileList(BaseModel):
     """List of audio files in a directory."""
+
     directory: str
-    files: List[AudioFileInfo]
+    files: list[AudioFileInfo]
     total_count: int
 
 
 class WaveformData(BaseModel):
     """Waveform data for visualization."""
+
     filename: str
-    samples: List[float] = Field(..., description="Normalized amplitude values (-1 to 1)")
+    samples: list[float] = Field(
+        ..., description="Normalized amplitude values (-1 to 1)"
+    )
     duration_seconds: float
     sample_rate: int
 
 
 class AudioMetadata(BaseModel):
     """Detailed metadata for an audio file."""
+
     filename: str
     path: str
     format: str
     duration_seconds: float
     sample_rate: int
     channels: int
-    bit_depth: Optional[int] = None
+    bit_depth: int | None = None
     size_bytes: int
 
 
@@ -82,14 +90,10 @@ class AudioMetadata(BaseModel):
 router = APIRouter()
 
 
-@router.get(
-    "/files",
-    response_model=AudioFileList,
-    summary="List audio files"
-)
+@router.get("/files", response_model=AudioFileList, summary="List audio files")
 async def list_audio_files(
     directory: str = Query("./output", description="Directory to list"),
-    extension: str = Query("wav", description="File extension to filter")
+    extension: str = Query("wav", description="File extension to filter"),
 ) -> AudioFileList:
     """
     List all audio files in the specified directory.
@@ -102,31 +106,29 @@ async def list_audio_files(
         raise HTTPException(status_code=404, detail=f"Directory not found: {directory}")
 
     if not dir_path.is_dir():
-        raise HTTPException(status_code=400, detail=f"Path is not a directory: {directory}")
+        raise HTTPException(
+            status_code=400, detail=f"Path is not a directory: {directory}"
+        )
 
     files = []
     for file_path in dir_path.rglob(f"*.{extension}"):
         try:
             stat = file_path.stat()
-            files.append(AudioFileInfo(
-                filename=file_path.name,
-                path=str(file_path.relative_to(dir_path)),
-                size_bytes=stat.st_size
-            ))
+            files.append(
+                AudioFileInfo(
+                    filename=file_path.name,
+                    path=str(file_path.relative_to(dir_path)),
+                    size_bytes=stat.st_size,
+                )
+            )
         except Exception as e:
             logger.warning(f"Error reading file {file_path}: {e}")
 
-    return AudioFileList(
-        directory=directory,
-        files=files,
-        total_count=len(files)
-    )
+    return AudioFileList(directory=directory, files=files, total_count=len(files))
 
 
 @router.get(
-    "/play/{file_path:path}",
-    summary="Stream audio file",
-    response_class=FileResponse
+    "/play/{file_path:path}", summary="Stream audio file", response_class=FileResponse
 )
 async def play_audio(file_path: str) -> FileResponse:
     """
@@ -145,7 +147,7 @@ async def play_audio(file_path: str) -> FileResponse:
     """
     # Resolve the path (prevents directory traversal attacks)
     path = Path(file_path).resolve()
-    
+
     # SECURITY: Validate that the resolved path is within the allowed directory
     # This prevents path traversal attacks (e.g., accessing /etc/passwd)
     allowed_base = Path("./output").resolve()
@@ -154,15 +156,12 @@ async def play_audio(file_path: str) -> FileResponse:
         # This ensures users can only access files in the output directory
         if not path.is_relative_to(allowed_base):
             raise HTTPException(
-                status_code=403, 
-                detail="Access denied: File must be within the output directory"
+                status_code=403,
+                detail="Access denied: File must be within the output directory",
             )
     except ValueError:
         # is_relative_to can raise ValueError on Windows with different drives
-        raise HTTPException(
-            status_code=403,
-            detail="Access denied: Invalid file path"
-        )
+        raise HTTPException(status_code=403, detail="Access denied: Invalid file path")
 
     # Basic security check - ensure it's a real file
     if not path.exists():
@@ -178,25 +177,23 @@ async def play_audio(file_path: str) -> FileResponse:
         ".mp3": "audio/mpeg",
         ".ogg": "audio/ogg",
         ".flac": "audio/flac",
-        ".m4a": "audio/mp4"
+        ".m4a": "audio/mp4",
     }
     content_type = content_types.get(extension, "application/octet-stream")
 
-    return FileResponse(
-        path=str(path),
-        media_type=content_type,
-        filename=path.name
-    )
+    return FileResponse(path=str(path), media_type=content_type, filename=path.name)
 
 
 @router.get(
     "/waveform/{file_path:path}",
     response_model=WaveformData,
-    summary="Get waveform data"
+    summary="Get waveform data",
 )
 async def get_waveform(
     file_path: str,
-    num_samples: int = Query(200, ge=50, le=1000, description="Number of waveform points")
+    num_samples: int = Query(
+        200, ge=50, le=1000, description="Number of waveform points"
+    ),
 ) -> WaveformData:
     """
     Generate waveform data for audio visualization.
@@ -244,8 +241,8 @@ async def get_waveform(
         # Calculate RMS for each chunk
         waveform_samples = []
         for i in range(0, len(y), chunk_size):
-            chunk = y[i:i + chunk_size]
-            rms = np.sqrt(np.mean(chunk ** 2))
+            chunk = y[i : i + chunk_size]
+            rms = np.sqrt(np.mean(chunk**2))
             waveform_samples.append(float(rms))
 
         # Truncate to exact number of samples
@@ -260,23 +257,21 @@ async def get_waveform(
             filename=path.name,
             samples=waveform_samples,
             duration_seconds=duration,
-            sample_rate=int(sr)
+            sample_rate=int(sr),
         )
 
     except ImportError:
         raise HTTPException(
             status_code=500,
-            detail="librosa not installed. Install with: pip install librosa"
+            detail="librosa not installed. Install with: pip install librosa",
         )
     except Exception as e:
         logger.error(f"Error generating waveform: {e}")
-        raise HTTPException(status_code=500, detail=f"Error processing audio: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing audio: {e!s}")
 
 
 @router.get(
-    "/info/{file_path:path}",
-    response_model=AudioMetadata,
-    summary="Get audio metadata"
+    "/info/{file_path:path}", response_model=AudioMetadata, summary="Get audio metadata"
 )
 async def get_audio_info(file_path: str) -> AudioMetadata:
     """
@@ -301,23 +296,17 @@ async def get_audio_info(file_path: str) -> AudioMetadata:
             duration_seconds=info.duration,
             sample_rate=info.samplerate,
             channels=info.channels,
-            size_bytes=path.stat().st_size
+            size_bytes=path.stat().st_size,
         )
 
     except ImportError:
-        raise HTTPException(
-            status_code=500,
-            detail="soundfile not installed"
-        )
+        raise HTTPException(status_code=500, detail="soundfile not installed")
     except Exception as e:
         logger.error(f"Error reading audio info: {e}")
-        raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error reading file: {e!s}")
 
 
-@router.delete(
-    "/{file_path:path}",
-    summary="Delete audio file"
-)
+@router.delete("/{file_path:path}", summary="Delete audio file")
 async def delete_audio(file_path: str) -> dict[str, str]:
     """
     Delete an audio file.
@@ -341,4 +330,4 @@ async def delete_audio(file_path: str) -> dict[str, str]:
         return {"message": f"Deleted {path.name}", "path": file_path}
     except Exception as e:
         logger.error(f"Error deleting file: {e}")
-        raise HTTPException(status_code=500, detail=f"Error deleting: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting: {e!s}")

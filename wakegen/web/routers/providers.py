@@ -32,21 +32,20 @@ and test audio generation.
 """
 
 import logging
-from typing import List, Optional, Dict, Any, Dict, Any
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from wakegen.config.settings import get_provider_config
+from wakegen.core.types import ProviderType
+
 # Import existing provider functionality from the codebase
 from wakegen.providers.registry import (
-    discover_available_providers,
     check_provider_availability,
+    discover_available_providers,
     get_provider,
-    ProviderInfo,
 )
-from wakegen.core.types import ProviderType
-from wakegen.models.audio import Voice
-from wakegen.config.settings import get_provider_config
 
 # Set up logging for this module
 logger = logging.getLogger(__name__)
@@ -87,14 +86,14 @@ class ProviderResponse(BaseModel):
     is_available: bool = Field(..., description="Whether provider is usable")
     requires_gpu: bool = Field(False, description="Requires GPU for inference")
     requires_api_key: bool = Field(False, description="Requires API key")
-    missing_dependencies: List[str] = Field(
-        default_factory=list,
-        description="List of missing dependencies"
+    missing_dependencies: list[str] = Field(
+        default_factory=list, description="List of missing dependencies"
     )
-    install_hint: Optional[str] = Field(None, description="Installation instructions")
+    install_hint: str | None = Field(None, description="Installation instructions")
 
     class Config:
         """Pydantic config for this model."""
+
         # Allow creating from ORM objects or dataclasses
         from_attributes = True
 
@@ -127,7 +126,7 @@ class TestGenerationRequest(BaseModel):
     """
 
     text: str = Field("Hello, this is a test.", description="Text to synthesize")
-    voice_id: Optional[str] = Field(None, description="Voice ID to use (optional)")
+    voice_id: str | None = Field(None, description="Voice ID to use (optional)")
 
 
 class TestGenerationResponse(BaseModel):
@@ -137,7 +136,7 @@ class TestGenerationResponse(BaseModel):
 
     success: bool = Field(..., description="Whether generation succeeded")
     message: str = Field(..., description="Result message")
-    audio_url: Optional[str] = Field(default=None, description="URL to play the audio")
+    audio_url: str | None = Field(default=None, description="URL to play the audio")
 
 
 # =============================================================================
@@ -151,16 +150,15 @@ router = APIRouter()
 
 @router.get(
     "/",
-    response_model=List[ProviderResponse],
+    response_model=list[ProviderResponse],
     summary="List all TTS providers",
-    description="Returns information about all supported TTS providers and their availability status."
+    description="Returns information about all supported TTS providers and their availability status.",
 )
 async def list_providers(
     available_only: bool = Query(
-        False,
-        description="If true, only return providers that are ready to use"
+        False, description="If true, only return providers that are ready to use"
     )
-) -> List[ProviderResponse]:
+) -> list[ProviderResponse]:
     """
     List all TTS providers with their availability status.
 
@@ -212,18 +210,22 @@ async def list_providers(
     for p in providers:
         # Get the provider type enum value as the ID
         # ProviderInfo has a 'type' field that's a ProviderType enum
-        provider_id = p.type.value if hasattr(p, 'type') else p.name.lower().replace(' ', '_')
+        provider_id = (
+            p.type.value if hasattr(p, "type") else p.name.lower().replace(" ", "_")
+        )
 
-        result.append(ProviderResponse(
-            id=provider_id,
-            name=p.name,
-            description=p.description,
-            is_available=p.is_available,
-            requires_gpu=p.requires_gpu,
-            requires_api_key=p.requires_api_key,
-            missing_dependencies=p.missing_dependencies or [],
-            install_hint=p.install_hint
-        ))
+        result.append(
+            ProviderResponse(
+                id=provider_id,
+                name=p.name,
+                description=p.description,
+                is_available=p.is_available,
+                requires_gpu=p.requires_gpu,
+                requires_api_key=p.requires_api_key,
+                missing_dependencies=p.missing_dependencies or [],
+                install_hint=p.install_hint,
+            )
+        )
 
     return result
 
@@ -231,7 +233,7 @@ async def list_providers(
 @router.get(
     "/summary",
     response_model=ProviderSummaryResponse,
-    summary="Get provider summary for dashboard"
+    summary="Get provider summary for dashboard",
 )
 async def get_provider_summary() -> ProviderSummaryResponse:
     """
@@ -244,15 +246,14 @@ async def get_provider_summary() -> ProviderSummaryResponse:
     available = sum(1 for p in providers if p.is_available)
 
     return ProviderSummaryResponse(
-        available_count=available,
-        total_count=len(providers)
+        available_count=available, total_count=len(providers)
     )
 
 
 @router.get(
     "/{provider_id}/status",
     response_model=ProviderResponse,
-    summary="Check provider availability"
+    summary="Check provider availability",
 )
 async def get_provider_status(provider_id: str) -> ProviderResponse:
     """
@@ -276,10 +277,7 @@ async def get_provider_status(provider_id: str) -> ProviderResponse:
     try:
         provider_type = ProviderType(provider_id.lower())
     except ValueError:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Unknown provider: {provider_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Unknown provider: {provider_id}")
 
     # Check availability using existing function
     info = check_provider_availability(provider_type)
@@ -292,28 +290,24 @@ async def get_provider_status(provider_id: str) -> ProviderResponse:
         requires_gpu=info.requires_gpu,
         requires_api_key=info.requires_api_key,
         missing_dependencies=info.missing_dependencies or [],
-        install_hint=info.install_hint
+        install_hint=info.install_hint,
     )
 
 
 @router.get(
     "/{provider_id}/voices",
-    response_model=List[VoiceResponse],
-    summary="List voices for a provider"
+    response_model=list[VoiceResponse],
+    summary="List voices for a provider",
 )
 async def list_provider_voices(
     provider_id: str,
-    language: Optional[str] = Query(
-        None,
-        description="Filter by language code (e.g., tr-TR, en-US)"
+    language: str | None = Query(
+        None, description="Filter by language code (e.g., tr-TR, en-US)"
     ),
     limit: int = Query(
-        100,
-        ge=1,
-        le=500,
-        description="Maximum number of voices to return"
-    )
-) -> List[VoiceResponse]:
+        100, ge=1, le=500, description="Maximum number of voices to return"
+    ),
+) -> list[VoiceResponse]:
     """
     List available voices for a specific TTS provider.
 
@@ -342,10 +336,7 @@ async def list_provider_voices(
     try:
         provider_type = ProviderType(provider_id.lower())
     except ValueError:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Unknown provider: {provider_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Unknown provider: {provider_id}")
 
     # Check if provider is available
     info = check_provider_availability(provider_type)
@@ -353,7 +344,7 @@ async def list_provider_voices(
         raise HTTPException(
             status_code=503,
             detail=f"Provider {provider_id} is not available. "
-                   f"Missing: {', '.join(info.missing_dependencies or ['unknown'])}"
+            f"Missing: {', '.join(info.missing_dependencies or ['unknown'])}",
         )
 
     # Get provider instance
@@ -366,10 +357,7 @@ async def list_provider_voices(
 
         # Filter by language if requested
         if language:
-            voices = [
-                v for v in voices
-                if language.lower() in v.language.lower()
-            ]
+            voices = [v for v in voices if language.lower() in v.language.lower()]
 
         # Apply limit
         voices = voices[:limit]
@@ -377,30 +365,23 @@ async def list_provider_voices(
         # Convert to response models
         return [
             VoiceResponse(
-                id=v.id,
-                name=v.name,
-                language=v.language,
-                gender=v.gender.value
+                id=v.id, name=v.name, language=v.language, gender=v.gender.value
             )
             for v in voices
         ]
 
     except Exception as e:
         logger.error(f"Error listing voices for {provider_id}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error fetching voices: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error fetching voices: {e!s}")
 
 
 @router.post(
     "/{provider_id}/test",
     response_model=TestGenerationResponse,
-    summary="Test TTS generation"
+    summary="Test TTS generation",
 )
 async def test_provider(
-    provider_id: str,
-    request: TestGenerationRequest
+    provider_id: str, request: TestGenerationRequest
 ) -> TestGenerationResponse:
     """
     Generate a test audio sample to verify the provider works.
@@ -431,17 +412,13 @@ async def test_provider(
     try:
         provider_type = ProviderType(provider_id.lower())
     except ValueError:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Unknown provider: {provider_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Unknown provider: {provider_id}")
 
     # Check availability
     info = check_provider_availability(provider_type)
     if not info.is_available:
         raise HTTPException(
-            status_code=503,
-            detail=f"Provider {provider_id} is not available"
+            status_code=503, detail=f"Provider {provider_id} is not available"
         )
 
     try:
@@ -456,45 +433,44 @@ async def test_provider(
             voices = await provider.list_voices()
             if not voices:
                 return TestGenerationResponse(
-                    success=False,
-                    message="No voices available for this provider"
+                    success=False, message="No voices available for this provider"
                 )
             voice_id = voices[0].id
 
         # Generate to a test directory
-        from pathlib import Path
         import time
-        
+        from pathlib import Path
+
         # Use output/test_samples directory
         output_dir = Path("./output/test_samples")
         output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         filename = f"test_{provider_id}_{int(time.time())}.wav"
         file_path = output_dir / filename
-        
+
         await provider.generate(request.text, voice_id, str(file_path))
 
         # Return a URL that the audio router can handle
         # The audio router expects a file path encoded in the URL
         # We'll use the absolute path to be safe, or relative to cwd
         abs_path = file_path.resolve()
-        
+
         # URL encode the path for the API call
         from urllib.parse import quote
+
         encoded_path = quote(str(abs_path))
         audio_url = f"/api/audio/play/{encoded_path}"
 
         return TestGenerationResponse(
             success=True,
             message=f"Successfully generated test audio with voice {voice_id}",
-            audio_url=audio_url
+            audio_url=audio_url,
         )
 
     except Exception as e:
         logger.error(f"Test generation failed for {provider_id}: {e}")
         return TestGenerationResponse(
-            success=False,
-            message=f"Generation failed: {str(e)}"
+            success=False, message=f"Generation failed: {e!s}"
         )
 
 
@@ -504,16 +480,19 @@ async def test_provider(
 # Some providers (like Bark) can't be installed via pip from PyPI and require
 # special installation commands. This endpoint allows installing them via GUI.
 
+
 class InstallProviderRequest(BaseModel):
     """Request schema for installing a special provider."""
+
     provider_id: str = Field(..., description="Provider ID to install")
 
 
 class InstallProviderResponse(BaseModel):
     """Response schema for provider installation."""
+
     success: bool = Field(..., description="Whether installation succeeded")
     message: str = Field(..., description="Installation result message")
-    output: Optional[str] = Field(default=None, description="Installation output")
+    output: str | None = Field(default=None, description="Installation output")
 
 
 # Dictionary of special providers that require non-standard installation.
@@ -580,54 +559,55 @@ SPECIAL_PROVIDERS = {
 }
 
 
-@router.get(
-    "/special",
-    summary="List special providers requiring manual installation"
-)
-async def list_special_providers() -> List[Dict[str, Any]]:
+@router.get("/special", summary="List special providers requiring manual installation")
+async def list_special_providers() -> list[dict[str, Any]]:
     """
     List providers that require special installation (not in pyproject.toml).
-    
+
     These providers can be installed via the POST /install endpoint.
     """
     import importlib.util
-    
+
     result = []
     for provider_id, info in SPECIAL_PROVIDERS.items():
         # Check if already installed by trying to import
         is_installed = importlib.util.find_spec(info["check_import"]) is not None
-        
-        result.append({
-            "id": provider_id,
-            "name": info["name"],
-            "description": info["description"],
-            "install_command": info["install_command"],
-            "is_installed": is_installed,
-        })
-    
+
+        result.append(
+            {
+                "id": provider_id,
+                "name": info["name"],
+                "description": info["description"],
+                "install_command": info["install_command"],
+                "is_installed": is_installed,
+            }
+        )
+
     return result
 
 
 @router.post(
     "/install",
     response_model=InstallProviderResponse,
-    summary="Install a special provider"
+    summary="Install a special provider",
 )
-async def install_special_provider(request: InstallProviderRequest) -> InstallProviderResponse:
+async def install_special_provider(
+    request: InstallProviderRequest,
+) -> InstallProviderResponse:
     """
     Install a special provider that requires non-PyPI installation.
-    
+
     This runs the installation command in a subprocess and returns the result.
     Use this for providers like Bark that need to be installed from GitHub.
-    
+
         REQUEST BODY:
         =============
         provider_id: The ID of the provider to install (e.g., "bark")
-        
+
         RETURNS:
         ========
         InstallProviderResponse: Success status and installation output
-        
+
         SECURITY NOTE:
         ==============
         This only allows installing from the predefined SPECIAL_PROVIDERS list.
@@ -635,22 +615,22 @@ async def install_special_provider(request: InstallProviderRequest) -> InstallPr
     """
     import subprocess
     import sys
-    
+
     provider_id = request.provider_id.lower()
-    
+
     # Validate provider is in our allowed list
     if provider_id not in SPECIAL_PROVIDERS:
         return InstallProviderResponse(
             success=False,
             message=f"Unknown provider: {provider_id}. "
-                    f"Available: {', '.join(SPECIAL_PROVIDERS.keys())}"
+            f"Available: {', '.join(SPECIAL_PROVIDERS.keys())}",
         )
-    
+
     provider_info = SPECIAL_PROVIDERS[provider_id]
     install_command = provider_info["install_command"]
-    
+
     logger.info(f"Installing special provider {provider_id}: {install_command}")
-    
+
     try:
         # =====================================================================
         # WINDOWS-COMPATIBLE INSTALLATION
@@ -658,10 +638,10 @@ async def install_special_provider(request: InstallProviderRequest) -> InstallPr
         # Using sys.executable ensures we use the SAME Python interpreter
         # that's running this script, avoiding issues where 'pip' might point
         # to a different Python installation on Windows.
-        # 
+        #
         # shell=True is required on Windows for commands with special chars
         # like '+' in git URLs (e.g., git+https://...)
-        
+
         # Build command using current Python interpreter
         if install_command.startswith("pip "):
             # Replace 'pip' with 'python -m pip' using current interpreter
@@ -669,9 +649,9 @@ async def install_special_provider(request: InstallProviderRequest) -> InstallPr
             full_command = f'"{sys.executable}" -m pip {pip_args}'
         else:
             full_command = install_command
-        
+
         logger.info(f"Running: {full_command}")
-        
+
         # Run with shell=True for Windows compatibility with special characters
         process = subprocess.run(
             full_command,
@@ -680,44 +660,45 @@ async def install_special_provider(request: InstallProviderRequest) -> InstallPr
             text=True,
             timeout=600,  # 10 minute timeout for large packages
         )
-        
+
         if process.returncode == 0:
             logger.info(f"Successfully installed {provider_id}")
-            
+
             # Clear the provider availability cache so the new install is detected
             # This is imported at runtime to avoid circular imports
             try:
                 from wakegen.providers.registry import clear_availability_cache
+
                 clear_availability_cache()
                 logger.info("Cleared provider availability cache")
             except ImportError:
                 pass  # Cache clearing is optional
-            
+
             return InstallProviderResponse(
                 success=True,
                 message=f"Successfully installed {provider_info['name']}! "
-                        "Please restart the server to use this provider.",
-                output=process.stdout[-1000:] if process.stdout else None  # Last 1000 chars
+                "Please restart the server to use this provider.",
+                output=process.stdout[-1000:]
+                if process.stdout
+                else None,  # Last 1000 chars
             )
         else:
             logger.error(f"Installation failed for {provider_id}: {process.stderr}")
             return InstallProviderResponse(
                 success=False,
-                message=f"Installation failed. See output for details.",
-                output=process.stderr[-1000:] if process.stderr else None
+                message="Installation failed. See output for details.",
+                output=process.stderr[-1000:] if process.stderr else None,
             )
-            
+
     except subprocess.TimeoutExpired:
         logger.error(f"Installation timed out for {provider_id}")
         return InstallProviderResponse(
             success=False,
             message="Installation timed out after 10 minutes. "
-                    "Try running the command manually in a terminal."
+            "Try running the command manually in a terminal.",
         )
     except Exception as e:
         logger.error(f"Installation error for {provider_id}: {e}")
         return InstallProviderResponse(
-            success=False,
-            message=f"Installation error: {str(e)}"
+            success=False, message=f"Installation error: {e!s}"
         )
-

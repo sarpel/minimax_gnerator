@@ -13,17 +13,17 @@ Features:
 
 from __future__ import annotations
 
-import asyncio
-import aiosqlite
 import json
-import os
 import time
-from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
-from wakegen.models.generation import GenerationParameters, GenerationResult
+import aiosqlite
+
 from wakegen.core.exceptions import GenerationError
+from wakegen.models.generation import GenerationParameters, GenerationResult
+
 
 @dataclass
 class CheckpointConfig:
@@ -34,9 +34,11 @@ class CheckpointConfig:
         cleanup_interval: Interval for cleaning up old checkpoints (seconds)
         max_checkpoints: Maximum number of checkpoints to keep
     """
+
     db_path: str = "checkpoints.db"
     cleanup_interval: int = 3600  # 1 hour
     max_checkpoints: int = 10
+
 
 class CheckpointManager:
     """SQLite-based checkpoint manager for generation progress.
@@ -56,7 +58,7 @@ class CheckpointManager:
             config: Checkpoint configuration
         """
         self.config = config
-        self._db: Optional[aiosqlite.Connection] = None
+        self._db: aiosqlite.Connection | None = None
         self._last_cleanup: float = 0
 
     async def _get_connection(self) -> aiosqlite.Connection:
@@ -78,23 +80,23 @@ class CheckpointManager:
 
         return self._db
 
-    async def __aenter__(self) -> 'CheckpointManager':
+    async def __aenter__(self) -> CheckpointManager:
         """Async context manager entry.
-        
+
         Issue 14: Enables 'async with CheckpointManager(...) as cm:' pattern
         for automatic resource cleanup.
-        
+
         Returns:
             Self for use in context
         """
         await self._get_connection()
         return self
-    
+
     async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
-        exc_tb: object
+        exc_tb: object,
     ) -> None:
         """Async context manager exit.
 
@@ -106,10 +108,10 @@ class CheckpointManager:
             exc_tb: Exception traceback if an error occurred
         """
         await self.close()
-    
+
     async def close(self) -> None:
         """Close database connection and release resources.
-        
+
         Issue 14: Explicit cleanup method for graceful shutdown.
         """
         if self._db is not None:
@@ -121,7 +123,8 @@ class CheckpointManager:
         db = await self._get_connection()
 
         # Create checkpoints table
-        await db.execute("""
+        await db.execute(
+            """
         CREATE TABLE IF NOT EXISTS checkpoints (
             id TEXT PRIMARY KEY,
             session_id TEXT NOT NULL,
@@ -133,10 +136,12 @@ class CheckpointManager:
             completed_tasks INTEGER NOT NULL,
             config_json TEXT NOT NULL
         )
-        """)
+        """
+        )
 
         # Create tasks table
-        await db.execute("""
+        await db.execute(
+            """
         CREATE TABLE IF NOT EXISTS tasks (
             id TEXT PRIMARY KEY,
             checkpoint_id TEXT NOT NULL,
@@ -149,11 +154,16 @@ class CheckpointManager:
             updated_at INTEGER NOT NULL,
             FOREIGN KEY (checkpoint_id) REFERENCES checkpoints(id)
         )
-        """)
+        """
+        )
 
         # Create index for faster lookups
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_checkpoint_session ON checkpoints(session_id)")
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_tasks_checkpoint ON tasks(checkpoint_id)")
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_checkpoint_session ON checkpoints(session_id)"
+        )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tasks_checkpoint ON tasks(checkpoint_id)"
+        )
         await db.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)")
 
         await db.commit()
@@ -168,24 +178,31 @@ class CheckpointManager:
             db = await self._get_connection()
 
             # Get all checkpoint IDs ordered by updated_at
-            cursor = await db.execute("""
+            cursor = await db.execute(
+                """
                 SELECT id FROM checkpoints
                 ORDER BY updated_at DESC
                 LIMIT -1 OFFSET ?
-            """, (self.config.max_checkpoints,))
+            """,
+                (self.config.max_checkpoints,),
+            )
 
             old_checkpoint_ids = [row[0] async for row in cursor]
 
             if old_checkpoint_ids:
                 # Delete old checkpoints and their tasks
                 for checkpoint_id in old_checkpoint_ids:
-                    await db.execute("DELETE FROM tasks WHERE checkpoint_id = ?", (checkpoint_id,))
-                    await db.execute("DELETE FROM checkpoints WHERE id = ?", (checkpoint_id,))
+                    await db.execute(
+                        "DELETE FROM tasks WHERE checkpoint_id = ?", (checkpoint_id,)
+                    )
+                    await db.execute(
+                        "DELETE FROM checkpoints WHERE id = ?", (checkpoint_id,)
+                    )
 
                 await db.commit()
                 self._last_cleanup = current_time
 
-        except Exception as e:
+        except Exception:
             # Don't fail if cleanup fails
             pass
 
@@ -194,7 +211,7 @@ class CheckpointManager:
         session_id: str,
         checkpoint_id: str,
         total_tasks: int,
-        config: Dict[str, Any]
+        config: dict[str, Any],
     ) -> None:
         """Create a new checkpoint for a generation session.
 
@@ -209,21 +226,24 @@ class CheckpointManager:
         db = await self._get_connection()
         current_time = int(time.time())
 
-        await db.execute("""
+        await db.execute(
+            """
             INSERT INTO checkpoints
             (id, session_id, created_at, updated_at, status, progress, total_tasks, completed_tasks, config_json)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            checkpoint_id,
-            session_id,
-            current_time,
-            current_time,
-            "active",
-            0.0,
-            total_tasks,
-            0,
-            json.dumps(config)
-        ))
+        """,
+            (
+                checkpoint_id,
+                session_id,
+                current_time,
+                current_time,
+                "active",
+                0.0,
+                total_tasks,
+                0,
+                json.dumps(config),
+            ),
+        )
 
         await db.commit()
 
@@ -232,9 +252,9 @@ class CheckpointManager:
         checkpoint_id: str,
         task_id: str,
         status: str,
-        parameters: Optional[GenerationParameters] = None,
-        result: Optional[GenerationResult] = None,
-        error: Optional[Exception] = None
+        parameters: GenerationParameters | None = None,
+        result: GenerationResult | None = None,
+        error: Exception | None = None,
     ) -> None:
         """Save the state of a single task.
 
@@ -253,38 +273,47 @@ class CheckpointManager:
         result_json = json.dumps(result.dict()) if result else None
         error_message = str(error) if error else None
 
-        await db.execute("""
+        await db.execute(
+            """
             INSERT OR REPLACE INTO tasks
             (id, checkpoint_id, task_id, status, parameters_json, result_json, error_message, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            f"{checkpoint_id}_{task_id}",
-            checkpoint_id,
-            task_id,
-            status,
-            parameters_json,
-            result_json,
-            error_message,
-            current_time,
-            current_time
-        ))
+        """,
+            (
+                f"{checkpoint_id}_{task_id}",
+                checkpoint_id,
+                task_id,
+                status,
+                parameters_json,
+                result_json,
+                error_message,
+                current_time,
+                current_time,
+            ),
+        )
 
         # Update checkpoint progress
         if status == "completed":
-            cursor = await db.execute("""
+            cursor = await db.execute(
+                """
                 SELECT completed_tasks FROM checkpoints WHERE id = ?
-            """, (checkpoint_id,))
+            """,
+                (checkpoint_id,),
+            )
             row = await cursor.fetchone()
             if row:
                 completed_tasks = row[0] + 1
                 total_tasks = await self._get_total_tasks(checkpoint_id)
                 progress = completed_tasks / total_tasks if total_tasks > 0 else 0.0
 
-                await db.execute("""
+                await db.execute(
+                    """
                     UPDATE checkpoints
                     SET completed_tasks = ?, progress = ?, updated_at = ?
                     WHERE id = ?
-                """, (completed_tasks, progress, current_time, checkpoint_id))
+                """,
+                    (completed_tasks, progress, current_time, checkpoint_id),
+                )
 
         await db.commit()
 
@@ -298,13 +327,16 @@ class CheckpointManager:
             Total number of tasks
         """
         db = await self._get_connection()
-        cursor = await db.execute("""
+        cursor = await db.execute(
+            """
             SELECT total_tasks FROM checkpoints WHERE id = ?
-        """, (checkpoint_id,))
+        """,
+            (checkpoint_id,),
+        )
         row = await cursor.fetchone()
-        return row[0] if row else 0
+        return int(row[0]) if row else 0
 
-    async def get_checkpoint_status(self, checkpoint_id: str) -> Dict[str, Any]:
+    async def get_checkpoint_status(self, checkpoint_id: str) -> dict[str, Any]:
         """Get the status of a checkpoint.
 
         Args:
@@ -314,11 +346,14 @@ class CheckpointManager:
             Dictionary with checkpoint status information
         """
         db = await self._get_connection()
-        cursor = await db.execute("""
+        cursor = await db.execute(
+            """
             SELECT status, progress, total_tasks, completed_tasks, config_json
             FROM checkpoints
             WHERE id = ?
-        """, (checkpoint_id,))
+        """,
+            (checkpoint_id,),
+        )
 
         row = await cursor.fetchone()
         if not row:
@@ -329,10 +364,12 @@ class CheckpointManager:
             "progress": row[1],
             "total_tasks": row[2],
             "completed_tasks": row[3],
-            "config": json.loads(row[4])
+            "config": json.loads(row[4]),
         }
 
-    async def get_pending_tasks(self, checkpoint_id: str) -> List[Tuple[str, GenerationParameters]]:
+    async def get_pending_tasks(
+        self, checkpoint_id: str
+    ) -> list[tuple[str, GenerationParameters]]:
         """Get all pending tasks for a checkpoint.
 
         Args:
@@ -342,11 +379,14 @@ class CheckpointManager:
             List of (task_id, parameters) tuples for pending tasks
         """
         db = await self._get_connection()
-        cursor = await db.execute("""
+        cursor = await db.execute(
+            """
             SELECT task_id, parameters_json
             FROM tasks
             WHERE checkpoint_id = ? AND status IN ('pending', 'processing')
-        """, (checkpoint_id,))
+        """,
+            (checkpoint_id,),
+        )
 
         tasks = []
         async for row in cursor:
@@ -358,7 +398,9 @@ class CheckpointManager:
 
         return tasks
 
-    async def get_completed_tasks(self, checkpoint_id: str) -> List[Tuple[str, GenerationResult]]:
+    async def get_completed_tasks(
+        self, checkpoint_id: str
+    ) -> list[tuple[str, GenerationResult]]:
         """Get all completed tasks for a checkpoint.
 
         Args:
@@ -368,11 +410,14 @@ class CheckpointManager:
             List of (task_id, result) tuples for completed tasks
         """
         db = await self._get_connection()
-        cursor = await db.execute("""
+        cursor = await db.execute(
+            """
             SELECT task_id, result_json
             FROM tasks
             WHERE checkpoint_id = ? AND status = 'completed'
-        """, (checkpoint_id,))
+        """,
+            (checkpoint_id,),
+        )
 
         tasks = []
         async for row in cursor:
@@ -384,7 +429,7 @@ class CheckpointManager:
 
         return tasks
 
-    async def get_failed_tasks(self, checkpoint_id: str) -> List[Tuple[str, str]]:
+    async def get_failed_tasks(self, checkpoint_id: str) -> list[tuple[str, str]]:
         """Get all failed tasks for a checkpoint.
 
         Args:
@@ -394,11 +439,14 @@ class CheckpointManager:
             List of (task_id, error_message) tuples for failed tasks
         """
         db = await self._get_connection()
-        cursor = await db.execute("""
+        cursor = await db.execute(
+            """
             SELECT task_id, error_message
             FROM tasks
             WHERE checkpoint_id = ? AND status = 'failed'
-        """, (checkpoint_id,))
+        """,
+            (checkpoint_id,),
+        )
 
         return [tuple(row) async for row in cursor]
 
@@ -411,15 +459,20 @@ class CheckpointManager:
         db = await self._get_connection()
         current_time = int(time.time())
 
-        await db.execute("""
+        await db.execute(
+            """
             UPDATE checkpoints
             SET status = 'completed', updated_at = ?
             WHERE id = ?
-        """, (current_time, checkpoint_id))
+        """,
+            (current_time, checkpoint_id),
+        )
 
         await db.commit()
 
-    async def mark_checkpoint_failed(self, checkpoint_id: str, error_message: str) -> None:
+    async def mark_checkpoint_failed(
+        self, checkpoint_id: str, error_message: str
+    ) -> None:
         """Mark a checkpoint as failed.
 
         Args:
@@ -429,11 +482,14 @@ class CheckpointManager:
         db = await self._get_connection()
         current_time = int(time.time())
 
-        await db.execute("""
+        await db.execute(
+            """
             UPDATE checkpoints
             SET status = 'failed', updated_at = ?
             WHERE id = ?
-        """, (current_time, checkpoint_id))
+        """,
+            (current_time, checkpoint_id),
+        )
 
         await db.commit()
 
@@ -453,7 +509,7 @@ class CheckpointManager:
 
         await db.commit()
 
-    async def get_latest_checkpoint(self, session_id: str) -> Optional[str]:
+    async def get_latest_checkpoint(self, session_id: str) -> str | None:
         """Get the latest checkpoint ID for a session.
 
         Args:
@@ -463,20 +519,22 @@ class CheckpointManager:
             Latest checkpoint ID or None if not found
         """
         db = await self._get_connection()
-        cursor = await db.execute("""
+        cursor = await db.execute(
+            """
             SELECT id FROM checkpoints
             WHERE session_id = ?
             ORDER BY created_at DESC
             LIMIT 1
-        """, (session_id,))
+        """,
+            (session_id,),
+        )
 
         row = await cursor.fetchone()
         return row[0] if row else None
 
     async def restore_from_checkpoint(
-        self,
-        checkpoint_id: str
-    ) -> Tuple[Dict[str, Any], List[Tuple[str, GenerationParameters]]]:
+        self, checkpoint_id: str
+    ) -> tuple[dict[str, Any], list[tuple[str, GenerationParameters]]]:
         """Restore generation state from a checkpoint.
 
         Args:
@@ -496,7 +554,7 @@ class CheckpointManager:
     async def save_batch_progress(
         self,
         checkpoint_id: str,
-        task_results: List[Tuple[str, Optional[GenerationResult], Optional[Exception]]]
+        task_results: list[tuple[str, GenerationResult | None, Exception | None]],
     ) -> None:
         """Save progress for a batch of tasks.
 
@@ -513,5 +571,5 @@ class CheckpointManager:
                 task_id=task_id,
                 status=status,
                 result=result,
-                error=error
+                error=error,
             )

@@ -18,18 +18,14 @@
 # To use: pip install my-wakegen-plugin
 # Then the provider will be automatically available!
 
-from wakegen.plugins.base import (
-    TTSPlugin,
-    PluginMetadata,
-    PluginLoadError,
-)
+from wakegen.plugins.base import PluginLoadError, PluginMetadata, TTSPlugin
 from wakegen.plugins.discovery import (
-    discover_plugins,
-    load_plugin,
-    get_plugin,
-    get_loaded_plugins,
-    register_plugin_provider,
-    reload_plugins,
+                                       discover_plugins,
+                                       get_loaded_plugins,
+                                       get_plugin,
+                                       load_plugin,
+                                       register_plugin_provider,
+                                       reload_plugins,
 )
 
 __all__ = [

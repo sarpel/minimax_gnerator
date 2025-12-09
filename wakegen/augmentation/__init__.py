@@ -17,16 +17,16 @@ The augmentation pipeline coordinates all these components to create
 realistic variations that improve wake word model robustness.
 """
 
-from .pipeline import AugmentationPipeline
-from .profiles import get_profile, EnvironmentProfile
 from .device_presets import (
-    TargetDevice,
-    DevicePreset,
-    DevicePresetManager,
-    get_device_preset,
-    list_device_presets,
-    device_preset_manager,
+                             DevicePreset,
+                             DevicePresetManager,
+                             TargetDevice,
+                             device_preset_manager,
+                             get_device_preset,
+                             list_device_presets,
 )
+from .pipeline import AugmentationPipeline
+from .profiles import EnvironmentProfile, get_profile
 
 __all__ = [
     # Core pipeline

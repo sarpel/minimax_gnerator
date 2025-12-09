@@ -1,12 +1,15 @@
 import os
-import soundfile as sf
+from typing import Any
+
 import librosa
 import numpy as np
-from typing import Any
+import soundfile as sf
+
 from wakegen.core.exceptions import AudioError
 
 # We use 'soundfile' to read and write audio files because it's fast and reliable.
 # We use 'librosa' for more complex operations like resampling (changing the speed/pitch).
+
 
 def save_audio(data: bytes, file_path: str, sample_rate: int = 24000) -> None:
     """
@@ -27,10 +30,11 @@ def save_audio(data: bytes, file_path: str, sample_rate: int = 24000) -> None:
         # Write the bytes to the file
         with open(file_path, "wb") as f:
             f.write(data)
-            
+
     except Exception as e:
         # Wrap any error in our custom AudioError
-        raise AudioError(f"Failed to save audio to {file_path}: {str(e)}") from e
+        raise AudioError(f"Failed to save audio to {file_path}: {e!s}") from e
+
 
 def load_audio(file_path: str) -> tuple[np.ndarray[Any, Any], int]:
     """
@@ -53,7 +57,8 @@ def load_audio(file_path: str) -> tuple[np.ndarray[Any, Any], int]:
         data, sr = librosa.load(file_path, sr=None)
         return data, int(sr)
     except Exception as e:
-        raise AudioError(f"Failed to load audio from {file_path}: {str(e)}") from e
+        raise AudioError(f"Failed to load audio from {file_path}: {e!s}") from e
+
 
 def resample_audio(file_path: str, target_sr: int = 16000) -> None:
     """
@@ -83,7 +88,8 @@ def resample_audio(file_path: str, target_sr: int = 16000) -> None:
         sf.write(file_path, y_resampled, target_sr)
 
     except Exception as e:
-        raise AudioError(f"Failed to resample audio {file_path}: {str(e)}") from e
+        raise AudioError(f"Failed to resample audio {file_path}: {e!s}") from e
+
 
 # Additional functions for quality assurance system
 async def load_audio_file(file_path: str) -> tuple[np.ndarray[Any, Any], int]:
@@ -99,6 +105,7 @@ async def load_audio_file(file_path: str) -> tuple[np.ndarray[Any, Any], int]:
         - The sample rate of the audio.
     """
     return load_audio(file_path)
+
 
 def get_audio_duration(audio_data: np.ndarray[Any, Any], sample_rate: int) -> float:
     """

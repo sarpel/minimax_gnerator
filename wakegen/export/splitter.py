@@ -1,19 +1,22 @@
 from __future__ import annotations
+
 import json
-from pathlib import Path
-from typing import List, Dict, Any, Tuple
 import logging
+from pathlib import Path
+from typing import Any
+
 from sklearn.model_selection import train_test_split
 
 # We use 'logging' to print messages to the console in a structured way.
 logger = logging.getLogger(__name__)
+
 
 async def split_dataset(
     export_dir: str,
     train_ratio: float = 0.8,
     val_ratio: float = 0.1,
     test_ratio: float = 0.1,
-    seed: int = 42
+    seed: int = 42,
 ) -> None:
     """
     Splits the exported dataset into training, validation, and test sets.
@@ -37,8 +40,8 @@ async def split_dataset(
         raise FileNotFoundError(f"Manifest file not found at {manifest_path}")
 
     # 1. Load the manifest
-    with open(manifest_path, "r", encoding="utf-8") as f:
-        data: List[Dict[str, Any]] = json.load(f)
+    with open(manifest_path, encoding="utf-8") as f:
+        data: list[dict[str, Any]] = json.load(f)
 
     logger.info(f"Loaded {len(data)} samples from manifest")
 
@@ -51,10 +54,7 @@ async def split_dataset(
     # First, we split off the test set
     # The 'stratify=labels' argument is the magic part that keeps the balance correct.
     train_val_items, test_items, train_val_labels, test_labels = train_test_split(
-        items, labels,
-        test_size=test_ratio,
-        random_state=seed,
-        stratify=labels
+        items, labels, test_size=test_ratio, random_state=seed, stratify=labels
     )
 
     # Now we split the remaining data into training and validation
@@ -65,13 +65,16 @@ async def split_dataset(
     adjusted_val_ratio = val_ratio / (train_ratio + val_ratio)
 
     train_items, val_items, train_labels, val_labels = train_test_split(
-        train_val_items, train_val_labels,
+        train_val_items,
+        train_val_labels,
         test_size=adjusted_val_ratio,
         random_state=seed,
-        stratify=train_val_labels
+        stratify=train_val_labels,
     )
 
-    logger.info(f"Split results: Train={len(train_items)}, Val={len(val_items)}, Test={len(test_items)}")
+    logger.info(
+        f"Split results: Train={len(train_items)}, Val={len(val_items)}, Test={len(test_items)}"
+    )
 
     # 4. Save the new manifests
     # We create separate JSON files for each set
@@ -79,7 +82,8 @@ async def split_dataset(
     _save_manifest(export_path / "val.json", val_items)
     _save_manifest(export_path / "test.json", test_items)
 
-def _save_manifest(path: Path, data: List[Dict[str, Any]]) -> None:
+
+def _save_manifest(path: Path, data: list[dict[str, Any]]) -> None:
     """
     Helper function to save a list of items to a JSON file.
     """
