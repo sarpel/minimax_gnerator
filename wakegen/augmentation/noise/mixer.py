@@ -18,7 +18,7 @@ import random
 import numpy as np
 import librosa
 import soundfile as sf
-from typing import Optional, Tuple, Any
+from typing import Optional, Tuple, Any, cast
 from wakegen.core.exceptions import NoiseError
 from wakegen.utils.audio import load_audio
 
@@ -127,7 +127,7 @@ class NoiseMixer:
         # Normalize to prevent clipping
         colored = colored / np.max(np.abs(colored)) * 0.1
 
-        return colored
+        return cast(np.ndarray[Any, Any], colored)
 
     def mix_with_noise(
         self,
@@ -180,7 +180,7 @@ class NoiseMixer:
         if max_val > 0:
             mixed_audio = mixed_audio / max_val * 0.95  # Leave 5% headroom
 
-        return mixed_audio
+        return cast(np.ndarray[Any, Any], mixed_audio)
 
     async def apply_noise_augmentation(
         self,

@@ -14,7 +14,7 @@ Key Features:
 
 from __future__ import annotations
 import numpy as np
-from typing import Optional, Tuple, Any
+from typing import Optional, Tuple, Any, cast
 from wakegen.core.exceptions import RoomSimulationError
 
 class RoomConvolver:
@@ -111,7 +111,7 @@ class RoomConvolver:
         if max_val > 0:
             mixed = mixed / max_val * 0.95
 
-        return mixed
+        return cast(np.ndarray[Any, Any], mixed)
 
     def _overlap_add_convolve(
         self,
@@ -177,7 +177,7 @@ class RoomConvolver:
         if max_val > 0:
             mixed = mixed / max_val * 0.95
 
-        return mixed
+        return cast(np.ndarray[Any, Any], mixed)
 
     def _pad_to_length(self, array: np.ndarray[Any, Any], target_length: int) -> np.ndarray[Any, Any]:
         """

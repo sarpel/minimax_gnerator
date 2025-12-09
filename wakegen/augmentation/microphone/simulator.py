@@ -15,7 +15,7 @@ Key Features:
 
 from __future__ import annotations
 import numpy as np
-from typing import Optional, Tuple, Dict, List, Any
+from typing import Optional, Tuple, Dict, List, Any, cast
 from dataclasses import dataclass
 from wakegen.core.exceptions import MicrophoneSimulationError
 from wakegen.utils.audio import load_audio
@@ -189,7 +189,7 @@ class MicrophoneSimulator:
 
         # Mix original and distorted
         mix_ratio = distortion_amount ** 0.5  # Square root for perceptual linearity
-        return (audio * (1.0 - mix_ratio)) + (distorted * mix_ratio)
+        return cast(np.ndarray[Any, Any], (audio * (1.0 - mix_ratio)) + (distorted * mix_ratio))
 
     def _add_microphone_noise(
         self,
@@ -218,7 +218,7 @@ class MicrophoneSimulator:
         # Generate noise
         noise = np.random.normal(0, noise_std, len(audio))
 
-        return audio + noise
+        return cast(np.ndarray[Any, Any], audio + noise)
 
     async def simulate_microphone(
         self,
@@ -383,3 +383,51 @@ class MicrophoneSimulator:
                 noise_floor=-45.0
             )
         }
+
+    def simulate_microphone_coloration(
+        self,
+        signal: np.ndarray[Any, Any],
+        mic_type: str = "cardioid"
+    ) -> np.ndarray[Any, Any]:
+        """
+        Simulate microphone coloration based on type.
+
+        Args:
+            signal: Input audio signal.
+            mic_type: Type of microphone ("cardioid", "omni", "figure8").
+
+        Returns:
+            Audio with coloration applied.
+            
+        Raises:
+            NotImplementedError: This feature is not yet implemented.
+        """
+        raise NotImplementedError(
+            f"Microphone coloration simulation for '{mic_type}' is not yet implemented. "
+            "This feature requires implementing polar pattern modeling and frequency response "
+            "characteristics specific to different microphone types."
+        )
+
+    def apply_proximity_effect(
+        self,
+        signal: np.ndarray[Any, Any],
+        distance_cm: float = 30.0
+    ) -> np.ndarray[Any, Any]:
+        """
+        Apply proximity effect to simulate distance from the microphone.
+
+        Args:
+            signal: Input audio signal.
+            distance_cm: Distance from the microphone in centimeters.
+
+        Returns:
+            Audio with proximity effect applied.
+            
+        Raises:
+            NotImplementedError: This feature is not yet implemented.
+        """
+        raise NotImplementedError(
+            f"Proximity effect simulation for distance {distance_cm}cm is not yet implemented. "
+            "This feature requires implementing bass boost characteristics that occur when "
+            "directional microphones are used close to the sound source."
+        )

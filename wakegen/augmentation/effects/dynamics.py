@@ -15,7 +15,7 @@ Key Features:
 
 from __future__ import annotations
 import numpy as np
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any, cast
 from wakegen.core.exceptions import AugmentationError
 from wakegen.utils.audio import load_audio
 import soundfile as sf
@@ -142,7 +142,7 @@ class DynamicsProcessor:
             if compressed_peak > original_peak and original_peak > 0:
                 compressed = compressed * (original_peak / compressed_peak)
 
-            return compressed
+            return cast(np.ndarray[Any, Any], compressed)
 
         except Exception as e:
             raise AugmentationError(f"Failed to apply compression: {str(e)}") from e

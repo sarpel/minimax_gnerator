@@ -301,10 +301,10 @@ async def run_export(job_id: str, request: ExportRequest) -> None:
         if job.total_files == 0:
             raise ValueError("No WAV files found to export")
 
-        for f in file_paths:
+        for file_path in file_paths:
             # Assuming parent directory is the label (wake word name)
-            label = f.parent.name
-            files.append(str(f))
+            label = file_path.parent.name
+            files.append(str(file_path))
             labels.append(label)
 
         # 2. Split dataset
@@ -416,7 +416,7 @@ async def run_export(job_id: str, request: ExportRequest) -> None:
                 "classes": sorted(list(set(labels)))
             }
             
-            with open(Path(output_path) / "dataset_info.json", "w") as f:
+            with open(str(Path(output_path) / "dataset_info.json"), "w") as f:
                 json.dump(manifest, f, indent=2)
 
         job.progress_percentage = 100.0

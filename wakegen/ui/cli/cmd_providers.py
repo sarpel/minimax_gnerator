@@ -98,7 +98,7 @@ def register_provider_commands(cli_group: click.Group) -> None:
                     requirements = "[dim]All satisfied[/dim]"
                 else:
                     requirements = "\n".join([
-                        f"[yellow]• {dep}[/yellow]" for dep in p.missing_dependencies
+                        f"[yellow]• {dep}[/yellow]" for dep in (p.missing_dependencies or [])
                     ])
                     if p.install_hint:
                         requirements += f"\n[dim]{p.install_hint}[/dim]"
@@ -125,7 +125,7 @@ def register_provider_commands(cli_group: click.Group) -> None:
     @cli_group.command(name="list-voices")
     @click.option("--provider", default="all", help="Provider to list voices for (default: all)")
     @click.option("--language", "-l", multiple=True, help="Filter voices by language code (e.g., tr-TR)")
-    def list_voices(provider: str, language: tuple) -> None:
+    def list_voices(provider: str, language: tuple[str, ...]) -> None:
         """
         Lists available voices for the specified provider(s).
         
@@ -140,7 +140,7 @@ def register_provider_commands(cli_group: click.Group) -> None:
         asyncio.run(_run_list_voices(provider, language))
 
 
-async def _run_list_voices(provider_name: str, languages: tuple) -> None:
+async def _run_list_voices(provider_name: str, languages: tuple[str, ...]) -> None:
     """
     Async implementation of list-voices.
     

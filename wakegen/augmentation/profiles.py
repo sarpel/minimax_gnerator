@@ -18,6 +18,9 @@ from __future__ import annotations
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 from wakegen.core.types import EnvironmentProfile, AugmentationType
+
+# Re-export EnvironmentProfile for use by other modules
+__all__ = ["EnvironmentProfile", "AugmentationProfile", "EnvironmentProfileManager", "get_profile", "environment_profile_manager"]
 from wakegen.core.exceptions import AugmentationError
 from wakegen.augmentation.noise.profiles import NoiseProfileManager, NoiseProfile
 from wakegen.augmentation.room.simulator import RoomParameters
@@ -57,7 +60,7 @@ class EnvironmentProfileManager:
     Provides access to pre-configured profiles and allows custom profile creation.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize with default environment profiles."""
         self.noise_manager = NoiseProfileManager()  # Initialize noise manager first
         self.profiles = self._create_default_profiles()

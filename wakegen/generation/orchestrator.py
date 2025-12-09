@@ -19,6 +19,7 @@ import logging
 import time
 from typing import List, Dict, Any, Optional, Tuple, AsyncIterator
 from pathlib import Path
+from dataclasses import asdict
 
 from wakegen.generation.variation_engine import VariationEngine, VariationParameters
 from wakegen.generation.batch_processor import BatchProcessor, BatchConfig
@@ -27,7 +28,7 @@ from wakegen.generation.progress import ProgressTracker, ProgressConfig
 from wakegen.generation.rate_limiter import RateLimiter
 from wakegen.models.generation import GenerationParameters, GenerationResult
 from wakegen.models.config import GenerationConfig
-from wakegen.core.exceptions import GenerationError
+from wakegen.core.exceptions import GenerationError, ConfigError
 from wakegen.core.protocols import TTSProvider
 from wakegen.core.types import ProviderType
 from wakegen.providers.registry import get_provider
@@ -193,8 +194,8 @@ class GenerationOrchestrator:
             "count": count,
             "output_dir": output_dir,
             "voice_ids": voice_ids,
-            # Issue M-007 Fix: Use .model_dump() instead of deprecated .dict()
-            "variation_params": variation_params.model_dump()
+            # Issue M-007 Fix: Use asdict() for dataclass instead of .model_dump()
+            "variation_params": asdict(variation_params)
         }
 
         if self.variation_engine is None:
@@ -285,6 +286,9 @@ class GenerationOrchestrator:
             GenerationParameters objects
         """
         # Generate parameters from variation engine
+        if self.variation_engine is None:
+            raise GenerationError("Variation engine not initialized")
+        
         params_generator = self.variation_engine.generate_variations(max_combinations)
 
         # Yield parameters one by one
@@ -420,7 +424,7 @@ class GenerationOrchestrator:
         return str(file_path)
 
     async def get_generation_status(self) -> Dict[str, Any]:
-        """Get the current generation status.
+        """Get the status of the current generation session.
 
         Returns:
             Dictionary with generation status information
@@ -429,6 +433,9 @@ class GenerationOrchestrator:
             return {"status": "not_started"}
 
         try:
+            if self.checkpoint_manager is None:
+                return {"status": "error", "error": "Checkpoint manager not initialized"}
+            
             checkpoint_status = await self.checkpoint_manager.get_checkpoint_status(
                 self._current_checkpoint_id
             )
@@ -451,6 +458,10 @@ class GenerationOrchestrator:
             return
 
         try:
+            if self.checkpoint_manager is None:
+                logger.error("Checkpoint manager not initialized")
+                return
+            
             # Mark checkpoint as failed
             await self.checkpoint_manager.mark_checkpoint_failed(
                 self._current_checkpoint_id,
@@ -480,11 +491,16 @@ class GenerationOrchestrator:
             logger.error(f"Error during cleanup: {str(e)}")
             raise GenerationError(f"Cleanup failed: {str(e)}") from e
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> GenerationOrchestrator:
         """Async context manager entry."""
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object
+    ) -> None:
         """Async context manager exit."""
         await self.cleanup()
 
@@ -506,31 +522,8 @@ class GenerationOrchestrator:
             voice_ids = ["tr-TR-PinarNeural", "tr-TR-AhmetNeural", "tr-TR-EmelNeural"]
 
         if self.variation_engine is None:
-             # Should be initialized by _start_new_generation or similar, but here we create one on fly? 
-             # No, this method creates params, doesn't use self.variation_engine except to call method.
-             # Actually self.variation_engine is initialized in __init__? No, it's None.
-             # Wait, create_turkish_generation_config calls self.variation_engine.create_turkish_parameters
-             # But self.variation_engine might be None if not generate() called.
-             # This design seems flawed or I misunderstand.
-             # Assuming variation_engine is required.
-             pass 
-             
-        # Create temp variation engine for turkish params if needed?
-        # The method uses self.variation_engine instance method.
-        # But variation_engine is initialized in generate() -> _start_new_generation().
-        # This helper method seems to assume it's available or should be static.
-        # variation_engine.py has create_turkish_parameters as instance method?
-        # Yes.
-        # We should create a dummy engine if None?
-        # For now, let's assume it's initialized or add check.
+            raise GenerationError("Variation engine not initialized. Please call generate() first or initialize variation engine.")
         
-        # Actually, self.variation_engine is initialized in _start_new_generation with params.
-        # If we call create_turkish_generation_config from outside, self.variation_engine is None.
-        # We might need to instantiate a temporary one or make the method static/independent.
-        # variation_engine takes params in __init__.
-        # This seems like a Chicken-Egg problem in the design.
-        
-        # Let's check VariationEngine usage.
         return self.variation_engine.create_turkish_parameters(wake_words, voice_ids)
 
     async def generate_turkish_samples(
@@ -636,9 +629,13 @@ class GenerationOrchestrator:
                 break
 
         # Initialize progress tracking
-        await self.progress_tracker.initialize_batch(len(params_list))
+        if self.progress_tracker is not None:
+            await self.progress_tracker.initialize_batch(len(params_list))
 
         # Process with fallback
+        if self.batch_processor is None:
+            raise GenerationError("Batch processor not initialized")
+
         results = []
         async for task_id, result, error in self.batch_processor.process_with_fallback(
             primary_provider=self._get_primary_provider(),

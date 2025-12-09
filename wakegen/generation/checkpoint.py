@@ -90,18 +90,22 @@ class CheckpointManager:
         await self._get_connection()
         return self
     
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object
+    ) -> None:
         """Async context manager exit.
-        
+
         Issue 14: Ensures database connection is properly closed even on errors.
-        
+
         Args:
             exc_type: Exception type if an error occurred
             exc_val: Exception value if an error occurred
             exc_tb: Exception traceback if an error occurred
         """
         await self.close()
-        return None
     
     async def close(self) -> None:
         """Close database connection and release resources.
@@ -396,7 +400,7 @@ class CheckpointManager:
             WHERE checkpoint_id = ? AND status = 'failed'
         """, (checkpoint_id,))
 
-        return [row async for row in cursor]
+        return [tuple(row) async for row in cursor]
 
     async def mark_checkpoint_completed(self, checkpoint_id: str) -> None:
         """Mark a checkpoint as completed.
@@ -468,20 +472,6 @@ class CheckpointManager:
 
         row = await cursor.fetchone()
         return row[0] if row else None
-
-    async def close(self) -> None:
-        """Close the database connection."""
-        if self._db is not None:
-            await self._db.close()
-            self._db = None
-
-    async def __aenter__(self):
-        """Async context manager entry."""
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit."""
-        await self.close()
 
     async def restore_from_checkpoint(
         self,

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import itertools
 import random
-from typing import List, Dict, Any, Tuple, Optional, Iterator
+from typing import List, Dict, Any, Tuple, Optional, Iterator, Union, cast
 from dataclasses import dataclass
 
 from wakegen.models.generation import GenerationParameters
@@ -163,12 +163,13 @@ class VariationEngine:
         pitch_values = self._generate_pitch_values()
 
         # Create Cartesian product of all parameters
+        combinations: Union[itertools.product[tuple[str, str, float, float, str]], itertools.islice[tuple[str, str, float, float, str]]]
         combinations = itertools.product(
             all_texts,
             self.parameters.voice_ids,
             speed_values,
             pitch_values,
-            self.parameters.prosody_variations
+            self.parameters.prosody_variations or ["normal"]
         )
 
         # Limit combinations if requested
@@ -183,7 +184,7 @@ class VariationEngine:
                 speed=speed,
                 pitch=pitch,
                 prosody=prosody,
-                emphasis_positions=self.parameters.emphasis_positions
+                emphasis_positions=self.parameters.emphasis_positions or []
             )
 
     def estimate_total_combinations(self) -> int:
@@ -200,7 +201,7 @@ class VariationEngine:
 
         speed_count = 3  # Default number of speed values
         pitch_count = 3  # Default number of pitch values
-        prosody_count = len(self.parameters.prosody_variations)
+        prosody_count = len(self.parameters.prosody_variations or ["normal"])
         voice_count = len(self.parameters.voice_ids)
 
         return text_count * voice_count * speed_count * pitch_count * prosody_count

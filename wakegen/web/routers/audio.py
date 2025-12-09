@@ -145,6 +145,24 @@ async def play_audio(file_path: str) -> FileResponse:
     """
     # Resolve the path (prevents directory traversal attacks)
     path = Path(file_path).resolve()
+    
+    # SECURITY: Validate that the resolved path is within the allowed directory
+    # This prevents path traversal attacks (e.g., accessing /etc/passwd)
+    allowed_base = Path("./output").resolve()
+    try:
+        # is_relative_to() checks if path is a subdirectory of allowed_base
+        # This ensures users can only access files in the output directory
+        if not path.is_relative_to(allowed_base):
+            raise HTTPException(
+                status_code=403, 
+                detail="Access denied: File must be within the output directory"
+            )
+    except ValueError:
+        # is_relative_to can raise ValueError on Windows with different drives
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: Invalid file path"
+        )
 
     # Basic security check - ensure it's a real file
     if not path.exists():
@@ -300,7 +318,7 @@ async def get_audio_info(file_path: str) -> AudioMetadata:
     "/{file_path:path}",
     summary="Delete audio file"
 )
-async def delete_audio(file_path: str) -> dict:
+async def delete_audio(file_path: str) -> dict[str, str]:
     """
     Delete an audio file.
 

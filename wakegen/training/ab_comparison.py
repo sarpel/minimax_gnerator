@@ -40,7 +40,10 @@ async def compare_models(
     metrics_b = await test_model(model_b_path, test_data_path, threshold)
 
     # 3. Compare Results
-    comparison = {
+    diff_accuracy = metrics_b["accuracy"] - metrics_a["accuracy"]
+    diff_f1 = metrics_b["f1_score"] - metrics_a["f1_score"]
+
+    comparison: dict[str, object] = {
         "model_a": {
             "path": model_a_path,
             "metrics": metrics_a
@@ -50,14 +53,13 @@ async def compare_models(
             "metrics": metrics_b
         },
         "diff": {
-            "accuracy": metrics_b["accuracy"] - metrics_a["accuracy"],
-            "f1_score": metrics_b["f1_score"] - metrics_a["f1_score"]
+            "accuracy": diff_accuracy,
+            "f1_score": diff_f1
         },
         "winner": "tie"
     }
 
     # Determine the winner based on F1 score (usually the best single metric)
-    diff_f1 = comparison["diff"]["f1_score"]
     if diff_f1 > 0:
         comparison["winner"] = "model_b"
         logger.info("Model B is better!")

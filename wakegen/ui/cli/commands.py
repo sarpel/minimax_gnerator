@@ -2,7 +2,7 @@ import click
 import asyncio
 import os
 from pathlib import Path
-from typing import Optional, Any
+from typing import Optional, Any, cast
 from rich.console import Console
 from rich.progress import track
 from rich.panel import Panel
@@ -583,7 +583,7 @@ async def run_batch_generation(
     provider_name: str,
     voice_id: Optional[str],
     split_by_provider: bool,
-    provider_list: Optional[list]
+    provider_list: Optional[list[str]]
 ) -> None:
     """
     Async implementation of batch generation.
@@ -691,14 +691,14 @@ async def run_batch_generation(
             # Get voice to use
             selected_voice = None
             if voice_id:
-                from wakegen.core.protocols import Voice
+                from wakegen.models.audio import Voice
                 from wakegen.core.types import Gender
                 selected_voice = Voice(
-                    id=voice_id, 
-                    name=voice_id, 
-                    language="unknown", 
+                    id=voice_id,
+                    name=voice_id,
+                    language="unknown",
                     gender=Gender.NEUTRAL,
-                    provider=p_type.value,
+                    provider=p_type,
                     supports_cloning=False
                 )
             else:

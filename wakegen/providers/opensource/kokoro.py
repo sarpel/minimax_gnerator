@@ -2,7 +2,7 @@ from __future__ import annotations
 import os
 import asyncio
 import soundfile as sf
-from typing import List, Any, Optional, Tuple
+from typing import List, Any, Optional, Tuple, cast
 from pathlib import Path
 
 from wakegen.core.types import ProviderType, Gender
@@ -104,13 +104,13 @@ class KokoroTTSProvider(BaseProvider):
             loop = asyncio.get_running_loop()
             
             # We define a helper function to run in the thread
-            def _run_inference():
-                return kokoro.create(
+            def _run_inference() -> tuple[Any, int]:
+                return cast(tuple[Any, int], kokoro.create(
                     text=text,
                     voice=voice_id,
                     speed=1.0,
                     lang="en-us"
-                )
+                ))
 
             # Run the inference in a separate thread
             samples, sample_rate = await loop.run_in_executor(None, _run_inference)
@@ -118,7 +118,7 @@ class KokoroTTSProvider(BaseProvider):
             # 4. Save the audio to a file
             # We use soundfile to write the numpy array to a WAV file
             # This is also a blocking I/O operation, so we run it in a thread
-            def _save_audio():
+            def _save_audio() -> None:
                 sf.write(output_path, samples, sample_rate)
 
             await loop.run_in_executor(None, _save_audio)

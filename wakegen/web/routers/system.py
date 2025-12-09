@@ -104,13 +104,14 @@ async def get_cache_summary() -> CacheInfo:
                 file_count += 1
                 
     # Human readable size
+    total_size_float = float(total_size)
     for unit in ['B', 'KB', 'MB', 'GB']:
-        if total_size < 1024:
-            size_human = f"{total_size:.1f} {unit}"
+        if total_size_float < 1024:
+            size_human = f"{total_size_float:.1f} {unit}"
             break
-        total_size /= 1024
+        total_size_float /= 1024
     else:
-        size_human = f"{total_size:.1f} TB"
+        size_human = f"{total_size_float:.1f} TB"
         
     return CacheInfo(
         path=str(cache_dir),

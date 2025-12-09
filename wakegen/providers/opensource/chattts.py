@@ -23,9 +23,9 @@ Reference: https://github.com/2noise/ChatTTS
 from __future__ import annotations
 import asyncio
 try:
-    import ChatTTS  # type: ignore
+    import ChatTTS
 except ImportError:
-    ChatTTS = None  # type: ignore
+    ChatTTS = None
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 

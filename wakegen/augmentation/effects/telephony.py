@@ -18,7 +18,7 @@ an old landline, a cell phone, or a Zoom call.
 
 from __future__ import annotations
 import numpy as np
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Tuple, Dict, Any, cast
 from dataclasses import dataclass
 from enum import Enum
 from wakegen.core.exceptions import AugmentationError
@@ -206,7 +206,7 @@ class TelephonySimulator:
                 noise = np.random.randn(len(quantized)) * noise_level
                 quantized = quantized + noise
             
-            return np.clip(quantized, -1.0, 1.0)
+            return cast(np.ndarray[Any, Any], np.clip(quantized, -1.0, 1.0))
         
         except Exception as e:
             raise AugmentationError(f"Codec artifacts failed: {e}") from e
@@ -501,7 +501,7 @@ class DistanceSimulator:
             attenuation = (reference_distance / distance) ** 1.5  # 1.5 for indoor
             attenuation = max(0.01, min(1.0, attenuation))  # Clamp
             
-            return audio * attenuation
+            return cast(np.ndarray[Any, Any], audio * attenuation)
         
         except Exception as e:
             raise AugmentationError(f"Distance attenuation failed: {e}") from e

@@ -13,7 +13,7 @@ import click
 import asyncio
 import os
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, cast
 
 from rich.console import Console
 from rich.progress import track
@@ -63,7 +63,7 @@ def register_generate_commands(cli_group: click.Group) -> None:
         provider: str,
         voice: Optional[str],
         config: Optional[str],
-        language: tuple
+        language: tuple[str, ...]
     ) -> None:
         """
         Generates audio samples for a wake word.
@@ -146,7 +146,7 @@ async def _run_interactive_generation() -> None:
 
 async def _run_generation_from_config(
     config_path: str,
-    language_override: Optional[tuple] = None
+    language_override: Optional[tuple[str, ...]] = None
 ) -> None:
     """
     Runs generation based on a YAML configuration file.
@@ -174,7 +174,7 @@ async def _run_generation_from_config(
         for p_config in config.providers:
             try:
                 # Initialize provider
-                provider = get_provider(p_config.type, get_provider_config())
+                provider = get_provider(cast(ProviderType, p_config.type), get_provider_config())
                 
                 # Determine voices to use
                 voices_to_use = []

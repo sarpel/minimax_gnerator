@@ -16,7 +16,7 @@ Key Features:
 from __future__ import annotations
 import random
 import numpy as np
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, cast
 from typing import Any, Optional, List
 from dataclasses import dataclass
 from wakegen.core.exceptions import NoiseError
@@ -113,39 +113,58 @@ class NoiseEventGenerator:
         intensity: float = 0.5
     ) -> np.ndarray[Any, Any]:
         """
-        Generate a specific type of noise event.
+        Generate a noise event of specified type and duration.
+
+        The event is a window of noise with realistic characteristics
+        depending on the event type.
 
         Args:
             event_type: Type of event to generate.
             duration: Duration of the event in seconds.
-            intensity: Relative intensity of the event.
+            intensity: Relative intensity of the event (0.1 to 1.0).
 
         Returns:
-            Generated event as numpy array.
+            Audio array representing the noise event.
 
         Raises:
-            NoiseError: If event type is unknown or generation fails.
+            NoiseError: If event generation fails or parameters are invalid.
         """
-        if event_type not in self._event_profiles:
-            raise NoiseError(f"Unknown event type: {event_type}")
-
-        profile = self._event_profiles[event_type]
-        num_samples = int(duration * self.sample_rate)
-
         try:
-            # Create time array
-            t = np.linspace(0, duration, num_samples)
+            event = NoiseEvent(
+                start_time=0,
+                duration=duration,
+                event_type=event_type,
+                intensity=intensity
+            )
+            event.validate()
 
-            # Generate base noise with appropriate frequency characteristics
-            base_freq = random.uniform(*profile["frequency_range"])
-            base_noise = self._generate_banded_noise(
-                num_samples, base_freq, profile["frequency_range"]
+            # Ensure minimum duration
+            num_samples = max(int(duration * self.sample_rate), 256)
+            num_seconds = num_samples / self.sample_rate
+
+            # Get event profile parameters
+            if event_type not in self._event_profiles:
+                raise NoiseError(f"Unknown event type: {event_type}")
+
+            profile = self._event_profiles[event_type]
+            center_freq = profile["center_freq"]
+            freq_range = profile["freq_range"]
+            noise_intensity = profile["intensity"]
+
+            # Generate banded noise for this event
+            event_audio = self._generate_banded_noise(
+                num_samples=num_samples,
+                center_freq=center_freq,
+                freq_range=freq_range
             )
 
-            # Apply intensity scaling
-            scaled_noise = base_noise * intensity * 0.5  # 0.5 is base scaling factor
+            # Scale noise based on intensity
+            scaled_noise = event_audio * intensity * noise_intensity
 
-            # Apply event-specific envelope for realism
+            # Create time array for envelope
+            t = np.linspace(0, num_seconds, num_samples)
+
+            # Apply envelope based on event type
             envelope = self._create_event_envelope(event_type, t)
             event_audio = scaled_noise * envelope
 
@@ -154,7 +173,7 @@ class NoiseEventGenerator:
             if max_val > 0:
                 event_audio = event_audio / max_val * 0.8  # 80% of max to leave headroom
 
-            return event_audio
+            return cast(np.ndarray[Any, Any], event_audio)
 
         except Exception as e:
             raise NoiseError(f"Failed to generate {event_type} event: {str(e)}") from e
@@ -217,31 +236,31 @@ class NoiseEventGenerator:
             # Quick attack, short sustain, quick release (percussive)
             attack = np.minimum(t_norm * 10, 1.0)
             release = np.maximum(1.0 - (t_norm - 0.7) * 5, 0.0) if t_norm > 0.7 else 1.0
-            return attack * release
+            return cast(np.ndarray[Any, Any], attack * release)
         elif event_type == "door_close":
             # Medium attack, longer sustain, medium release
             attack = np.minimum(t_norm * 3, 1.0)
             release = np.maximum(1.0 - (t_norm - 0.8) * 2, 0.0) if t_norm > 0.8 else 1.0
-            return attack * release
+            return cast(np.ndarray[Any, Any], attack * release)
         elif event_type == "footstep":
             # Quick attack, very short sustain, quick release
             attack = np.minimum(t_norm * 15, 1.0)
             release = np.maximum(1.0 - (t_norm - 0.5) * 4, 0.0) if t_norm > 0.5 else 1.0
-            return attack * release
+            return cast(np.ndarray[Any, Any], attack * release)
         elif event_type == "chair_scrape":
             # Variable envelope with some randomness
             base = np.sin(t_norm * np.pi * 2) * 0.3 + 0.7
-            return np.maximum(base, 0.1)
+            return cast(np.ndarray[Any, Any], np.maximum(base, 0.1))
         elif event_type == "water_running":
             # Gradual attack, steady sustain, gradual release
             attack = np.minimum(t_norm * 2, 1.0)
             release = np.maximum(1.0 - (t_norm - 0.9) * 3, 0.0) if t_norm > 0.9 else 1.0
-            return attack * release
+            return cast(np.ndarray[Any, Any], attack * release)
         else:
             # Default: simple attack-release
             attack = np.minimum(t_norm * 5, 1.0)
             release = np.maximum(1.0 - (t_norm - 0.6) * 3, 0.0) if t_norm > 0.6 else 1.0
-            return attack * release
+            return cast(np.ndarray[Any, Any], attack * release)
 
     def generate_random_events(
         self,

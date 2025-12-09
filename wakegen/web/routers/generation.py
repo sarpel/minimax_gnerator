@@ -373,7 +373,7 @@ async def get_job_status(job_id: str) -> JobStatusResponse:
     "/cancel/{job_id}",
     summary="Cancel running job"
 )
-async def cancel_job(job_id: str) -> dict:
+async def cancel_job(job_id: str) -> dict[str, str]:
     """
     Cancel a running generation job.
 

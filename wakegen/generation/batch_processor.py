@@ -28,16 +28,18 @@ from wakegen.models.generation import GenerationParameters, GenerationResult
 from wakegen.models.audio import AudioSample
 from wakegen.core.exceptions import GenerationError, ProviderError
 from wakegen.core.protocols import TTSProvider
+from wakegen.core.types import ProviderType
 
 import time
 import tempfile
 import os
+from typing import cast
 
 logger = logging.getLogger(__name__)
 
 @dataclass
 class BatchConfig:
-    """Configuration for batch processing.
+    """Configuration for batch audio generation processing.
 
     Attributes:
         max_concurrent_tasks: Maximum number of concurrent generation tasks
@@ -48,9 +50,9 @@ class BatchConfig:
     max_concurrent_tasks: int = 5
     retry_attempts: int = 3
     timeout_seconds: int = 300
-    rate_limits: Dict[str, Tuple[int, int]] = None  # provider_type: (max_requests, period_seconds)
+    rate_limits: dict[str, tuple[int, int]] = None  # type: ignore
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Initialize default rate limits if not provided."""
         if self.rate_limits is None:
             self.rate_limits = {
@@ -121,7 +123,7 @@ class BatchProcessor:
             retry=retry_if_exception_type((ProviderError, asyncio.TimeoutError)),
             reraise=True
         )
-        async def _generate_with_retry():
+        async def _generate_with_retry() -> GenerationResult:
             # Apply rate limiting
             await self.rate_limiters[provider_type].wait_for_token()
 
@@ -217,7 +219,7 @@ class BatchProcessor:
             file_path=output_path,
             text=params.text,
             voice_id=params.voice_id,
-            provider=getattr(self, '_current_provider_type', 'edge_tts'),
+            provider=cast(ProviderType, getattr(self, '_current_provider_type', 'edge_tts')),
             duration_seconds=duration
         )
         
@@ -226,21 +228,22 @@ class BatchProcessor:
             audio_data=audio_sample,
             generation_time=0.0,  # Could be tracked if needed
             provider_used=audio_sample.provider,
-            success=True
+            success=True,
+            error_message=None
         )
 
     async def _worker(
         self,
         provider: TTSProvider,
-        task_queue: asyncio.Queue,
-        results_queue: asyncio.Queue
+        task_queue: asyncio.Queue[tuple[str, GenerationParameters]],
+        results_queue: asyncio.Queue[tuple[str, GenerationResult | None, Exception | None]]
     ) -> None:
         """Worker coroutine that processes tasks from the queue.
 
         Args:
-            provider: Audio provider instance
-            task_queue: Queue of tasks to process
-            results_queue: Queue to put results
+            provider: TTS provider instance
+            task_queue: Queue for incoming tasks (task_id, params)
+            results_queue: Queue for results (task_id, result, error)
         """
         while True:
             try:
@@ -289,8 +292,8 @@ class BatchProcessor:
             await self.progress_tracker.initialize_batch(len(tasks))
 
         # Create queues
-        task_queue = asyncio.Queue()
-        results_queue = asyncio.Queue()
+        task_queue: asyncio.Queue[tuple[str, GenerationParameters]] = asyncio.Queue()
+        results_queue: asyncio.Queue[tuple[str, GenerationResult | None, Exception | None]] = asyncio.Queue()
 
         # Put all tasks in the queue
         for task_id, params in tasks:

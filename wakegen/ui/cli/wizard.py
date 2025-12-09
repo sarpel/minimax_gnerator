@@ -8,7 +8,7 @@ from rich.prompt import Confirm, FloatPrompt, IntPrompt, Prompt
 from rich.panel import Panel
 from rich.text import Text
 
-from wakegen.config.settings import GenerationConfig
+from wakegen.models.config import GenerationConfig
 from wakegen.core.types import ProviderType
 
 # Initialize the Rich console for beautiful output

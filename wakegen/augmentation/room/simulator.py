@@ -16,7 +16,7 @@ Key Features:
 from __future__ import annotations
 import numpy as np
 import pyroomacoustics as pra
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Tuple, Dict, Any, cast
 from dataclasses import dataclass
 from wakegen.core.exceptions import RoomSimulationError
 from wakegen.utils.audio import load_audio
@@ -129,7 +129,7 @@ class RoomSimulator:
             # Get the impulse response
             rir = room.rir[0][0]  # Get first microphone, first source
 
-            return rir
+            return cast(np.ndarray[Any, Any], rir)
 
         except Exception as e:
             raise RoomSimulationError(f"Failed to generate room impulse response: {str(e)}") from e
@@ -194,7 +194,7 @@ class RoomSimulator:
             if max_val > 0:
                 mixed = mixed / max_val * 0.95  # 5% headroom
 
-            return mixed
+            return cast(np.ndarray[Any, Any], mixed)
 
         except Exception as e:
             raise RoomSimulationError(f"Failed to apply room simulation: {str(e)}") from e
@@ -233,7 +233,7 @@ class RoomSimulator:
         result = np.fft.irfft(fft_result, n=fft_size)
 
         # Return only the valid part
-        return result[:total_length]
+        return cast(np.ndarray[Any, Any], result[:total_length])
 
     async def simulate_room_effects(
         self,
