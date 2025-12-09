@@ -412,32 +412,217 @@ sending 0.0 instead of 0. Valid range: -12 to +12 semitones.
 
 ---
 
+## Phase 5: Additional Files Review (Completed December 9, 2025)
+
+This section covers the remaining files that were not reviewed in the initial phases.
+
+### 5A. Core Files Review
+
+#### `wakegen/__init__.py` ✓
+
+| Aspect | Assessment |
+|--------|------------|
+| **Structure** | ✅ Simple, clean package init |
+| **Plugin Init** | ✅ Graceful error handling with silent fallback |
+| **Version** | ✅ Semantic versioning (1.0.0) |
+
+**Note**: Plugin auto-registration is commented out (line 26). Consider documenting why this is disabled by default.
+
+#### `wakegen/main.py` ✓
+
+| Aspect | Assessment |
+|--------|------------|
+| **Structure** | ✅ Clean entry point |
+| **Exports** | ✅ Proper `__all__` export |
+| **Size** | ✅ Minimal (10 lines) |
+
+No issues identified.
+
+#### `wakegen/core/types.py` ✓
+
+| Aspect | Assessment |
+|--------|------------|
+| **Enums** | ✅ Well-structured `str, Enum` pattern |
+| **Documentation** | ✅ Clear docstrings |
+| **Coverage** | ✅ All 11 providers defined |
+
+All provider types properly enumerated: `EDGE_TTS`, `MINIMAX`, `PIPER`, `COQUI_XTTS`, `KOKORO`, `MIMIC3`, `F5_TTS`, `STYLETTS2`, `ORPHEUS`, `BARK`, `CHATTTS`.
+
+---
+
+### 5B. Configuration Files Review
+
+#### `wakegen/config/yaml_loader.py` ✓
+
+| Feature | Assessment |
+|---------|------------|
+| **Pydantic v2** | ✅ Proper use of `ConfigDict`, `Field`, validators |
+| **Env Vars** | ✅ `${VAR_NAME:default}` substitution pattern |
+| **Validation** | ✅ Comprehensive field validators |
+| **Error Msgs** | ✅ Excellent human-readable error formatting |
+| **Template** | ✅ Well-commented config template generator |
+
+**Strengths**:
+- Pattern: `ENV_VAR_PATTERN = r"\$\{([^}:]+)(?::([^}]*))?\}"` is robust
+- Models: `ProjectConfig`, `ProviderConfig`, `GenerationConfig`, `AugmentationConfig`, `ExportConfig` well-designed
+- Validation: Cross-model validation (e.g., provider weights must sum to 1.0)
+
+No issues identified.
+
+---
+
+### 5C. Models Review
+
+#### `wakegen/models/audio.py` ✓
+
+| Aspect | Assessment |
+|--------|------------|
+| **Structure** | ✅ Clean Pydantic models |
+| **Types** | ✅ Proper type hints |
+| **Fields** | ✅ Good use of `Field` with descriptions |
+
+Models: `Voice`, `AudioSample`, `ProviderCapabilities` - all well-structured.
+
+#### `wakegen/models/generation.py` ✓
+
+| Aspect | Assessment |
+|--------|------------|
+| **Structure** | ✅ Clean Pydantic models |
+| **Validation** | ✅ Range validators (`ge=`, `le=`) |
+| **Coverage** | ✅ Request/Response/Parameters/Result pattern |
+
+Models: `GenerationRequest`, `GenerationResponse`, `GenerationParameters`, `GenerationResult` - all well-structured.
+
+---
+
+### 5D. Provider Files Review
+
+#### `wakegen/providers/base.py` ✓
+
+| Aspect | Assessment |
+|--------|------------|
+| **Structure** | ✅ Proper ABC pattern |
+| **Methods** | ✅ All required abstract methods |
+| **Cleanup** | ✅ Default `cleanup()` with documentation |
+| **Health** | ✅ Default `health_check()` implementation |
+
+No issues identified.
+
+#### `wakegen/generation/batch_processor.py` ✓
+
+| ID | Severity | Location | Issue | Recommendation |
+|----|----------|----------|-------|----------------|
+| BP-001 | Low | Line 57 | `rate_limits: dict[str, tuple[int, int]] = None` type hint | Use `None` default with `dict[...] | None` type |
+| BP-002 | Low | Line 224-229 | Exception silently swallowed on duration read | Log warning instead of bare `pass` |
+| BP-003 | Medium | Line 235-237 | `cast(ProviderType, getattr(self, "_current_provider_type", "edge_tts"))` | `_current_provider_type` is never set - always defaults to edge_tts |
+
+```python
+# BP-001 Fix
+rate_limits: dict[str, tuple[int, int]] | None = None
+
+# BP-002 Fix
+except Exception as e:
+    logger.debug(f"Could not read audio duration: {e}")
+```
+
+---
+
+### 5E. Open Source Providers Review
+
+All 9 open source providers follow consistent patterns:
+
+| Provider | File | Lines | Issues |
+|----------|------|-------|--------|
+| bark.py | ✓ | 329 | None |
+| chattts.py | ✓ | 384 | None |
+| coqui_xtts.py | ✓ | 306 | OS-001 |
+| kokoro.py | ✓ | 251 | None |
+| piper.py | ✓ | 340 | None |
+| mimic3.py | ✓ | 422 | None |
+| f5_tts.py | ✓ | 340 | None |
+| orpheus.py | ✓ | 416 | None |
+| styletts2.py | ✓ | 349 | None |
+
+#### Issues Identified
+
+| ID | Severity | Location | Issue | Recommendation |
+|----|----------|----------|-------|----------------|
+| OS-001 | Low | `coqui_xtts.py:277` | Import inside function (`import shutil`) | Move to module level |
+
+#### ✅ Provider Strengths
+
+1. **Consistent Structure**: All providers follow the same class pattern
+2. **Proper Registration**: All end with `register_provider(ProviderType.X, XProvider)`
+3. **Lazy Loading**: Models are loaded on first use, not at import
+4. **Cleanup Methods**: Heavy providers (XTTS, Bark, ChatTTS) properly implement `cleanup()`
+5. **Documentation**: Excellent ELI5-style comments throughout
+
+---
+
+### 5F. Utilities Review
+
+#### `wakegen/utils/async_helpers.py` ✓
+
+| Feature | Assessment |
+|---------|------------|
+| **Retry Decorator** | ✅ Well-implemented with exponential backoff |
+| **ParallelExecutor** | ✅ Good concurrency control with semaphore |
+| **RateLimiter** | ✅ Token bucket implementation |
+| **BatchConfig** | ⚠️ Duplicate class name (also in batch_processor.py) |
+
+| ID | Severity | Location | Issue | Recommendation |
+|----|----------|----------|-------|----------------|
+| AH-001 | Low | Line 380-387 | `BatchConfig` duplicates class in `batch_processor.py` | Consolidate to single location |
+| AH-002 | Low | Line 311 | `yield task.result()` could mask exceptions | Add exception handling |
+
+---
+
+## Updated Consolidated Findings
+
+### New Issues Added (P3 - Backlog)
+
+16. **BP-001**: Type hint inconsistency in BatchConfig
+17. **BP-003**: `_current_provider_type` never set, always defaults to edge_tts
+18. **OS-001**: Import inside function in coqui_xtts.py
+19. **AH-001**: Duplicate `BatchConfig` class across modules
+
+---
+
 ## Appendix: Files Reviewed
 
 ```
 wakegen/
-├── __init__.py
-├── main.py
+├── __init__.py ✓
+├── main.py ✓
 ├── core/
 │   ├── exceptions.py ✓
 │   ├── protocols.py ✓
-│   └── types.py
+│   └── types.py ✓
 ├── config/
 │   ├── settings.py ✓
-│   └── yaml_loader.py
+│   └── yaml_loader.py ✓
 ├── models/
-│   ├── audio.py
+│   ├── audio.py ✓
 │   ├── config.py ✓
-│   └── generation.py
+│   └── generation.py ✓
 ├── providers/
-│   ├── base.py
+│   ├── base.py ✓
 │   ├── registry.py ✓
 │   ├── commercial/minimax.py ✓
-│   └── opensource/*.py
+│   └── opensource/
+│       ├── bark.py ✓
+│       ├── chattts.py ✓
+│       ├── coqui_xtts.py ✓
+│       ├── kokoro.py ✓
+│       ├── piper.py ✓
+│       ├── mimic3.py ✓
+│       ├── f5_tts.py ✓
+│       ├── orpheus.py ✓
+│       └── styletts2.py ✓
 ├── generation/
 │   ├── orchestrator.py ✓
 │   ├── checkpoint.py ✓
-│   └── batch_processor.py
+│   └── batch_processor.py ✓
 ├── augmentation/
 │   └── pipeline.py ✓
 ├── quality/
@@ -450,8 +635,10 @@ wakegen/
 │   └── routers/generation.py ✓
 └── utils/
     ├── audio.py ✓
-    └── async_helpers.py
+    └── async_helpers.py ✓
 ```
+
+**All files reviewed as of December 9, 2025.**
 
 ---
 
