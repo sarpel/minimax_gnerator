@@ -463,23 +463,32 @@ wake word audio datasets using multiple TTS providers.
 
     # Import and register routers (we'll create these files next)
     try:
+        from fastapi import Depends
         from wakegen.web.routers import config_router, generation, providers
+        from wakegen.web.dependencies import verify_api_key
 
-        # Provider management endpoints
+        # Provider management endpoints (Protected)
         app.include_router(
             providers.router,
             prefix="/api/providers",
-            tags=["Providers"],  # Groups endpoints in API docs
+            tags=["Providers"],
+            dependencies=[Depends(verify_api_key)],
         )
 
-        # Configuration endpoints
+        # Configuration endpoints (Protected)
         app.include_router(
-            config_router.router, prefix="/api/config", tags=["Configuration"]
+            config_router.router,
+            prefix="/api/config",
+            tags=["Configuration"],
+            dependencies=[Depends(verify_api_key)],
         )
 
-        # Generation endpoints
+        # Generation endpoints (Protected)
         app.include_router(
-            generation.router, prefix="/api/generate", tags=["Generation"]
+            generation.router,
+            prefix="/api/generate",
+            tags=["Generation"],
+            dependencies=[Depends(verify_api_key)],
         )
 
         logger.info("All API routers registered successfully")
@@ -496,7 +505,12 @@ wake word audio datasets using multiple TTS providers.
     try:
         from wakegen.web.routers import audio
 
-        app.include_router(audio.router, prefix="/api/audio", tags=["Audio"])
+        app.include_router(
+            audio.router,
+            prefix="/api/audio",
+            tags=["Audio"],
+            dependencies=[Depends(verify_api_key)],
+        )
         logger.info("Audio router registered")
     except ImportError as e:
         module_name = getattr(e, "name", "unknown")
@@ -509,7 +523,10 @@ wake word audio datasets using multiple TTS providers.
         from wakegen.web.routers import augmentation
 
         app.include_router(
-            augmentation.router, prefix="/api/augmentation", tags=["Augmentation"]
+            augmentation.router,
+            prefix="/api/augmentation",
+            tags=["Augmentation"],
+            dependencies=[Depends(verify_api_key)],
         )
         logger.info("Augmentation router registered")
     except ImportError as e:
@@ -522,7 +539,12 @@ wake word audio datasets using multiple TTS providers.
     try:
         from wakegen.web.routers import quality
 
-        app.include_router(quality.router, prefix="/api/quality", tags=["Quality"])
+        app.include_router(
+            quality.router,
+            prefix="/api/quality",
+            tags=["Quality"],
+            dependencies=[Depends(verify_api_key)],
+        )
         logger.info("Quality router registered")
     except ImportError as e:
         module_name = getattr(e, "name", "unknown")
@@ -534,7 +556,12 @@ wake word audio datasets using multiple TTS providers.
     try:
         from wakegen.web.routers import export
 
-        app.include_router(export.router, prefix="/api/export", tags=["Export"])
+        app.include_router(
+            export.router,
+            prefix="/api/export",
+            tags=["Export"],
+            dependencies=[Depends(verify_api_key)],
+        )
         logger.info("Export router registered")
     except ImportError as e:
         module_name = getattr(e, "name", "unknown")
@@ -546,7 +573,12 @@ wake word audio datasets using multiple TTS providers.
     try:
         from wakegen.web.routers import system
 
-        app.include_router(system.router, prefix="/api/system", tags=["System"])
+        app.include_router(
+            system.router,
+            prefix="/api/system",
+            tags=["System"],
+            dependencies=[Depends(verify_api_key)],
+        )
         logger.info("System router registered")
     except ImportError as e:
         module_name = getattr(e, "name", "unknown")

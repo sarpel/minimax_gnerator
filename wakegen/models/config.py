@@ -1,5 +1,4 @@
-
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from wakegen.core.types import AudioFormat, QualityLevel
@@ -20,18 +19,35 @@ class ProviderConfig(BaseSettings):
     )
 
     # API Keys (Optional for now, as Edge TTS doesn't need one)
-    minimax_api_key: str | None = Field(
+    # SEC-002: Use SecretStr to prevent accidental logging of API keys
+    minimax_api_key: SecretStr | None = Field(
         default=None, validation_alias="MINIMAX_API_KEY"
     )
     minimax_group_id: str | None = Field(
         default=None, validation_alias="MINIMAX_GROUP_ID"
     )
-    elevenlabs_api_key: str | None = Field(
+    elevenlabs_api_key: SecretStr | None = Field(
         default=None, validation_alias="ELEVENLABS_API_KEY"
     )
-    openai_api_key: str | None = Field(
+    openai_api_key: SecretStr | None = Field(
         default=None, validation_alias="OPENAI_API_KEY"
     )
+
+    def get_minimax_key(self) -> str | None:
+        """Get the plain text MiniMax API key."""
+        return self.minimax_api_key.get_secret_value() if self.minimax_api_key else None
+
+    def get_elevenlabs_key(self) -> str | None:
+        """Get the plain text ElevenLabs API key."""
+        return (
+            self.elevenlabs_api_key.get_secret_value()
+            if self.elevenlabs_api_key
+            else None
+        )
+
+    def get_openai_key(self) -> str | None:
+        """Get the plain text OpenAI API key."""
+        return self.openai_api_key.get_secret_value() if self.openai_api_key else None
 
 
 class GenerationConfig(BaseSettings):

@@ -8,6 +8,7 @@ This module provides multiple methods for detecting duplicate audio samples:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import warnings
 from dataclasses import dataclass
@@ -102,42 +103,50 @@ async def detect_duplicates(
     except Exception as e:
         raise DeduplicationError(f"Failed to load target file: {e!s}") from e
 
-    results = []
+    # Optimized parallel processing (PERF-001)
+    # Use a semaphore to limit concurrent file operations
+    sem = asyncio.Semaphore(10)  # Limit concurrent file reads/comparisons
 
-    for ref_file in reference_files:
-        ref_file = Path(ref_file)
+    async def _process_reference(ref_path: str | Path) -> DuplicateDetectionResult:
+        ref_path = Path(ref_path)
 
-        if not ref_file.exists():
-            results.append(
-                DuplicateDetectionResult(
+        async with sem:
+            if not ref_path.exists():
+                return DuplicateDetectionResult(
                     is_duplicate=False,
                     similarity_score=0.0,
                     method_used="file_check",
-                    reference_file=str(ref_file),
+                    reference_file=str(ref_path),
                     error_message="Reference file does not exist",
                 )
-            )
-            continue
 
-        try:
-            # Try multiple detection methods in order of increasing computational cost
-            result = await _detect_duplicates_single(
-                target_audio, target_sample_rate, ref_file, config
-            )
-            results.append(result)
+            try:
+                # Try multiple detection methods
+                result = await _detect_duplicates_single(
+                    target_audio, target_sample_rate, ref_path, config
+                )
 
-        except Exception as e:
-            results.append(
-                DuplicateDetectionResult(
+                # Ensure reference file path is set in result
+                if not result.reference_file:
+                    result.reference_file = str(ref_path)
+
+                return result
+
+            except Exception as e:
+                return DuplicateDetectionResult(
                     is_duplicate=False,
                     similarity_score=0.0,
                     method_used="error",
-                    reference_file=str(ref_file),
+                    reference_file=str(ref_path),
                     error_message=f"Detection failed: {e!s}",
                 )
-            )
 
-    return results
+    # Run comparisons in parallel
+    results = await asyncio.gather(
+        *[_process_reference(ref) for ref in reference_files]
+    )
+
+    return list(results)
 
 
 async def _detect_duplicates_single(

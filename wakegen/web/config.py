@@ -28,7 +28,7 @@ and automatic validation.
         WAKEGEN_WEB_RELOAD=true         # Enable auto-reload
 """
 
-
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
 
@@ -113,6 +113,16 @@ class WebConfig(BaseSettings):
     """
     Logging verbosity level. One of: DEBUG, INFO, WARNING, ERROR, CRITICAL.
     DEBUG is most verbose, CRITICAL only shows fatal errors.
+    """
+
+    # =========================================================================
+    # SECURITY SETTINGS
+    # =========================================================================
+
+    api_key: SecretStr | None = None
+    """
+    API Key for protecting the web interface.
+    If set, requests must include 'X-API-Key' header.
     """
 
     # =========================================================================

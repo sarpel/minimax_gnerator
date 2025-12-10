@@ -175,14 +175,15 @@ class MiniMaxProvider(BaseProvider):
         super().__init__(config)
 
         # Validate that we have the required API key
-        if not self.config.minimax_api_key:
+        if not self.config.get_minimax_key():
             raise ConfigError(
                 "MiniMax API key is required. "
                 "Please set MINIMAX_API_KEY in your environment."
             )
 
         # Set up HTTP client for async requests
-        self.api_key = self.config.minimax_api_key
+        # SEC-002: Use helper method to get plain text key from SecretStr
+        self.api_key = self.config.get_minimax_key()
         self.group_id = self.config.minimax_group_id
         self.base_url = "https://api.minimaxi.chat"  # Fixed: Changed from https://api.minimax.ai to official endpoint
         self.endpoint = "/v1/t2a_v2"
