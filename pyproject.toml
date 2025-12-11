@@ -30,10 +30,11 @@ keywords = ["wake-word", "tts", "dataset", "audio", "generation"]
 #
 dependencies = [
     # ===== Core Dependencies =====
+    "numpy<2.0.0",              # PINNED: Version 2.0.0+ breaks F5-TTS and others
+    "pydantic>=2.5.0,<2.11.0",  # PINNED: F5-TTS requires <=2.10.6
     "httpx>=0.27.0",            # For making HTTP requests (web calls)
     "soundfile>=0.12.0",        # For saving audio files
     "librosa>=0.10.0",          # For audio processing (resampling, etc.)
-    "pydantic>=2.5.0",          # For data validation and settings
     "pydantic-settings>=2.1.0", # For managing configuration from .env files
     "python-dotenv>=1.0.0",     # For loading environment variables from .env
     "pyyaml>=6.0.0",            # For reading YAML configuration files

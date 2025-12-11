@@ -55,3 +55,14 @@
     *   Add unit tests for `wakegen/utils/` (audio, async helpers).
     *   Add integration tests for `wakegen/web` error handling.
 *   **Benefit:** Higher confidence in refactoring and release stability.
+
+## 5. Architecture: Hybrid Venv/Docker System
+
+### ARC-005: Docker Sidecar Support for Incompatible Providers
+*   **Context:** Some TTS providers (e.g., legacy Coqui, specific versions of F5-TTS) have conflicting dependencies (e.g., Python < 3.10, older NumPy) that cannot coexist in the main `venv`.
+*   **Plan:** Implement a "Sidecar" architecture where these providers run in isolated Docker containers.
+    *   **Controller (WakeGen):** The main app manages the container lifecycle (build, start, stop) and communicates via a local REST API (e.g., `http://localhost:5050/generate`).
+    *   **Sidecar (Container):** A lightweight Flask/FastAPI server wrapping the specific TTS engine, running in its own perfect environment (Linux, specific Python version).
+    *   **Discovery:** A new `DockerProvider` class will handle the orchestration.
+*   **Prerequisites:** Users must have Docker Desktop installed to use these specific providers.
+*   **Benefit:** Allows WakeGen to support *any* TTS engine regardless of its dependency hell, without bloating or breaking the main application.
