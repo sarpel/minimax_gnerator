@@ -320,7 +320,7 @@ async def batch_verify_pronunciation(
         raise ASRVerificationError("Whisper is not available for batch processing")
 
     results = []
-    for audio_path, expected_text in zip(audio_file_paths, expected_texts):
+    for audio_path, expected_text in zip(audio_file_paths, expected_texts, strict=True):
         try:
             result = await verify_pronunciation(audio_path, expected_text, config)
             results.append(result)

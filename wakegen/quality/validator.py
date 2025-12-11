@@ -213,9 +213,7 @@ async def validate_sample(
         )
 
     except Exception as e:
-        raise SampleValidationError(
-            f"Validation failed for {file_path}: {e!s}"
-        ) from e
+        raise SampleValidationError(f"Validation failed for {file_path}: {e!s}") from e
 
 
 async def _calculate_file_hash(file_path: Path) -> str:

@@ -5,18 +5,18 @@ Linting script for wakegen project.
 This script runs all linting and formatting tools in sequence.
 Use --fix to automatically fix issues where possible.
 """
+
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Tuple
 
 
-def run_command(cmd: List[str], description: str) -> Tuple[bool, str]:
+def run_command(cmd: list[str], description: str) -> tuple[bool, str]:
     """Run a command and return success status and output."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Running: {description}")
     print(f"Command: {' '.join(cmd)}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     try:
         result = subprocess.run(

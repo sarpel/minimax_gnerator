@@ -14,12 +14,10 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Generator
-
-from wakegen.core.exceptions import ConfigError
 
 logger = logging.getLogger(__name__)
 

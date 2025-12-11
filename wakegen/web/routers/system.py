@@ -9,7 +9,7 @@ This module provides endpoints for system status, GPU information, and cache man
     GET  /cache/summary    - Get cache usage statistics
     POST /cache/clear      - Clear application caches
     GET  /env              - List relevant environment variables
-    
+
 """
 
 import logging

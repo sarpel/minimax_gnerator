@@ -66,8 +66,11 @@ class AudioDegrader:
         Raises:
             AugmentationError: If bit depth is invalid.
         """
-        if target_bits not in [8, 12, 16, 20, 24, 32]:
-            raise AugmentationError(f"Unsupported bit depth: {target_bits}")
+        allowed_bits = [8, 12, 16, 20, 24, 32]
+        if target_bits not in allowed_bits:
+            # Snap to nearest valid bit depth
+            target_bits = min(allowed_bits, key=lambda x: abs(x - target_bits))
+
 
         try:
             # Scale to target bit range
@@ -130,9 +133,7 @@ class AudioDegrader:
             return np.fft.irfft(fft_filtered)
 
         except Exception as e:
-            raise AugmentationError(
-                f"Failed to apply bandwidth limiting: {e!s}"
-            ) from e
+            raise AugmentationError(f"Failed to apply bandwidth limiting: {e!s}") from e
 
     def add_transmission_artifacts(
         self,
@@ -196,7 +197,11 @@ class AudioDegrader:
         Raises:
             AugmentationError: If bitrate is invalid.
         """
-        if bitrate_kbps not in [32, 48, 64, 96, 128, 192, 256, 320]:
+        allowed_bitrates = [32, 48, 64, 96, 128, 192, 256, 320]
+        if bitrate_kbps not in allowed_bitrates:
+            # Snap to nearest valid bitrate
+            bitrate_kbps = min(allowed_bitrates, key=lambda x: abs(x - bitrate_kbps))
+
             raise AugmentationError(f"Unsupported MP3 bitrate: {bitrate_kbps}")
 
         try:
@@ -270,9 +275,7 @@ class AudioDegrader:
             return degraded
 
         except Exception as e:
-            raise AugmentationError(
-                f"Failed to apply random degradation: {e!s}"
-            ) from e
+            raise AugmentationError(f"Failed to apply random degradation: {e!s}") from e
 
     async def apply_degradation(
         self,

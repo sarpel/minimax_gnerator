@@ -142,9 +142,9 @@ class ChatTTSProvider(BaseProvider):
             raise ProviderError(
                 f"ChatTTS is not installed. Install with: pip install chattts\n"
                 f"Original error: {e}"
-            )
+            ) from e
         except Exception as e:
-            raise ProviderError(f"Failed to initialize ChatTTS: {e}")
+            raise ProviderError(f"Failed to initialize ChatTTS: {e}") from e
 
     async def generate(
         self,
@@ -228,7 +228,9 @@ class ChatTTSProvider(BaseProvider):
 
             # Normalize and convert to int16
             audio_array = audio_array.flatten()
-            audio_array = audio_array / np.max(np.abs(audio_array)) * 0.9
+            max_val = np.max(np.abs(audio_array))
+            if max_val > 0:
+                audio_array = audio_array / max_val * 0.9
             audio_int16 = (audio_array * 32767).astype(np.int16)
 
             # Save audio
@@ -238,7 +240,33 @@ class ChatTTSProvider(BaseProvider):
             write_wav(str(output_file), self._sample_rate, audio_int16)
 
         except Exception as e:
-            raise ProviderError(f"ChatTTS generation failed: {e}")
+            raise ProviderError(f"ChatTTS generation failed: {e}") from e
+
+    async def cleanup(self) -> None:
+        """
+        Clean up resources.
+        Unloads the ChatTTS model to free up memory/VRAM.
+        """
+        if self._model:
+            del self._model
+            self._model = None
+
+        # Clear speaker cache
+        self._speaker_cache.clear()
+
+        # Force garbage collection
+        import gc
+        gc.collect()
+
+        # If using GPU, empty cache
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except ImportError:
+            pass
+
+        await super().cleanup()
 
     async def _get_speaker_embedding(self, voice_id: str) -> Any:
         """
@@ -270,6 +298,8 @@ class ChatTTSProvider(BaseProvider):
         torch.manual_seed(seed)
 
         assert self._model is not None
+        # Note: ChatTTS model loading uses torch.load internally which can be unsafe
+        # with untrusted files. We are using the official model here.
         speaker = await asyncio.to_thread(
             self._model.sample_random_speaker,
         )

@@ -234,7 +234,7 @@ class MiniMaxProvider(BaseProvider):
             },
         }
 
-    @property
+
     def provider_type(self) -> ProviderType:
         """
         Returns the type of this provider.

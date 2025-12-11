@@ -10,8 +10,9 @@ import pytest
 
 def test_validate_dataset(client):
     """Test the quality validation endpoint."""
-    with patch("pathlib.Path.exists", return_value=True), patch(
-        "pathlib.Path.rglob", return_value=[Path("test.wav")]
+    with (
+        patch("pathlib.Path.exists", return_value=True),
+        patch("pathlib.Path.rglob", return_value=[Path("test.wav")]),
     ):
         # Use GET for queries as per implementation
         response = client.get("/api/quality/validate?directory=./data")
@@ -33,8 +34,9 @@ def test_apply_augmentation(client):
     """Test the augmentation application endpoint."""
     with patch("wakegen.web.routers.augmentation.run_augmentation") as mock_run:
         # Need to provide a valid profile object and existing input directory
-        with patch("pathlib.Path.exists", return_value=True), patch(
-            "pathlib.Path.rglob", return_value=[Path("test.wav")]
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("pathlib.Path.rglob", return_value=[Path("test.wav")]),
         ):
             payload = {
                 "input_dir": "./in",
@@ -61,10 +63,11 @@ def test_apply_augmentation(client):
 
 def test_start_export(client):
     """Test starting an export job."""
-    with patch("wakegen.web.routers.export.run_export") as mock_run, patch(
-        "pathlib.Path.exists", return_value=True
-    ), patch("pathlib.Path.rglob", return_value=[Path("test.wav")]), patch(
-        "pathlib.Path.mkdir"
+    with (
+        patch("wakegen.web.routers.export.run_export") as mock_run,
+        patch("pathlib.Path.exists", return_value=True),
+        patch("pathlib.Path.rglob", return_value=[Path("test.wav")]),
+        patch("pathlib.Path.mkdir"),
     ):
         payload = {
             "format": "openwakeword",

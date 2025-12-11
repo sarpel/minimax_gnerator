@@ -347,7 +347,7 @@ async def _run_generation(
         cache_hits = 0
         for i in track(range(count), description="Generating samples..."):
             filename = (
-                f"{text.replace(' ', '_').lower()}_{i+1}.{gen_config.audio_format}"
+                f"{text.replace(' ', '_').lower()}_{i + 1}.{gen_config.audio_format}"
             )
             file_path = os.path.join(output_dir, filename)
 

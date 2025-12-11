@@ -464,8 +464,9 @@ wake word audio datasets using multiple TTS providers.
     # Import and register routers (we'll create these files next)
     try:
         from fastapi import Depends
-        from wakegen.web.routers import config_router, generation, providers
+
         from wakegen.web.dependencies import verify_api_key
+        from wakegen.web.routers import config_router, generation, providers
 
         # Provider management endpoints (Protected)
         app.include_router(

@@ -85,7 +85,7 @@ class EdgeTTSProvider(BaseProvider):
             raise ProviderError(
                 f"Edge TTS is not installed. Install with: pip install edge-tts\n"
                 f"Original error: {e}"
-            )
+            ) from e
         except ProviderError:
             # Re-raise our validation errors as-is
             raise

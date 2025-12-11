@@ -101,19 +101,11 @@ class RoomSimulator:
             # Validate room parameters
             self._validate_room_parameters(room_params)
 
-            # Create room corners array [[x1, y1], [x2, y2], ...]
-            corners = np.array(
-                [
-                    [0, 0],
-                    [room_params.length, 0],
-                    [room_params.length, room_params.width],
-                    [0, room_params.width],
-                ]
-            ).T  # Transpose to get shape (2, 4)
-
             # Create the room
+            # Fix: pyroomacoustics ShoeBox takes dimensions as first arg, not corners
+            # corners are for the generic Room class
             room = pra.ShoeBox(
-                corners,
+                [room_params.length, room_params.width, room_params.height],
                 fs=self.sample_rate,
                 materials=pra.Material(room_params.absorption),
                 max_order=room_params.max_order,
@@ -127,7 +119,8 @@ class RoomSimulator:
             )
 
             room.add_source(
-                room_params.source_position, signal=np.array([1.0])  # Impulse signal
+                room_params.source_position,
+                signal=np.array([1.0]),  # Impulse signal
             )
 
             # Compute RIR (Room Impulse Response)
@@ -210,9 +203,7 @@ class RoomSimulator:
             return cast(np.ndarray[Any, Any], mixed)
 
         except Exception as e:
-            raise RoomSimulationError(
-                f"Failed to apply room simulation: {e!s}"
-            ) from e
+            raise RoomSimulationError(f"Failed to apply room simulation: {e!s}") from e
 
     def _fft_convolve(
         self, signal: np.ndarray[Any, Any], kernel: np.ndarray[Any, Any]
@@ -289,9 +280,7 @@ class RoomSimulator:
             sf.write(output_path, processed_audio, self.sample_rate)
 
         except Exception as e:
-            raise RoomSimulationError(
-                f"Failed to simulate room effects: {e!s}"
-            ) from e
+            raise RoomSimulationError(f"Failed to simulate room effects: {e!s}") from e
 
     def get_preset_room(self, preset_name: str) -> RoomParameters:
         """

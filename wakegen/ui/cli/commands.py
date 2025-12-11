@@ -520,7 +520,7 @@ async def run_generation(
         cache_hits = 0
         for i in track(range(count), description="Generating samples..."):
             filename = (
-                f"{text.replace(' ', '_').lower()}_{i+1}.{gen_config.audio_format}"
+                f"{text.replace(' ', '_').lower()}_{i + 1}.{gen_config.audio_format}"
             )
             file_path = os.path.join(output_dir, filename)
 
@@ -562,17 +562,65 @@ async def run_generation(
 
 
 @cli.command()
+@click.option("--input-dir", required=True, help="Directory containing original audio")
+@click.option("--output-dir", required=True, help="Directory to save augmented audio")
 @click.option(
-    "--input-dir", required=True, help="Directory containing audio files to augment"
+    "--profile",
+    default="default",
+    help="Augmentation profile (default, noisy, reverberant)",
 )
-@click.option("--output-dir", required=True, help="Directory to save augmented files")
-def augment(input_dir: str, output_dir: str) -> None:
+@click.option(
+    "--count", default=1, help="Number of augmented copies per original file"
+)
+def augment(
+    input_dir: str, output_dir: str, profile: str, count: int
+) -> None:
     """
     Applies augmentation effects (noise, reverb) to existing audio files.
     """
-    console.print("[yellow]Augmentation command not yet fully implemented.[/yellow]")
-    console.print(f"Would augment files from {input_dir} to {output_dir}")
-    # TODO: Connect to wakegen.augmentation.pipeline
+    from wakegen.augmentation.pipeline import AugmentationPipeline
+    from wakegen.augmentation.profiles import get_profile
+    import asyncio
+    from pathlib import Path
+
+    input_path = Path(input_dir)
+    output_path = Path(output_dir)
+
+    if not input_path.exists():
+        console.print(f"[bold red]Error:[/bold red] Input directory {input_dir} not found")
+        return
+
+    try:
+        # Load profile
+        aug_profile = get_profile(profile)
+        pipeline = AugmentationPipeline(aug_profile)
+        
+        # Get all wav files
+        files = list(input_path.glob("*.wav"))
+        if not files:
+            console.print(f"[yellow]No .wav files found in {input_dir}[/yellow]")
+            return
+
+        console.print(f"Found {len(files)} files. Generating {count} augmented copies each.")
+        
+        async def run_augmentation():
+            with Progress() as progress:
+                task = progress.add_task("[cyan]Augmenting...", total=len(files) * count)
+                
+                for file in files:
+                    for i in range(count):
+                        # Create output filename: original_aug_{profile}_{i}.wav
+                        out_name = f"{file.stem}_aug_{profile}_{i}{file.suffix}"
+                        out_file = output_path / out_name
+                        
+                        await pipeline.apply(str(file), str(out_file))
+                        progress.advance(task)
+                        
+        asyncio.run(run_augmentation())
+        console.print(f"[bold green]Augmentation complete![/bold green] Output: {output_dir}")
+
+    except Exception as e:
+        console.print(f"[bold red]Augmentation failed:[/bold red] {e}")
 
 
 @cli.command()
@@ -581,15 +629,63 @@ def validate(data_dir: str) -> None:
     """
     Runs quality assurance checks on the dataset.
     """
-    console.print("[yellow]Validation command not yet fully implemented.[/yellow]")
-    console.print(f"Would validate dataset in {data_dir}")
-    # TODO: Connect to wakegen.quality.validator
+    from wakegen.quality.validator import validate_sample
+    from wakegen.quality.statistics import calculate_dataset_statistics
+    import asyncio
+    from pathlib import Path
+
+    path = Path(data_dir)
+    if not path.exists():
+        console.print(f"[bold red]Error:[/bold red] Directory {data_dir} not found")
+        return
+
+    try:
+        files = list(path.rglob("*.wav"))
+        if not files:
+            console.print("[yellow]No audio files found to validate.[/yellow]")
+            return
+
+        console.print(f"Validating {len(files)} files...")
+        
+        async def run_validation():
+            valid_count = 0
+            results = []
+            
+            with Progress() as progress:
+                task = progress.add_task("[cyan]Validating...", total=len(files))
+                
+                for file in files:
+                    result = await validate_sample(str(file))
+                    results.append(result)
+                    if result.is_valid:
+                        valid_count += 1
+                    progress.advance(task)
+            
+            # Calculate stats
+            stats = calculate_dataset_statistics(results)
+            
+            # Display report
+            console.print("\n[bold]Validation Results:[/bold]")
+            console.print(f"Total Files: {len(files)}")
+            console.print(f"Valid Files: [green]{valid_count}[/green]")
+            console.print(f"Invalid Files: [red]{len(files) - valid_count}[/red]")
+            console.print(f"Pass Rate: {valid_count / len(files) * 100:.1f}%")
+            
+            if stats.get("issues"):
+                console.print("\n[bold yellow]Common Issues:[/bold yellow]")
+                for issue, count in stats["issues"].items():
+                    console.print(f"  - {issue}: {count}")
+
+        asyncio.run(run_validation())
+
+    except Exception as e:
+        console.print(f"[bold red]Validation failed:[/bold red] {e}")
 
 
 @cli.command()
 @click.option("--data-dir", required=True, help="Directory containing the dataset")
 @click.option(
-    "--format", default="openwakeword", help="Export format (default: openwakeword)"
+    "--format", default="openwakeword", help="Export format (openwakeword, pytorch, tensorflow)"
 )
 @click.option(
     "--output-path", required=True, help="Path to save the exported manifest/files"
@@ -598,25 +694,51 @@ def export(data_dir: str, format: str, output_path: str) -> None:
     """
     Exports the dataset to a specific format for training.
     """
-    console.print("[yellow]Export command not yet fully implemented.[/yellow]")
-    console.print(f"Would export {data_dir} as {format} to {output_path}")
-    # TODO: Connect to wakegen.export
+    from wakegen.export import export_dataset
+    from wakegen.core.types import AudioFormat
+    import asyncio
+
+    try:
+        console.print(f"Exporting dataset from {data_dir} to {output_path} ({format})...")
+        
+        async def run_export():
+            await export_dataset(
+                source_dir=data_dir,
+                output_dir=output_path,
+                format=format,
+                split_ratios=(0.8, 0.1, 0.1) # Default 80/10/10 split
+            )
+            
+        asyncio.run(run_export())
+        console.print(f"[bold green]Export complete![/bold green]")
+
+    except Exception as e:
+        console.print(f"[bold red]Export failed:[/bold red] {e}")
 
 
 @cli.command()
-@click.option("--model-type", default="openwakeword", help="Type of model to train")
+@click.option("--export-dir", required=True, help="Directory containing the exported dataset (train.json)")
+@click.option("--model-name", default="my_wakeword", help="Name for the trained model")
 @click.option(
-    "--output-script", default="train.sh", help="Path to save the training script"
+    "--output-script", default="train_script.py", help="Path to save the training script"
 )
-def train_script(model_type: str, output_script: str) -> None:
+def train_script(export_dir: str, model_name: str, output_script: str) -> None:
     """
-    Generates a training script for the selected model type.
+    Generates a training script for the exported dataset.
     """
-    console.print(
-        "[yellow]Training script generation not yet fully implemented.[/yellow]"
-    )
-    console.print(f"Would generate {model_type} training script at {output_script}")
-    # TODO: Connect to wakegen.training.script_generator
+    from wakegen.training.script_generator import generate_training_script
+    import asyncio
+    
+    try:
+        asyncio.run(
+            generate_training_script(
+                export_dir=export_dir,
+                output_script_path=output_script,
+                model_name=model_name
+            )
+        )
+    except Exception as e:
+        console.print(f"[bold red]Script generation failed:[/bold red] {e}")
 
 
 # =============================================================================
@@ -1910,11 +2032,10 @@ def serve(host: str, port: int, reload: bool, debug: bool) -> None:
     uvicorn.run(
         # When reload=True, we pass the app as a string import path
         # When reload=False, we can pass the app object directly
-        "wakegen.web.app:create_app" if reload else app,
+        # Note: create_app returns an app instance, not a factory, so factory=False
+        "wakegen.web.app:app" if reload else app,
         host=host,
         port=port,
         reload=reload,
         log_level="debug" if debug else "info",
-        # Factory mode when using reload (function that creates app)
-        factory=reload,
     )

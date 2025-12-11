@@ -167,7 +167,10 @@ class VariationEngine:
         pitch_values = self._generate_pitch_values()
 
         # Create Cartesian product of all parameters
-        combinations: itertools.product[tuple[str, str, float, float, str]] | itertools.islice[tuple[str, str, float, float, str]]
+        combinations: (
+            itertools.product[tuple[str, str, float, float, str]]
+            | itertools.islice[tuple[str, str, float, float, str]]
+        )
         combinations = itertools.product(
             all_texts,
             self.parameters.voice_ids,

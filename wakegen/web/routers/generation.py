@@ -57,9 +57,7 @@ class GenerationJob(BaseModel):
     started_at: datetime | None = Field(
         default=None, description="When execution started"
     )
-    completed_at: datetime | None = Field(
-        default=None, description="When job finished"
-    )
+    completed_at: datetime | None = Field(default=None, description="When job finished")
 
     # Configuration
     wake_words: list[str] = Field(..., description="Wake words to generate")
@@ -256,6 +254,11 @@ async def run_generation_job(job_id: str) -> None:
             os.makedirs(word_dir, exist_ok=True)
 
             for i in range(job.count):
+                # Check for cancellation
+                if get_job(job_id).status == JobStatus.CANCELLED:
+                    logger.info(f"Job {job_id} cancelled during execution")
+                    return
+
                 sample_index += 1
 
                 # VOICE ROTATION: Cycle through available voices to create variation
@@ -279,16 +282,18 @@ async def run_generation_job(job_id: str) -> None:
                     logger.warning(f"Failed to generate sample: {e}")
                     # Continue with other samples instead of failing completely
 
-        # Mark as completed
-        job.status = JobStatus.COMPLETED
-        job.completed_at = datetime.now()
-        job.current_word = None
-        job.current_file = None
-        save_job(job)
+        # Mark as completed only if not cancelled
+        current_job = get_job(job_id)
+        if current_job.status != JobStatus.CANCELLED:
+            job.status = JobStatus.COMPLETED
+            job.completed_at = datetime.now()
+            job.current_word = None
+            job.current_file = None
+            save_job(job)
 
-        logger.info(
-            f"Job {job_id} completed: {job.completed_samples}/{job.total_samples} samples"
-        )
+            logger.info(
+                f"Job {job_id} completed: {job.completed_samples}/{job.total_samples} samples"
+            )
 
     except Exception as e:
         logger.error(f"Job {job_id} failed: {e}")

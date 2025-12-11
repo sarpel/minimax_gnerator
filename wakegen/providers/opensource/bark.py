@@ -171,9 +171,29 @@ class BarkProvider(BaseProvider):
             raise ProviderError(
                 f"Bark is not installed. Install with: pip install git+https://github.com/suno-ai/bark.git\n"
                 f"Original error: {e}"
-            )
+            ) from e
         except Exception as e:
-            raise ProviderError(f"Failed to initialize Bark: {e}")
+            raise ProviderError(f"Failed to initialize Bark: {e}") from e
+
+    async def cleanup(self) -> None:
+        """
+        Clean up resources.
+        Since Bark doesn't expose a direct unload method, we rely on garbage collection
+        but can clear any cached data if we had it.
+        """
+        # Force garbage collection to help release model weights
+        import gc
+        gc.collect()
+
+        # If using GPU, empty cache
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except ImportError:
+            pass
+
+        await super().cleanup()
 
     async def generate(
         self,
@@ -231,7 +251,7 @@ class BarkProvider(BaseProvider):
             write_wav(str(output_file), self._sample_rate, audio_int16)
 
         except Exception as e:
-            raise ProviderError(f"Bark generation failed: {e}")
+            raise ProviderError(f"Bark generation failed: {e}") from e
 
     async def list_voices(self, language: str | None = None) -> list[Voice]:
         """

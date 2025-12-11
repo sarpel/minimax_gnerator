@@ -140,9 +140,7 @@ class StyleTTS2Provider(BaseProvider):
             return self._model
 
         except Exception as e:
-            raise ProviderError(
-                f"Failed to initialize StyleTTS 2 model: {e!s}"
-            ) from e
+            raise ProviderError(f"Failed to initialize StyleTTS 2 model: {e!s}") from e
 
     def _parse_voice_id(self, voice_id: str) -> dict[str, str]:
         """

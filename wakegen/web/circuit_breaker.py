@@ -10,11 +10,11 @@ that says "this isn't working, let's stop trying for a bit and give it time to f
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from datetime import datetime, timedelta
+from collections.abc import Callable
+from datetime import datetime
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +120,7 @@ class CircuitBreaker:
             self._on_success()
             return result
 
-        except self.expected_exception as e:
+        except self.expected_exception:
             # Expected failure, record it
             self._on_failure()
             raise

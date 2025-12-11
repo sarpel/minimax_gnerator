@@ -254,9 +254,7 @@ class F5TTSProvider(BaseProvider):
             await self._ensure_f5_available()
             logger.info("F5-TTS configuration validated successfully")
         except Exception as e:
-            raise ProviderError(
-                f"F5-TTS configuration validation failed: {e!s}"
-            ) from e
+            raise ProviderError(f"F5-TTS configuration validation failed: {e!s}") from e
 
     def supports_voice_cloning(self) -> bool:
         """Returns True as F5-TTS supports voice cloning."""

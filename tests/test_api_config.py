@@ -55,8 +55,9 @@ def test_save_config(client):
         # Or just allow validation to pass since valid_yaml is provided.
 
         # We also need to patch Path.exists and mkdir
-        with patch("pathlib.Path.exists", return_value=False), patch(
-            "pathlib.Path.mkdir"
+        with (
+            patch("pathlib.Path.exists", return_value=False),
+            patch("pathlib.Path.mkdir"),
         ):
             response = client.post(
                 "/api/config/save",

@@ -41,7 +41,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Request
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 # Import job management from generation router
 from wakegen.web.routers.generation import JobStatus, get_job

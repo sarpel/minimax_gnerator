@@ -11,6 +11,7 @@ Key Features:
 - List available providers
 - Auto-discover which providers are actually usable (dependencies installed)
 """
+
 import importlib.util
 import os
 import sys
@@ -161,16 +162,16 @@ def get_any_provider(provider_name: str, config: ProviderConfig) -> TTSProvider:
             from wakegen.plugins.discovery import get_plugin_provider
 
             return cast(TTSProvider, get_plugin_provider(provider_name, config))
-        except ImportError:
+        except ImportError as e:
             raise ConfigError(
                 f"Provider '{provider_name}' not found. "
                 f"It's not a built-in provider and plugin system is not available."
-            )
-        except ConfigError:
+            ) from e
+        except ConfigError as e:
             raise ConfigError(
                 f"Provider '{provider_name}' not found in built-in or plugin providers. "
                 f"Available built-in: {[p.value for p in list_available_providers()]}"
-            )
+            ) from e
 
 
 def list_available_providers() -> list[ProviderType]:

@@ -463,7 +463,7 @@ async def get_status(job_id: str) -> ExportJob:
 
 @router.get("/recent", response_model=list[RecentExport], summary="List recent exports")
 async def list_recent(
-    limit: int = Query(10, ge=1, le=50, description="Maximum number of results")
+    limit: int = Query(10, ge=1, le=50, description="Maximum number of results"),
 ) -> list[RecentExport]:
     """Get a list of recent export jobs."""
     jobs = sorted(

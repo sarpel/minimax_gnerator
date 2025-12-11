@@ -455,7 +455,7 @@ def _generate_html_report(stats_result: DatasetStatisticsResult) -> str:
     <div class="stats-box">
         <h2>📊 Basic Statistics</h2>
         <p><span class="metric">Total Files:</span> <span class="value">{stats_result.file_count}</span></p>
-        <p><span class="metric">Total Duration:</span> <span class="value">{stats_result.total_duration_seconds:.2f} seconds ({stats_result.total_duration_seconds/3600:.2f} hours)</span></p>
+        <p><span class="metric">Total Duration:</span> <span class="value">{stats_result.total_duration_seconds:.2f} seconds ({stats_result.total_duration_seconds / 3600:.2f} hours)</span></p>
         <p><span class="metric">Average Duration:</span> <span class="value">{stats_result.average_duration_seconds:.2f} seconds</span></p>
         <p><span class="metric">Duration Range:</span> <span class="value">{stats_result.min_duration_seconds:.2f}s - {stats_result.max_duration_seconds:.2f}s</span></p>
     </div>

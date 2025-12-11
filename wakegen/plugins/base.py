@@ -26,14 +26,14 @@ class MyTTSPlugin(TTSPlugin):
             description="My custom TTS provider",
             author="Your Name",
         )
-    
+
     async def generate(self, text: str, voice_id: str, output_path: str) -> None:
         # Your TTS implementation here
         pass
-    
+
     async def list_voices(self) -> list[Voice]:
         return [Voice(id="voice1", name="Voice 1", language="en-US", gender=Gender.NEUTRAL)]
-    
+
     async def validate_config(self) -> None:
         # Check if plugin is properly configured
         pass

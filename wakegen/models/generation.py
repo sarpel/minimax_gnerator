@@ -1,4 +1,3 @@
-
 from pydantic import BaseModel, Field
 
 from wakegen.core.types import ProviderType

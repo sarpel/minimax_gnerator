@@ -19,8 +19,6 @@ import os
 import tempfile
 import time
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
-from typing import cast
 
 from tenacity import (
     retry,
@@ -215,9 +213,7 @@ class BatchProcessor:
             file_path=output_path,
             text=params.text,
             voice_id=params.voice_id,
-            provider=cast(
-                ProviderType, getattr(self, "_current_provider_type", "edge_tts")
-            ),
+            provider=provider.provider_type,  # Use actual provider type
             duration_seconds=duration,
         )
 

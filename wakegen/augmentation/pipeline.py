@@ -16,6 +16,7 @@ Key Features:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import random
@@ -129,6 +130,18 @@ class AugmentationPipeline:
         Raises:
             AugmentationError: If augmentation pipeline fails.
         """
+        # OFF-LOAD TO THREAD: Audio processing is CPU-bound
+        return await asyncio.to_thread(
+            self._apply_sync, input_path, output_path, intermediate_dir
+        )
+
+    def _apply_sync(
+        self, input_path: str, output_path: str, intermediate_dir: str | None = None
+    ) -> str:
+        """
+        Synchronous implementation of the augmentation pipeline.
+        This runs in a thread to avoid blocking the event loop.
+        """
         try:
             # Create intermediate directory if specified
             if intermediate_dir:
@@ -156,25 +169,21 @@ class AugmentationPipeline:
             for aug_type in self.profile.augmentation_types:
                 try:
                     if aug_type == AugmentationType.BACKGROUND_NOISE:
-                        processed_audio = await self._apply_background_noise(
-                            processed_audio
-                        )
+                        processed_audio = self._apply_background_noise(processed_audio)
                         if intermediate_dir:
                             intermediate_files["noise"] = self._save_intermediate(
                                 processed_audio, intermediate_dir, "after_noise"
                             )
 
                     elif aug_type == AugmentationType.ROOM_SIMULATION:
-                        processed_audio = await self._apply_room_simulation(
-                            processed_audio
-                        )
+                        processed_audio = self._apply_room_simulation(processed_audio)
                         if intermediate_dir:
                             intermediate_files["room"] = self._save_intermediate(
                                 processed_audio, intermediate_dir, "after_room"
                             )
 
                     elif aug_type == AugmentationType.MICROPHONE_SIMULATION:
-                        processed_audio = await self._apply_microphone_simulation(
+                        processed_audio = self._apply_microphone_simulation(
                             processed_audio
                         )
                         if intermediate_dir:
@@ -183,32 +192,32 @@ class AugmentationPipeline:
                             )
 
                     elif aug_type == AugmentationType.TIME_STRETCH:
-                        processed_audio = await self._apply_time_stretch(
-                            processed_audio
-                        )
+                        processed_audio = self._apply_time_stretch(processed_audio)
                         if intermediate_dir:
-                            intermediate_files[
-                                "time_stretch"
-                            ] = self._save_intermediate(
-                                processed_audio, intermediate_dir, "after_time_stretch"
+                            intermediate_files["time_stretch"] = (
+                                self._save_intermediate(
+                                    processed_audio,
+                                    intermediate_dir,
+                                    "after_time_stretch",
+                                )
                             )
 
                     elif aug_type == AugmentationType.PITCH_SHIFT:
-                        processed_audio = await self._apply_pitch_shift(processed_audio)
+                        processed_audio = self._apply_pitch_shift(processed_audio)
                         if intermediate_dir:
                             intermediate_files["pitch_shift"] = self._save_intermediate(
                                 processed_audio, intermediate_dir, "after_pitch_shift"
                             )
 
                     elif aug_type == AugmentationType.COMPRESSION:
-                        processed_audio = await self._apply_compression(processed_audio)
+                        processed_audio = self._apply_compression(processed_audio)
                         if intermediate_dir:
                             intermediate_files["compression"] = self._save_intermediate(
                                 processed_audio, intermediate_dir, "after_compression"
                             )
 
                     elif aug_type == AugmentationType.DEGRADATION:
-                        processed_audio = await self._apply_degradation(processed_audio)
+                        processed_audio = self._apply_degradation(processed_audio)
                         if intermediate_dir:
                             intermediate_files["degradation"] = self._save_intermediate(
                                 processed_audio, intermediate_dir, "after_degradation"
@@ -230,7 +239,7 @@ class AugmentationPipeline:
             logger.error(f"Augmentation pipeline failed: {e!s}")
             raise AugmentationError(f"Augmentation pipeline failed: {e!s}") from e
 
-    async def _apply_background_noise(
+    def _apply_background_noise(
         self, audio: np.ndarray[Any, Any]
     ) -> np.ndarray[Any, Any]:
         """
@@ -272,7 +281,7 @@ class AugmentationPipeline:
                 f"Background noise application failed: {e!s}"
             ) from e
 
-    async def _apply_room_simulation(
+    def _apply_room_simulation(
         self, audio: np.ndarray[Any, Any]
     ) -> np.ndarray[Any, Any]:
         """
@@ -298,7 +307,7 @@ class AugmentationPipeline:
         except Exception as e:
             raise AugmentationError(f"Room simulation failed: {e!s}") from e
 
-    async def _apply_microphone_simulation(
+    def _apply_microphone_simulation(
         self, audio: np.ndarray[Any, Any]
     ) -> np.ndarray[Any, Any]:
         """
@@ -318,9 +327,7 @@ class AugmentationPipeline:
         except Exception as e:
             raise AugmentationError(f"Microphone simulation failed: {e!s}") from e
 
-    async def _apply_time_stretch(
-        self, audio: np.ndarray[Any, Any]
-    ) -> np.ndarray[Any, Any]:
+    def _apply_time_stretch(self, audio: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
         """
         Apply time stretching augmentation.
 
@@ -339,9 +346,7 @@ class AugmentationPipeline:
         except Exception as e:
             raise AugmentationError(f"Time stretching failed: {e!s}") from e
 
-    async def _apply_pitch_shift(
-        self, audio: np.ndarray[Any, Any]
-    ) -> np.ndarray[Any, Any]:
+    def _apply_pitch_shift(self, audio: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
         """
         Apply pitch shifting augmentation.
 
@@ -360,9 +365,7 @@ class AugmentationPipeline:
         except Exception as e:
             raise AugmentationError(f"Pitch shifting failed: {e!s}") from e
 
-    async def _apply_compression(
-        self, audio: np.ndarray[Any, Any]
-    ) -> np.ndarray[Any, Any]:
+    def _apply_compression(self, audio: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
         """
         Apply dynamics compression augmentation.
 
@@ -396,9 +399,7 @@ class AugmentationPipeline:
         except Exception as e:
             raise AugmentationError(f"Dynamics processing failed: {e!s}") from e
 
-    async def _apply_degradation(
-        self, audio: np.ndarray[Any, Any]
-    ) -> np.ndarray[Any, Any]:
+    def _apply_degradation(self, audio: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
         """
         Apply quality degradation augmentation.
 
@@ -465,9 +466,7 @@ class AugmentationPipeline:
             sf.write(filepath, audio, self.sample_rate)
 
         except Exception as e:
-            raise AugmentationError(
-                f"Failed to save audio to {filepath}: {e!s}"
-            ) from e
+            raise AugmentationError(f"Failed to save audio to {filepath}: {e!s}") from e
 
     async def batch_augment(
         self,
@@ -513,7 +512,7 @@ class AugmentationPipeline:
                     results.append(result_path)
 
                     logger.info(
-                        f"Processed {i+1}/{len(input_paths)}: {input_path} -> {output_path}"
+                        f"Processed {i + 1}/{len(input_paths)}: {input_path} -> {output_path}"
                     )
 
                 except Exception as e:

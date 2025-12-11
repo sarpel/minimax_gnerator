@@ -20,10 +20,12 @@ It enables audio playback, waveform data generation, and file management.
     4. Separation of concerns from generation/config endpoints
 """
 
+import asyncio
 import logging
 import os
 from pathlib import Path
 
+import librosa
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -226,48 +228,48 @@ async def get_waveform(
         raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
 
     try:
-        import librosa
-        import numpy as np
+        # Offload heavy audio processing to a thread
+        return await asyncio.to_thread(_process_waveform_sync, path, num_samples)
 
-        # Load audio file
-        y, sr = librosa.load(str(path), sr=None, mono=True)
-
-        # Calculate duration
-        duration = len(y) / sr
-
-        # Calculate chunk size for downsampling
-        chunk_size = max(1, len(y) // num_samples)
-
-        # Calculate RMS for each chunk
-        waveform_samples = []
-        for i in range(0, len(y), chunk_size):
-            chunk = y[i : i + chunk_size]
-            rms = np.sqrt(np.mean(chunk**2))
-            waveform_samples.append(float(rms))
-
-        # Truncate to exact number of samples
-        waveform_samples = waveform_samples[:num_samples]
-
-        # Normalize to 0..1 range
-        max_val = max(waveform_samples) if waveform_samples else 1
-        if max_val > 0:
-            waveform_samples = [s / max_val for s in waveform_samples]
-
-        return WaveformData(
-            filename=path.name,
-            samples=waveform_samples,
-            duration_seconds=duration,
-            sample_rate=int(sr),
-        )
-
-    except ImportError:
-        raise HTTPException(
-            status_code=500,
-            detail="librosa not installed. Install with: pip install librosa",
-        )
     except Exception as e:
         logger.error(f"Error generating waveform: {e}")
-        raise HTTPException(status_code=500, detail=f"Error processing audio: {e!s}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _process_waveform_sync(path: Path, num_samples: int) -> WaveformData:
+    """Synchronous helper for waveform generation."""
+    import numpy as np
+
+    # Load audio file
+    y, sr = librosa.load(str(path), sr=None, mono=True)
+
+    # Calculate duration
+    duration = len(y) / sr
+
+    # Calculate chunk size for downsampling
+    chunk_size = max(1, len(y) // num_samples)
+
+    # Calculate RMS for each chunk
+    waveform_samples = []
+    for i in range(0, len(y), chunk_size):
+        chunk = y[i : i + chunk_size]
+        rms = np.sqrt(np.mean(chunk**2))
+        waveform_samples.append(float(rms))
+
+    # Truncate to exact number of samples
+    waveform_samples = waveform_samples[:num_samples]
+
+    # Normalize to 0..1 range
+    max_val = max(waveform_samples) if waveform_samples else 1
+    if max_val > 0:
+        waveform_samples = [s / max_val for s in waveform_samples]
+
+    return WaveformData(
+        filename=path.name,
+        samples=waveform_samples,
+        duration_seconds=duration,
+        sample_rate=int(sr),
+    )
 
 
 @router.get(

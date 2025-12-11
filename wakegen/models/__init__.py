@@ -5,10 +5,10 @@
 from wakegen.models.audio import AudioSample, ProviderCapabilities, Voice
 from wakegen.models.config import GenerationConfig, ProviderConfig
 from wakegen.models.generation import (
-                                       GenerationParameters,
-                                       GenerationRequest,
-                                       GenerationResponse,
-                                       GenerationResult,
+    GenerationParameters,
+    GenerationRequest,
+    GenerationResponse,
+    GenerationResult,
 )
 
 __all__ = [

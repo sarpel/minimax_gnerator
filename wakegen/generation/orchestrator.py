@@ -13,6 +13,7 @@ Responsibilities:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 import uuid
@@ -423,7 +424,8 @@ class GenerationOrchestrator:
 
         source_path = result.audio_data.file_path
         if source_path and Path(source_path).exists():
-            shutil.copy2(source_path, file_path)
+            # ASYNC FIX: Offload blocking I/O to thread
+            await asyncio.to_thread(shutil.copy2, source_path, file_path)
         else:
             logger.warning(f"Source audio file not found: {source_path}")
 
@@ -557,6 +559,10 @@ class GenerationOrchestrator:
         Returns:
             List of generation results
         """
+        # Ensure components are initialized (fixes chicken-egg problem)
+        if self.variation_engine is None:
+            self._initialize_components()
+
         # Create Turkish variation parameters
         turkish_params = self.create_turkish_generation_config(wake_words, voice_ids)
 

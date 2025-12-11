@@ -221,9 +221,7 @@ class OrpheusTTSProvider(BaseProvider):
             return self._model
 
         except Exception as e:
-            raise ProviderError(
-                f"Failed to initialize Orpheus TTS model: {e!s}"
-            ) from e
+            raise ProviderError(f"Failed to initialize Orpheus TTS model: {e!s}") from e
 
     async def generate(self, text: str, voice_id: str, output_path: str) -> None:
         """

@@ -361,9 +361,7 @@ class DynamicsProcessor:
             sf.write(output_path, processed, self.sample_rate)
 
         except Exception as e:
-            raise AugmentationError(
-                f"Failed to apply dynamics effects: {e!s}"
-            ) from e
+            raise AugmentationError(f"Failed to apply dynamics effects: {e!s}") from e
 
     def get_dynamics_preset(self, preset_name: str) -> dict[str, Any]:
         """

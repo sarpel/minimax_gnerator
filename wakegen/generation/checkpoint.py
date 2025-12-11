@@ -311,23 +311,23 @@ class CheckpointManager:
 
     async def flush_batch(self) -> None:
         """Flush pending tasks to database in a single transaction.
-        
+
         PERF: This method commits all pending tasks in one transaction,
         reducing disk I/O from N commits to 1 commit (10-50x faster).
-        
+
         ELI5: Instead of saving each task separately (like saving a Word
         document after every sentence), we save many tasks at once (like
         saving after writing a whole page).
         """
         if not self._pending_tasks:
             return
-        
+
         db = await self._get_connection()
-        
+
         try:
             # Begin transaction for batch insert
             await db.execute("BEGIN TRANSACTION")
-            
+
             # Insert all pending tasks in one go
             await db.executemany(
                 """
@@ -335,46 +335,50 @@ class CheckpointManager:
                 (id, checkpoint_id, task_id, status, parameters_json, result_json, error_message, created_at, updated_at)
                 VALUES (:id, :checkpoint_id, :task_id, :status, :parameters_json, :result_json, :error_message, :created_at, :updated_at)
             """,
-                self._pending_tasks
+                self._pending_tasks,
             )
-            
+
             # Update checkpoint progress for completed tasks
             if self._pending_updates:
                 # Group updates by checkpoint_id
                 checkpoint_updates: dict[str, int] = {}
                 for checkpoint_id, _, _, count in self._pending_updates:
-                    checkpoint_updates[checkpoint_id] = checkpoint_updates.get(checkpoint_id, 0) + count
-                
+                    checkpoint_updates[checkpoint_id] = (
+                        checkpoint_updates.get(checkpoint_id, 0) + count
+                    )
+
                 # Update each checkpoint's progress
                 for checkpoint_id, completed_count in checkpoint_updates.items():
                     cursor = await db.execute(
                         "SELECT completed_tasks, total_tasks FROM checkpoints WHERE id = ?",
-                        (checkpoint_id,)
+                        (checkpoint_id,),
                     )
                     row = await cursor.fetchone()
                     if row:
                         current_completed = row[0]
                         total_tasks = row[1]
                         new_completed = current_completed + completed_count
-                        progress = new_completed / total_tasks if total_tasks > 0 else 0.0
-                        
+                        progress = (
+                            new_completed / total_tasks if total_tasks > 0 else 0.0
+                        )
+
                         await db.execute(
                             """
                             UPDATE checkpoints
                             SET completed_tasks = ?, progress = ?, updated_at = ?
                             WHERE id = ?
                         """,
-                            (new_completed, progress, int(time.time()), checkpoint_id)
+                            (new_completed, progress, int(time.time()), checkpoint_id),
                         )
-            
+
             # Commit transaction
             await db.execute("COMMIT")
-            
-        except Exception as e:
+
+        except Exception:
             # Rollback on error
             await db.execute("ROLLBACK")
             raise
-        
+
         finally:
             # Clear pending batches
             self._pending_tasks.clear()

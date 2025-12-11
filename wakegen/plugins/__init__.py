@@ -20,12 +20,12 @@
 
 from wakegen.plugins.base import PluginLoadError, PluginMetadata, TTSPlugin
 from wakegen.plugins.discovery import (
-                                       discover_plugins,
-                                       get_loaded_plugins,
-                                       get_plugin,
-                                       load_plugin,
-                                       register_plugin_provider,
-                                       reload_plugins,
+    discover_plugins,
+    get_loaded_plugins,
+    get_plugin,
+    load_plugin,
+    register_plugin_provider,
+    reload_plugins,
 )
 
 __all__ = [

@@ -17,11 +17,12 @@ def test_list_providers(client):
 def test_provider_voices(client, mock_provider_registry):
     """Test fetching voices for a provider."""
     # We patch the availability check to ensure we can list voices even if not installed
-    with patch(
-        "wakegen.web.routers.providers.check_provider_availability"
-    ) as mock_check, patch(
-        "wakegen.web.routers.providers.get_provider"
-    ) as mock_get_provider:  # Must patch usage
+    with (
+        patch(
+            "wakegen.web.routers.providers.check_provider_availability"
+        ) as mock_check,
+        patch("wakegen.web.routers.providers.get_provider") as mock_get_provider,
+    ):  # Must patch usage
         mock_check.return_value.is_available = True
 
         # Configure the mock provider returned by get_provider

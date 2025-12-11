@@ -213,7 +213,7 @@ class ProgressTracker:
                 task_id[:12],  # Shorten task ID
                 f"[{status_color}]{status_icon} {status}[/{status_color}]",
                 f"{duration:.1f}s",
-                str(details) if (details := None) else "",  # Placeholder for details
+                str(details) if details else "",
             )
 
         # Combine all elements

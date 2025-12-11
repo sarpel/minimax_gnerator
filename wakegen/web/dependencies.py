@@ -6,7 +6,7 @@ This module provides FastAPI dependencies for authentication and security.
 
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Security, status
+from fastapi import HTTPException, Security, status
 from fastapi.security import APIKeyHeader
 
 from wakegen.web.config import get_settings

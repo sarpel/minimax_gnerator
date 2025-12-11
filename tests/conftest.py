@@ -27,7 +27,21 @@ def mock_provider_registry():
     Mock the provider registry to avoid loading real providers/models.
     This is critical for CI/CD and fast testing.
     """
-    with patch("wakegen.providers.registry.get_provider") as mock_get:
+    # Patch where it is USED, not just where it is defined
+    # Since multiple routers import get_provider, we might need multiple patches
+    # or patch the underlying registry dictionary if possible.
+    # For now, let's patch the most common usage points.
+    with patch("wakegen.web.routers.providers.get_provider") as mock_get_1, \
+         patch("wakegen.web.routers.generation.get_provider") as mock_get_2, \
+         patch("wakegen.generation.orchestrator.get_provider") as mock_get_3, \
+         patch("wakegen.providers.registry.get_provider") as mock_get_orig:
+
+        mock_get = mock_get_orig # Use the original one as the primary mock configuration source
+
+        # Configure all mocks to behave the same
+        for m in [mock_get_1, mock_get_2, mock_get_3, mock_get_orig]:
+             m.side_effect = mock_get.side_effect
+
         # Create a mock provider instance
         mock_provider = MagicMock()
         mock_provider.id = "mock_provider"

@@ -82,7 +82,7 @@ class Mimic3Provider(BaseProvider):
 
             # Wait for the process to complete with a timeout
             # If it takes more than 5 seconds, something is wrong
-            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=5.0)
+            _stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=5.0)
 
             # Check if the command succeeded
             if process.returncode != 0:
@@ -102,12 +102,10 @@ class Mimic3Provider(BaseProvider):
             )
         except asyncio.TimeoutError:
             raise ProviderError(
-                "Mimic3 verification timed out. " "Please check your installation."
+                "Mimic3 verification timed out. Please check your installation."
             )
         except Exception as e:
-            raise ProviderError(
-                f"Failed to verify Mimic3 installation: {e!s}"
-            ) from e
+            raise ProviderError(f"Failed to verify Mimic3 installation: {e!s}") from e
 
     async def generate(self, text: str, voice_id: str, output_path: str) -> None:
         """

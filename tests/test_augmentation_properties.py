@@ -151,23 +151,23 @@ class TestBatchAugmentationCountProperty:
 
             # The property: successful files should equal valid files
             # (since invalid files should fail and not be in results)
-            assert (
-                successful_count == num_valid
-            ), f"Expected {num_valid} successful files, got {successful_count}"
+            assert successful_count == num_valid, (
+                f"Expected {num_valid} successful files, got {successful_count}"
+            )
 
             # Verify that total processed (success + implicit failures) equals input count
             # Since failed files are not returned, we verify by checking:
             # - All valid files were processed successfully
             # - Results count matches valid file count
             implied_failed_count = total_input_count - successful_count
-            assert (
-                implied_failed_count == num_invalid
-            ), f"Expected {num_invalid} failed files, got {implied_failed_count}"
+            assert implied_failed_count == num_invalid, (
+                f"Expected {num_invalid} failed files, got {implied_failed_count}"
+            )
 
             # The core property: success + failure = total
-            assert (
-                successful_count + implied_failed_count == total_input_count
-            ), f"Count mismatch: {successful_count} + {implied_failed_count} != {total_input_count}"
+            assert successful_count + implied_failed_count == total_input_count, (
+                f"Count mismatch: {successful_count} + {implied_failed_count} != {total_input_count}"
+            )
 
 
 @pytest.mark.asyncio
@@ -229,6 +229,6 @@ async def test_batch_augment_all_invalid():
         )
 
         # All files should fail, so results should be empty
-        assert (
-            len(results) == 0
-        ), f"Expected 0 results for invalid files, got {len(results)}"
+        assert len(results) == 0, (
+            f"Expected 0 results for invalid files, got {len(results)}"
+        )

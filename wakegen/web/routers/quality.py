@@ -337,7 +337,7 @@ async def validate_file(
 
 @router.get("/metrics", response_model=QualityMetrics, summary="Get quality metrics")
 async def get_metrics(
-    directory: str = Query("./output", description="Directory to analyze")
+    directory: str = Query("./output", description="Directory to analyze"),
 ) -> QualityMetrics:
     """
     Get detailed quality metrics for a dataset.
@@ -373,7 +373,7 @@ async def get_metrics(
 
 @router.get("/summary", response_model=DatasetSummary, summary="Get dataset summary")
 async def get_summary(
-    directory: str = Query("./output", description="Directory to summarize")
+    directory: str = Query("./output", description="Directory to summarize"),
 ) -> DatasetSummary:
     """
     Get a high-level summary of a dataset.
@@ -420,7 +420,7 @@ async def get_summary(
 
 @router.get("/recommendations", summary="Get recommendations")
 async def get_recommendations(
-    directory: str = Query("./output", description="Directory to analyze")
+    directory: str = Query("./output", description="Directory to analyze"),
 ) -> list[str]:
     """
     Get recommendations for improving dataset quality.

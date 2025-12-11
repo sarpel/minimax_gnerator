@@ -405,7 +405,7 @@ def _generate_data_tables(
             {
                 "Sample Rate (Hz)": k,
                 "Count": v,
-                "Percentage": f"{(v/stats_result.file_count*100):.1f}%",
+                "Percentage": f"{(v / stats_result.file_count * 100):.1f}%",
             }
             for k, v in stats_result.sample_rate_distribution.items()
         ]
@@ -421,7 +421,7 @@ def _generate_data_tables(
             {
                 "Quality Range": k,
                 "Count": v,
-                "Percentage": f"{(v/stats_result.file_count*100):.1f}%",
+                "Percentage": f"{(v / stats_result.file_count * 100):.1f}%",
             }
             for k, v in stats_result.quality_score_distribution.items()
         ]
@@ -437,7 +437,7 @@ def _generate_data_tables(
             {
                 "SNR Range (dB)": k,
                 "Count": v,
-                "Percentage": f"{(v/stats_result.file_count*100):.1f}%",
+                "Percentage": f"{(v / stats_result.file_count * 100):.1f}%",
             }
             for k, v in stats_result.snr_distribution.items()
         ]
@@ -453,7 +453,7 @@ def _generate_data_tables(
             {
                 "Size Range (bytes)": k,
                 "Count": v,
-                "Percentage": f"{(v/stats_result.file_count*100):.1f}%",
+                "Percentage": f"{(v / stats_result.file_count * 100):.1f}%",
             }
             for k, v in stats_result.file_size_distribution.items()
         ]

@@ -8,11 +8,11 @@ dynamics processing, quality degradation, and environment simulation.
 from .degradation import AudioDegrader
 from .dynamics import DynamicsProcessor
 from .telephony import (
-                        DistanceConfig,
-                        DistanceSimulator,
-                        PhoneType,
-                        TelephonyConfig,
-                        TelephonySimulator,
+    DistanceConfig,
+    DistanceSimulator,
+    PhoneType,
+    TelephonyConfig,
+    TelephonySimulator,
 )
 from .time_domain import TimeDomainEffects
 

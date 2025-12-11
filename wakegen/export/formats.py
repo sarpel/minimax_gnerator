@@ -1255,7 +1255,6 @@ for example in train_data:
             f.write(card)
 
 
-
 # Export format registry
 EXPORTERS: dict[ExportFormat, type[BaseExporter]] = {
     ExportFormat.MYCROFT_PRECISE: MycroftPreciseExporter,

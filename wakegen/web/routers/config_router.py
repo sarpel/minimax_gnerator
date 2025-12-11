@@ -130,9 +130,7 @@ async def get_template() -> ConfigTemplate:
 
     except Exception as e:
         logger.error(f"Error generating template: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Error generating template: {e!s}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error generating template: {e!s}")
 
 
 @router.post(
@@ -292,7 +290,7 @@ async def save_config(request: ConfigSaveRequest) -> ConfigSaveResponse:
     "/load", response_model=ConfigLoadResponse, summary="Load configuration from file"
 )
 async def load_config_file(
-    path: str = Query(..., description="Path to configuration file")
+    path: str = Query(..., description="Path to configuration file"),
 ) -> ConfigLoadResponse:
     """
     Load a configuration file and return its contents.

@@ -234,17 +234,17 @@ class NoiseEventGenerator:
         if event_type == "dish_clink":
             # Quick attack, short sustain, quick release (percussive)
             attack = np.minimum(t_norm * 10, 1.0)
-            release = np.maximum(1.0 - (t_norm - 0.7) * 5, 0.0) if t_norm > 0.7 else 1.0
+            release = np.where(t_norm > 0.7, np.maximum(1.0 - (t_norm - 0.7) * 5, 0.0), 1.0)
             return cast(np.ndarray[Any, Any], attack * release)
         elif event_type == "door_close":
             # Medium attack, longer sustain, medium release
             attack = np.minimum(t_norm * 3, 1.0)
-            release = np.maximum(1.0 - (t_norm - 0.8) * 2, 0.0) if t_norm > 0.8 else 1.0
+            release = np.where(t_norm > 0.8, np.maximum(1.0 - (t_norm - 0.8) * 2, 0.0), 1.0)
             return cast(np.ndarray[Any, Any], attack * release)
         elif event_type == "footstep":
             # Quick attack, very short sustain, quick release
             attack = np.minimum(t_norm * 15, 1.0)
-            release = np.maximum(1.0 - (t_norm - 0.5) * 4, 0.0) if t_norm > 0.5 else 1.0
+            release = np.where(t_norm > 0.5, np.maximum(1.0 - (t_norm - 0.5) * 4, 0.0), 1.0)
             return cast(np.ndarray[Any, Any], attack * release)
         elif event_type == "chair_scrape":
             # Variable envelope with some randomness
@@ -253,12 +253,12 @@ class NoiseEventGenerator:
         elif event_type == "water_running":
             # Gradual attack, steady sustain, gradual release
             attack = np.minimum(t_norm * 2, 1.0)
-            release = np.maximum(1.0 - (t_norm - 0.9) * 3, 0.0) if t_norm > 0.9 else 1.0
+            release = np.where(t_norm > 0.9, np.maximum(1.0 - (t_norm - 0.9) * 3, 0.0), 1.0)
             return cast(np.ndarray[Any, Any], attack * release)
         else:
             # Default: simple attack-release
             attack = np.minimum(t_norm * 5, 1.0)
-            release = np.maximum(1.0 - (t_norm - 0.6) * 3, 0.0) if t_norm > 0.6 else 1.0
+            release = np.where(t_norm > 0.6, np.maximum(1.0 - (t_norm - 0.6) * 3, 0.0), 1.0)
             return cast(np.ndarray[Any, Any], attack * release)
 
     def generate_random_events(

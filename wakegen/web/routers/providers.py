@@ -31,7 +31,9 @@ and test audio generation.
     - HTTPException is raised for error responses
 """
 
+import asyncio
 import logging
+import sys
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -157,7 +159,7 @@ router = APIRouter()
 async def list_providers(
     available_only: bool = Query(
         False, description="If true, only return providers that are ready to use"
-    )
+    ),
 ) -> list[ProviderResponse]:
     """
     List all TTS providers with their availability status.
@@ -613,9 +615,6 @@ async def install_special_provider(
         This only allows installing from the predefined SPECIAL_PROVIDERS list.
         Arbitrary commands cannot be executed.
     """
-    import subprocess
-    import sys
-
     provider_id = request.provider_id.lower()
 
     # Validate provider is in our allowed list
@@ -653,13 +652,30 @@ async def install_special_provider(
         logger.info(f"Running: {full_command}")
 
         # Run with shell=True for Windows compatibility with special characters
-        process = subprocess.run(
+        # ASYNC FIX: Use create_subprocess_shell to avoid blocking the event loop
+        process = await asyncio.create_subprocess_shell(
             full_command,
-            shell=True,  # Required for complex commands on Windows
-            capture_output=True,
-            text=True,
-            timeout=600,  # 10 minute timeout for large packages
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
+
+        try:
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                process.communicate(), timeout=600
+            )
+            stdout_str = stdout_bytes.decode() if stdout_bytes else ""
+            stderr_str = stderr_bytes.decode() if stderr_bytes else ""
+        except asyncio.TimeoutError:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
+            logger.error(f"Installation timed out for {provider_id}")
+            return InstallProviderResponse(
+                success=False,
+                message="Installation timed out after 10 minutes. "
+                "Try running the command manually in a terminal.",
+            )
 
         if process.returncode == 0:
             logger.info(f"Successfully installed {provider_id}")
@@ -678,25 +694,15 @@ async def install_special_provider(
                 success=True,
                 message=f"Successfully installed {provider_info['name']}! "
                 "Please restart the server to use this provider.",
-                output=process.stdout[-1000:]
-                if process.stdout
-                else None,  # Last 1000 chars
+                output=stdout_str[-1000:] if stdout_str else None,  # Last 1000 chars
             )
         else:
-            logger.error(f"Installation failed for {provider_id}: {process.stderr}")
+            logger.error(f"Installation failed for {provider_id}: {stderr_str}")
             return InstallProviderResponse(
                 success=False,
                 message="Installation failed. See output for details.",
-                output=process.stderr[-1000:] if process.stderr else None,
+                output=stderr_str[-1000:] if stderr_str else None,
             )
-
-    except subprocess.TimeoutExpired:
-        logger.error(f"Installation timed out for {provider_id}")
-        return InstallProviderResponse(
-            success=False,
-            message="Installation timed out after 10 minutes. "
-            "Try running the command manually in a terminal.",
-        )
     except Exception as e:
         logger.error(f"Installation error for {provider_id}: {e}")
         return InstallProviderResponse(

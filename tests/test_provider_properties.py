@@ -84,34 +84,34 @@ class TestBarkProviderVoiceListingProperty:
         # All voices should be Voice instances with valid attributes
         for voice in voices:
             # Check it's a Voice instance
-            assert isinstance(
-                voice, Voice
-            ), f"Expected Voice instance, got {type(voice)}"
+            assert isinstance(voice, Voice), (
+                f"Expected Voice instance, got {type(voice)}"
+            )
 
             # Check id is non-empty string
             assert voice.id is not None, "Voice id should not be None"
-            assert isinstance(
-                voice.id, str
-            ), f"Voice id should be string, got {type(voice.id)}"
+            assert isinstance(voice.id, str), (
+                f"Voice id should be string, got {type(voice.id)}"
+            )
             assert len(voice.id) > 0, "Voice id should not be empty"
 
             # Check id matches expected format: v2/{lang}_speaker_{num}
-            assert voice.id.startswith(
-                "v2/"
-            ), f"Voice id should start with 'v2/', got {voice.id}"
-            assert (
-                "_speaker_" in voice.id
-            ), f"Voice id should contain '_speaker_', got {voice.id}"
+            assert voice.id.startswith("v2/"), (
+                f"Voice id should start with 'v2/', got {voice.id}"
+            )
+            assert "_speaker_" in voice.id, (
+                f"Voice id should contain '_speaker_', got {voice.id}"
+            )
 
             # Check provider is set correctly
-            assert (
-                voice.provider == ProviderType.BARK
-            ), f"Voice provider should be BARK, got {voice.provider}"
+            assert voice.provider == ProviderType.BARK, (
+                f"Voice provider should be BARK, got {voice.provider}"
+            )
 
             # Check gender is valid
-            assert isinstance(
-                voice.gender, Gender
-            ), f"Voice gender should be Gender enum, got {type(voice.gender)}"
+            assert isinstance(voice.gender, Gender), (
+                f"Voice gender should be Gender enum, got {type(voice.gender)}"
+            )
 
             # Check language is non-empty
             assert voice.language is not None, "Voice language should not be None"
@@ -119,9 +119,9 @@ class TestBarkProviderVoiceListingProperty:
 
             # If language filter was provided, verify it matches
             if language is not None:
-                assert (
-                    voice.language == language
-                ), f"Voice language {voice.language} should match filter {language}"
+                assert voice.language == language, (
+                    f"Voice language {voice.language} should match filter {language}"
+                )
 
     @pytest.mark.asyncio
     async def test_bark_voice_count_per_language(self):
@@ -147,9 +147,9 @@ class TestBarkProviderVoiceListingProperty:
             "tr",
         ]:
             voices = await provider.list_voices(language=lang)
-            assert (
-                len(voices) == 10
-            ), f"Expected 10 voices for {lang}, got {len(voices)}"
+            assert len(voices) == 10, (
+                f"Expected 10 voices for {lang}, got {len(voices)}"
+            )
 
     @pytest.mark.asyncio
     async def test_bark_all_voices_count(self):
@@ -161,9 +161,9 @@ class TestBarkProviderVoiceListingProperty:
 
         # 13 languages * 10 speakers = 130 total voices
         expected_count = 13 * 10
-        assert (
-            len(voices) == expected_count
-        ), f"Expected {expected_count} total voices, got {len(voices)}"
+        assert len(voices) == expected_count, (
+            f"Expected {expected_count} total voices, got {len(voices)}"
+        )
 
 
 class TestChatTTSProviderVoiceListingProperty:
@@ -216,26 +216,26 @@ class TestChatTTSProviderVoiceListingProperty:
         # All voices should be Voice instances with valid attributes
         for voice in voices:
             # Check it's a Voice instance
-            assert isinstance(
-                voice, Voice
-            ), f"Expected Voice instance, got {type(voice)}"
+            assert isinstance(voice, Voice), (
+                f"Expected Voice instance, got {type(voice)}"
+            )
 
             # Check id is non-empty string
             assert voice.id is not None, "Voice id should not be None"
-            assert isinstance(
-                voice.id, str
-            ), f"Voice id should be string, got {type(voice.id)}"
+            assert isinstance(voice.id, str), (
+                f"Voice id should be string, got {type(voice.id)}"
+            )
             assert len(voice.id) > 0, "Voice id should not be empty"
 
             # Check provider is set correctly
-            assert (
-                voice.provider == ProviderType.CHATTTS
-            ), f"Voice provider should be CHATTTS, got {voice.provider}"
+            assert voice.provider == ProviderType.CHATTTS, (
+                f"Voice provider should be CHATTTS, got {voice.provider}"
+            )
 
             # Check gender is valid
-            assert isinstance(
-                voice.gender, Gender
-            ), f"Voice gender should be Gender enum, got {type(voice.gender)}"
+            assert isinstance(voice.gender, Gender), (
+                f"Voice gender should be Gender enum, got {type(voice.gender)}"
+            )
 
             # Check language is non-empty
             assert voice.language is not None, "Voice language should not be None"
@@ -251,9 +251,9 @@ class TestChatTTSProviderVoiceListingProperty:
 
         # 9 preset speakers + 5 numeric seed options = 14 total voices
         expected_count = 14
-        assert (
-            len(voices) == expected_count
-        ), f"Expected {expected_count} total voices, got {len(voices)}"
+        assert len(voices) == expected_count, (
+            f"Expected {expected_count} total voices, got {len(voices)}"
+        )
 
     @pytest.mark.asyncio
     async def test_chattts_all_voices_have_unique_ids(self):

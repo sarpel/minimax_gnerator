@@ -218,7 +218,7 @@ class PiperTTSProvider(BaseProvider):
             are automatically evicted when cache is full.
         """
         # Delegate to cached loader
-        return await self._load_voice_model(voice_id)
+        return self._load_voice_model(voice_id)
 
     @staticmethod
     @lru_cache(maxsize=5)
@@ -237,9 +237,7 @@ class PiperTTSProvider(BaseProvider):
             return voice
 
         except Exception as e:
-            raise ProviderError(
-                f"Failed to load Piper voice {voice_id}: {e!s}"
-            ) from e
+            raise ProviderError(f"Failed to load Piper voice {voice_id}: {e!s}") from e
 
     async def list_voices(self) -> list[Voice]:
         """

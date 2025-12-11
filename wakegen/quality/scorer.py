@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from wakegen.core.exceptions import QualityAssuranceError
 from wakegen.quality.validator import SampleValidationResult, validate_sample
@@ -65,7 +65,8 @@ class QualityScoringConfig(BaseModel):
         default=0.8, description="Minimum technical score (0-1)"
     )
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def validate_weights(self) -> QualityScoringConfig:
         """Validate that weights sum to 1.0."""
         total_weight = (
             self.clarity_weight
@@ -76,6 +77,7 @@ class QualityScoringConfig(BaseModel):
         )
         if not math.isclose(total_weight, 1.0, rel_tol=1e-6):
             raise ValueError(f"Weights must sum to 1.0, got {total_weight}")
+        return self
 
 
 async def calculate_quality_score(

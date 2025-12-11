@@ -1,7 +1,5 @@
-import re
-
 # Read the file
-with open("wakegen/generation/checkpoint.py", "r", encoding="utf-8") as f:
+with open("wakegen/generation/checkpoint.py", encoding="utf-8") as f:
     content = f.read()
 
 # Fix escaped triple quotes

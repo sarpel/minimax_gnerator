@@ -18,12 +18,12 @@ realistic variations that improve wake word model robustness.
 """
 
 from .device_presets import (
-                             DevicePreset,
-                             DevicePresetManager,
-                             TargetDevice,
-                             device_preset_manager,
-                             get_device_preset,
-                             list_device_presets,
+    DevicePreset,
+    DevicePresetManager,
+    TargetDevice,
+    device_preset_manager,
+    get_device_preset,
+    list_device_presets,
 )
 from .pipeline import AugmentationPipeline
 from .profiles import EnvironmentProfile, get_profile

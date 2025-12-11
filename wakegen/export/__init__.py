@@ -15,17 +15,17 @@ Supported formats:
 
 # Format exports
 from .formats import (
-                      BaseExporter,
-                      DatasetMetadata,
-                      ExportFormat,
-                      HuggingFaceExporter,
-                      MycroftPreciseExporter,
-                      PicovoiceExporter,
-                      PyTorchExporter,
-                      SampleMetadata,
-                      TensorFlowExporter,
-                      export_to_format,
-                      list_export_formats,
+    BaseExporter,
+    DatasetMetadata,
+    ExportFormat,
+    HuggingFaceExporter,
+    MycroftPreciseExporter,
+    PicovoiceExporter,
+    PyTorchExporter,
+    SampleMetadata,
+    TensorFlowExporter,
+    export_to_format,
+    list_export_formats,
 )
 from .manifest import generate_manifest
 

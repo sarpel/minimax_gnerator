@@ -7,7 +7,7 @@ acoustic characteristics and constraints of the target device.
 
 Target Devices:
 - ESP32 microcontrollers with PDM/I2S microphones
-- Raspberry Pi with USB/I2S microphones  
+- Raspberry Pi with USB/I2S microphones
 - Smart speakers (Echo-like devices)
 - Mobile phones (iOS/Android)
 - Embedded Linux devices (Jetson, etc.)
