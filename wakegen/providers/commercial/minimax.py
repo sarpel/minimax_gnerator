@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64  # CQ-003 Fix: Moved from inside function to module level
 import logging
 import os
 import time  # Added import for time module
@@ -188,6 +189,18 @@ class MiniMaxProvider(BaseProvider):
         self.base_url = "https://api.minimaxi.chat"  # Fixed: Changed from https://api.minimax.ai to official endpoint
         self.endpoint = "/v1/t2a_v2"
 
+        # PERF-004 Fix: Create persistent HTTP client with connection pooling
+        # This eliminates 50-200ms overhead from creating new clients per request
+        # ELI5: Instead of opening a new connection to the server for each request,
+        # we keep a pool of connections ready to reuse, like keeping a phone line open
+        self._client = httpx.AsyncClient(
+            timeout=30.0,
+            limits=httpx.Limits(
+                max_connections=10,  # Maximum total connections
+                max_keepalive_connections=5,  # Keep 5 connections alive for reuse
+            ),
+        )
+
         # Rate limiting configuration - using official MiniMax rate limits
         self.max_requests_per_minute = 60  # Official MiniMax API limit
         self.current_requests = 0
@@ -281,18 +294,18 @@ class MiniMaxProvider(BaseProvider):
 
             logger.debug(f"Making MiniMax API request to {url}")
 
-            # Make the async HTTP request
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(url, headers=headers, json=request_dict)
+            # PERF-004 Fix: Use persistent client instead of creating new one
+            # Make the async HTTP request using our pooled client
+            response = await self._client.post(url, headers=headers, json=request_dict)
 
-                # Check for HTTP errors
-                response.raise_for_status()
+            # Check for HTTP errors
+            response.raise_for_status()
 
-                # Parse the JSON response
-                response_data = response.json()
+            # Parse the JSON response
+            response_data = response.json()
 
-                # Validate and convert to our response model
-                return MiniMaxTTSResponse(**response_data)
+            # Validate and convert to our response model
+            return MiniMaxTTSResponse(**response_data)
 
         except httpx.HTTPStatusError as e:
             error_msg = (
@@ -374,9 +387,8 @@ class MiniMaxProvider(BaseProvider):
             if not response.audio_data:
                 raise ProviderError("No audio data returned from MiniMax API")
 
+            # CQ-003 Fix: base64 is now imported at module level
             # Decode the base64 audio data and save to file
-            import base64
-
             audio_bytes = base64.b64decode(response.audio_data)
 
             # Issue C-005 Fix: Handle empty directory path for relative paths
@@ -486,19 +498,21 @@ class MiniMaxProvider(BaseProvider):
         """
         Release resources held by the MiniMax provider.
 
-        Currently resets rate-limiting state. If a persistent HTTP client
-        is added in the future, it should be closed here.
+        PERF-004 Fix: Properly close the persistent HTTP client to prevent
+        resource leaks and ensure graceful shutdown.
 
         ELI5: Think of this like cleaning up your desk at the end of the day.
-        We reset our "request counter" so we're ready for a fresh start next time.
+        We close our persistent connection to the server and reset our counters
+        so we're ready for a fresh start next time.
         """
+        # Close the persistent HTTP client
+        if hasattr(self, "_client") and self._client:
+            await self._client.aclose()
+            logger.debug("Closed persistent HTTP client")
+
         # Reset rate-limiting state to initial values
         self.current_requests = 0
         self.last_reset_time = time.time()
-
-        # Future: if using persistent client, close it here:
-        # if hasattr(self, '_client') and self._client:
-        #     await self._client.aclose()
 
         logger.debug("MiniMax provider cleanup completed")
 

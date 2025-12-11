@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil  # OS-001 Fix: Moved from inside function to module level
 import tempfile
 from typing import Any
 
@@ -273,9 +274,8 @@ class CoquiXTTSProvider(BaseProvider):
             if not os.path.exists(os.path.dirname(output_embedding_path)):
                 os.makedirs(os.path.dirname(output_embedding_path), exist_ok=True)
 
+            # OS-001 Fix: shutil is now imported at module level
             # Copy the reference audio as the embedding (simplified approach)
-            import shutil
-
             shutil.copy2(reference_audio_path, output_embedding_path)
 
             return output_embedding_path

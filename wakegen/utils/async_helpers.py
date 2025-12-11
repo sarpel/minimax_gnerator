@@ -377,13 +377,9 @@ class RateLimiter:
 # =============================================================================
 
 
-@dataclass
-class BatchConfig:
-    """Configuration for batch processing."""
+from wakegen.config.batch import BatchConfig
 
-    batch_size: int = 10
-    max_concurrent_batches: int = 2
-    delay_between_batches: float = 0.0
+# AH-001 Fix: BatchConfig moved to wakegen.config.batch for reuse
 
 
 async def process_in_batches(

@@ -41,7 +41,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Request
 
 # Import job management from generation router
 from wakegen.web.routers.generation import JobStatus, get_job
@@ -51,6 +51,8 @@ logger = logging.getLogger(__name__)
 
 # =============================================================================
 # CONNECTION MANAGER
+# =============================================================================
+# WEBSOCKET CONNECTION MANAGER
 # =============================================================================
 # Manages all active WebSocket connections, grouped by job_id.
 # This allows us to broadcast updates to all clients watching a specific job.
@@ -78,30 +80,83 @@ class ConnectionManager:
         ==============
         FastAPI runs in an async event loop, so we don't need traditional
         thread locks. Async operations are cooperative - only one runs at a time.
+
+        RATE LIMITING (SEC-003):
+        ========================
+        To prevent DoS attacks, we limit:
+        - Total concurrent connections globally
+        - Connections per IP address
     """
 
-    def __init__(self) -> None:
-        """Initialize the connection manager with empty tracking dictionaries."""
+    def __init__(
+        self, max_total_connections: int = 100, max_connections_per_ip: int = 5
+    ) -> None:
+        """Initialize the connection manager with rate limiting.
+
+        Args:
+            max_total_connections: Maximum total WebSocket connections allowed
+            max_connections_per_ip: Maximum connections allowed from single IP
+        """
         # Maps job_id -> set of active WebSocket connections
         self.active_connections: dict[str, set[WebSocket]] = {}
 
         # Track when each connection was established (for debugging/timeouts)
         self.connection_times: dict[WebSocket, datetime] = {}
 
-    async def connect(self, websocket: WebSocket, job_id: str) -> None:
+        # SEC-003 Fix: Track connections by IP address for rate limiting
+        # Maps IP address -> set of WebSocket connections from that IP
+        self.connections_by_ip: dict[str, set[WebSocket]] = {}
+
+        # Rate limiting configuration
+        self.max_total_connections = max_total_connections
+        self.max_connections_per_ip = max_connections_per_ip
+
+    async def connect(self, websocket: WebSocket, job_id: str, client_ip: str) -> None:
         """
         Accept a new WebSocket connection and start tracking it.
 
         Args:
             websocket: The WebSocket connection to accept
             job_id: The job this client wants to watch
+            client_ip: IP address of the connecting client
+
+        Raises:
+            WebSocketDisconnect: If rate limits are exceeded
 
         WHAT HAPPENS:
         =============
-        1. Accept the WebSocket handshake
-        2. Add to the set of connections for this job_id
-        3. Record connection time for debugging
+        1. Check rate limits (global and per-IP)
+        2. Accept the WebSocket handshake
+        3. Add to the set of connections for this job_id
+        4. Record connection time for debugging
         """
+        # SEC-003 Fix: Check global connection limit
+        total_connections = sum(
+            len(conns) for conns in self.active_connections.values()
+        )
+        if total_connections >= self.max_total_connections:
+            await websocket.close(
+                code=1008,  # Policy violation
+                reason=f"Server at capacity ({self.max_total_connections} connections)",
+            )
+            logger.warning(
+                f"Rejected connection from {client_ip}: global limit reached"
+            )
+            return
+
+        # SEC-003 Fix: Check per-IP connection limit
+        ip_connections = len(self.connections_by_ip.get(client_ip, set()))
+        if ip_connections >= self.max_connections_per_ip:
+            await websocket.close(
+                code=1008,  # Policy violation
+                reason=f"Too many connections from your IP ({self.max_connections_per_ip} max)",
+            )
+            logger.warning(
+                f"Rejected connection from {client_ip}: "
+                f"IP has {ip_connections} connections (limit: {self.max_connections_per_ip})"
+            )
+            return
+
         # Accept the WebSocket handshake
         # This completes the HTTP -> WebSocket upgrade
         await websocket.accept()
@@ -114,7 +169,15 @@ class ConnectionManager:
         self.active_connections[job_id].add(websocket)
         self.connection_times[websocket] = datetime.now()
 
-        logger.info(f"WebSocket connected for job {job_id}")
+        # SEC-003 Fix: Track connection by IP
+        if client_ip not in self.connections_by_ip:
+            self.connections_by_ip[client_ip] = set()
+        self.connections_by_ip[client_ip].add(websocket)
+
+        logger.info(
+            f"WebSocket connected for job {job_id} from {client_ip} "
+            f"(IP has {len(self.connections_by_ip[client_ip])} connections)"
+        )
 
     def disconnect(self, websocket: WebSocket, job_id: str) -> None:
         """
@@ -134,6 +197,16 @@ class ConnectionManager:
 
         # Remove from connection times
         self.connection_times.pop(websocket, None)
+
+        # SEC-003 Fix: Remove from IP tracking
+        # Find and remove this websocket from the IP tracking dict
+        for ip, connections in list(self.connections_by_ip.items()):
+            if websocket in connections:
+                connections.discard(websocket)
+                # Clean up empty sets
+                if not connections:
+                    del self.connections_by_ip[ip]
+                break
 
         logger.info(f"WebSocket disconnected for job {job_id}")
 
@@ -228,8 +301,13 @@ async def websocket_progress(websocket: WebSocket, job_id: str) -> None:
             console.log(data.progress_percentage);
         };
     """
-    # Accept the connection and register it
-    await manager.connect(websocket, job_id)
+    # SEC-003 Fix: Extract client IP for rate limiting
+    # ELI5: We need to know which computer is connecting so we can limit
+    # how many connections each computer can make (prevents abuse)
+    client_ip = websocket.client.host if websocket.client else "unknown"
+
+    # Accept the connection and register it (with rate limiting)
+    await manager.connect(websocket, job_id, client_ip)
 
     try:
         # Send initial connection confirmation
@@ -317,8 +395,10 @@ async def websocket_progress(websocket: WebSocket, job_id: str) -> None:
         logger.error(f"WebSocket error for job {job_id}: {e}")
         try:
             await websocket.send_json({"type": "error", "message": str(e)})
-        except:
-            pass
+        except Exception as send_error:
+            # CQ-001 Fix: Specific exception handling with logging
+            # This happens when the WebSocket is already closed and we can't send the error
+            logger.debug(f"Failed to send error to closing websocket: {send_error}")
 
     finally:
         # Always clean up the connection

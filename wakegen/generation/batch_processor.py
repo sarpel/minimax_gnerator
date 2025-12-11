@@ -29,6 +29,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from wakegen.config.batch import BatchConfig
 from wakegen.core.exceptions import GenerationError, ProviderError
 from wakegen.core.protocols import TTSProvider
 from wakegen.core.types import ProviderType
@@ -39,33 +40,7 @@ from wakegen.models.generation import GenerationParameters, GenerationResult
 
 logger = logging.getLogger(__name__)
 
-
-@dataclass
-class BatchConfig:
-    """Configuration for batch audio generation processing.
-
-    Attributes:
-        max_concurrent_tasks: Maximum number of concurrent generation tasks
-        retry_attempts: Number of retry attempts for failed tasks
-        timeout_seconds: Timeout for individual generation tasks
-        rate_limits: Rate limits per provider type
-    """
-
-    max_concurrent_tasks: int = 5
-    retry_attempts: int = 3
-    timeout_seconds: int = 300
-    rate_limits: dict[str, tuple[int, int]] = None  # type: ignore
-
-    def __post_init__(self) -> None:
-        """Initialize default rate limits if not provided."""
-        if self.rate_limits is None:
-            self.rate_limits = {
-                "commercial": (
-                    10,
-                    60,
-                ),  # 10 requests per minute for commercial providers
-                "free": (5, 60),  # 5 requests per minute for free providers
-            }
+# AH-001 Fix: BatchConfig moved to wakegen.config.batch for reuse
 
 
 class BatchProcessor:
@@ -88,6 +63,13 @@ class BatchProcessor:
         self.config = config
         self.rate_limiters: dict[str, RateLimiter] = {}
         self.progress_tracker: ProgressTracker | None = None
+        # BP-003 Fix: Track current provider type for proper result creation
+        self._current_provider_type: ProviderType | None = None
+
+        # PERF: Graceful shutdown support
+        # ELI5: This flag tells workers "finish what you're doing, then stop"
+        # instead of "stop immediately and drop everything"
+        self._shutdown_event = asyncio.Event()
 
         # Initialize rate limiters for each provider type
         for provider_type, (max_requests, period_seconds) in config.rate_limits.items():
@@ -225,8 +207,9 @@ class BatchProcessor:
 
                 info = sf.info(output_path)
                 duration = info.duration
-            except Exception:
-                pass
+            except Exception as e:
+                # BP-002 Fix: Log exception instead of silently swallowing it
+                logger.debug(f"Could not read audio duration: {e}")
 
         audio_sample = AudioSample(
             file_path=output_path,
@@ -257,14 +240,23 @@ class BatchProcessor:
     ) -> None:
         """Worker coroutine that processes tasks from the queue.
 
+        PERF: Implements graceful shutdown - completes in-flight tasks before stopping.
+
         Args:
             provider: TTS provider instance
             task_queue: Queue for incoming tasks (task_id, params)
             results_queue: Queue for results (task_id, result, error)
         """
-        while True:
+        while not self._shutdown_event.is_set():
             try:
-                task_id, params = await task_queue.get()
+                # Wait for task with timeout to check shutdown flag
+                try:
+                    task_id, params = await asyncio.wait_for(
+                        task_queue.get(), timeout=1.0
+                    )
+                except asyncio.TimeoutError:
+                    # No task available, check shutdown flag and continue
+                    continue
 
                 try:
                     # Process the task
@@ -274,18 +266,45 @@ class BatchProcessor:
                     await results_queue.put((task_id, result, None))
 
                 except Exception as e:
+                    # BP-002 Fix: Log the exception before putting in queue
+                    logger.error(
+                        f"Task {task_id} failed: {e!s}",
+                        exc_info=True,
+                        extra={"task_id": task_id, "provider": str(provider)},
+                    )
                     # Put error in results queue
                     await results_queue.put((task_id, None, e))
 
                 finally:
+                    # Always mark task as done
                     task_queue.task_done()
 
             except asyncio.CancelledError:
-                # Worker was cancelled, exit gracefully
+                # Worker was cancelled, enter drain mode
+                logger.info("Worker cancelled, entering drain mode")
                 break
             except Exception as e:
-                logger.error(f"Worker error: {e!s}")
+                logger.error(f"Worker error: {e!s}", exc_info=True)
                 break
+
+        # PERF: Drain mode - complete remaining tasks before exiting
+        # ELI5: Like finishing the dishes you started before leaving the kitchen
+        logger.info("Worker entering drain mode, processing remaining tasks")
+        while not task_queue.empty():
+            try:
+                task_id, params = task_queue.get_nowait()
+                try:
+                    result = await self._process_single_task(provider, params, task_id)
+                    await results_queue.put((task_id, result, None))
+                except Exception as e:
+                    logger.error(f"Task {task_id} failed in drain mode: {e!s}")
+                    await results_queue.put((task_id, None, e))
+                finally:
+                    task_queue.task_done()
+            except asyncio.QueueEmpty:
+                break
+
+        logger.info("Worker shutdown complete")
 
     async def process_batch(
         self, provider: TTSProvider, tasks: list[tuple[str, GenerationParameters]]
@@ -301,6 +320,9 @@ class BatchProcessor:
         """
         if not tasks:
             return
+
+        # BP-003 Fix: Set current provider type for result creation
+        self._current_provider_type = provider.provider_type
 
         # Initialize progress if tracker is set
         if self.progress_tracker:

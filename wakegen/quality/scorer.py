@@ -122,11 +122,17 @@ async def calculate_quality_score(
         # Load audio data for analysis
         audio_data, sample_rate = await load_audio_file(file_path)
 
-        # Calculate individual component scores
-        clarity_score = _calculate_clarity_score(audio_data, sample_rate)
+        # PERF: Pre-compute FFT once and share between scorers
+        # ELI5: Instead of doing the same expensive calculation (FFT) multiple times,
+        # we do it once and reuse the result. Like photocopying a document once
+        # instead of scanning it multiple times.
+        fft_cache = _compute_fft_cache(audio_data, sample_rate)
+
+        # Calculate individual component scores (passing FFT cache)
+        clarity_score = _calculate_clarity_score(audio_data, sample_rate, fft_cache)
         snr_score = _calculate_snr_score(validation_result.signal_to_noise_ratio_db)
         naturalness_score = _calculate_naturalness_score(audio_data, sample_rate)
-        diversity_score = _calculate_diversity_score(audio_data)
+        diversity_score = _calculate_diversity_score(audio_data, fft_cache)
         technical_score = _calculate_technical_score(validation_result)
 
         # Apply minimum thresholds
@@ -162,8 +168,46 @@ async def calculate_quality_score(
         ) from e
 
 
+@dataclass
+class FFTCache:
+    """Cached FFT results to avoid redundant computations.
+
+    PERF: Stores pre-computed FFT data that multiple scorers need.
+    """
+
+    fft_result: np.ndarray[Any, Any]
+    frequencies: np.ndarray[Any, Any]
+    magnitudes: np.ndarray[Any, Any]
+
+
+def _compute_fft_cache(audio_data: np.ndarray[Any, Any], sample_rate: int) -> FFTCache:
+    """Pre-compute FFT and related data for reuse.
+
+    PERF: Computes FFT once instead of multiple times across scorers.
+
+    Args:
+        audio_data: Audio signal
+        sample_rate: Sample rate in Hz
+
+    Returns:
+        FFTCache with pre-computed FFT data
+    """
+    if len(audio_data.shape) > 1:
+        audio_data = audio_data[0]
+
+    fft_result = np.fft.rfft(audio_data)
+    frequencies = np.fft.rfftfreq(len(audio_data), 1.0 / sample_rate)
+    magnitudes = np.abs(fft_result)
+
+    return FFTCache(
+        fft_result=fft_result, frequencies=frequencies, magnitudes=magnitudes
+    )
+
+
 def _calculate_clarity_score(
-    audio_data: np.ndarray[Any, Any], sample_rate: int
+    audio_data: np.ndarray[Any, Any],
+    sample_rate: int,
+    fft_cache: FFTCache | None = None,
 ) -> float:
     """Calculate clarity score based on spectral characteristics.
 
@@ -173,6 +217,7 @@ def _calculate_clarity_score(
     Args:
         audio_data: Audio signal
         sample_rate: Sample rate in Hz
+        fft_cache: Optional pre-computed FFT data (PERF optimization)
 
     Returns:
         Clarity score (0-1)
@@ -181,10 +226,15 @@ def _calculate_clarity_score(
         # Use first channel for mono analysis
         audio_data = audio_data[0]
 
-    # Calculate spectral centroid (measure of brightness)
-    fft_result = np.fft.rfft(audio_data)
-    frequencies = np.fft.rfftfreq(len(audio_data), 1.0 / sample_rate)
-    magnitudes = np.abs(fft_result)
+    # PERF: Use cached FFT if available
+    if fft_cache is not None:
+        frequencies = fft_cache.frequencies
+        magnitudes = fft_cache.magnitudes
+    else:
+        # Fallback: compute FFT if not cached
+        fft_result = np.fft.rfft(audio_data)
+        frequencies = np.fft.rfftfreq(len(audio_data), 1.0 / sample_rate)
+        magnitudes = np.abs(fft_result)
 
     # Weighted average frequency (spectral centroid)
     spectral_centroid = np.sum(frequencies * magnitudes) / np.sum(magnitudes)
@@ -281,13 +331,16 @@ def _calculate_naturalness_score(
     return float(max(0.0, min(1.0, naturalness_score)))
 
 
-def _calculate_diversity_score(audio_data: np.ndarray[Any, Any]) -> float:
+def _calculate_diversity_score(
+    audio_data: np.ndarray[Any, Any], fft_cache: FFTCache | None = None
+) -> float:
     """Calculate spectral diversity score.
 
     Diversity measures the richness and variety of frequency content.
 
     Args:
         audio_data: Audio signal
+        fft_cache: Optional pre-computed FFT data (PERF optimization)
 
     Returns:
         Diversity score (0-1)
@@ -296,9 +349,13 @@ def _calculate_diversity_score(audio_data: np.ndarray[Any, Any]) -> float:
         # Use first channel for mono analysis
         audio_data = audio_data[0]
 
-    # Calculate spectral entropy (measure of frequency distribution)
-    fft_result = np.fft.rfft(audio_data)
-    magnitudes = np.abs(fft_result)
+    # PERF: Use cached FFT if available
+    if fft_cache is not None:
+        magnitudes = fft_cache.magnitudes
+    else:
+        # Fallback: compute FFT if not cached
+        fft_result = np.fft.rfft(audio_data)
+        magnitudes = np.abs(fft_result)
 
     # Normalize magnitudes to probability distribution
     magnitudes = magnitudes + 1e-10  # Avoid log(0)

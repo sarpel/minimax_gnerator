@@ -1,3 +1,4 @@
+import asyncio  # CQ-002 Fix: Import asyncio for truly async I/O
 import os
 from typing import Any
 
@@ -96,6 +97,13 @@ async def load_audio_file(file_path: str) -> tuple[np.ndarray[Any, Any], int]:
     """
     Async wrapper for load_audio function.
 
+    CQ-002 Fix: This function now uses asyncio.to_thread() to execute the
+    blocking librosa.load() call in a thread pool, preventing event loop blocking.
+
+    ELI5: Instead of making the entire program wait while we read a file,
+    we hand that work to a separate worker thread, so the main program can
+    keep doing other things while the file is being read.
+
     Args:
         file_path: The path to the audio file.
 
@@ -104,7 +112,8 @@ async def load_audio_file(file_path: str) -> tuple[np.ndarray[Any, Any], int]:
         - The audio data as a numpy array.
         - The sample rate of the audio.
     """
-    return load_audio(file_path)
+    # Run the blocking load_audio function in a thread pool
+    return await asyncio.to_thread(load_audio, file_path)
 
 
 def get_audio_duration(audio_data: np.ndarray[Any, Any], sample_rate: int) -> float:
