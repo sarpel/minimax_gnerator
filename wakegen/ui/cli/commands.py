@@ -1,28 +1,28 @@
-import click
 import asyncio
 import os
 from pathlib import Path
-from typing import Optional, Any
+from typing import Any
+
+import click
 from rich.console import Console
-from rich.progress import track
 from rich.panel import Panel
+from rich.progress import track
 from rich.table import Table
+
+# Import providers to ensure they are registered
 from wakegen.config.settings import get_generation_config, get_provider_config
-from wakegen.config.yaml_loader import load_config, get_template_config, WakegenConfig
+from wakegen.config.yaml_loader import WakegenConfig, get_template_config, load_config
+from wakegen.core.exceptions import ConfigError
+from wakegen.core.protocols import TTSProvider
+from wakegen.core.types import ProviderType
 from wakegen.providers.registry import (
+    discover_available_providers,
     get_provider,
     list_available_providers,
-    discover_available_providers,
-    ProviderInfo,
 )
-from wakegen.core.types import ProviderType
-from wakegen.core.protocols import TTSProvider
-from wakegen.core.exceptions import ConfigError
-from wakegen.utils.logging import setup_logging
-from wakegen.utils.audio import resample_audio
 from wakegen.ui.cli.wizard import run_wizard
-# Import providers to ensure they are registered
-import wakegen.providers
+from wakegen.utils.audio import resample_audio
+from wakegen.utils.logging import setup_logging
 
 # We use 'click' to create the command line interface.
 # It handles parsing arguments (like --text "hello") and displaying help messages.
@@ -30,30 +30,42 @@ import wakegen.providers
 
 console = Console()
 
+
 @click.group()
-def cli():
+def cli() -> None:
     """
     Wake Word Dataset Generator CLI.
-    
+
     This tool helps you generate, augment, and prepare datasets for training
     custom wake word models (like "Hey Computer").
     """
     setup_logging()
 
+
 @cli.command(name="list-providers")
-@click.option("--available-only", "-a", is_flag=True, help="Show only providers that are ready to use")
-@click.option("--verbose", "-v", is_flag=True, help="Show detailed information including install hints")
-def list_providers(available_only: bool, verbose: bool):
+@click.option(
+    "--available-only",
+    "-a",
+    is_flag=True,
+    help="Show only providers that are ready to use",
+)
+@click.option(
+    "--verbose",
+    "-v",
+    is_flag=True,
+    help="Show detailed information including install hints",
+)
+def list_providers(available_only: bool, verbose: bool) -> None:
     """
     Lists all supported TTS providers and their availability status.
-    
+
     This command checks which providers are actually usable based on:
     - Required Python packages being installed
     - API keys being configured (for commercial providers)
-    
+
     Use this to see which providers you can use with the --provider flag,
     and what you need to install to enable more providers.
-    
+
     Examples:
         wakegen list-providers              # Show all providers
         wakegen list-providers --available-only  # Show only usable ones
@@ -61,16 +73,18 @@ def list_providers(available_only: bool, verbose: bool):
     """
     # Discover all providers and their availability status
     providers = discover_available_providers()
-    
+
     # Filter if requested
     if available_only:
         providers = [p for p in providers if p.is_available]
-    
+
     if not providers:
         console.print("[yellow]No providers available.[/yellow]")
-        console.print("Use [cyan]wakegen list-providers --verbose[/cyan] for installation instructions.")
+        console.print(
+            "Use [cyan]wakegen list-providers --verbose[/cyan] for installation instructions."
+        )
         return
-    
+
     # Create a nice table
     table = Table(title="TTS Providers", show_header=True, header_style="bold cyan")
     table.add_column("Provider", style="bold")
@@ -78,49 +92,61 @@ def list_providers(available_only: bool, verbose: bool):
     table.add_column("Description")
     if verbose:
         table.add_column("Requirements")
-    
+
     for p in providers:
         # Status indicator
         if p.is_available:
             status = "[green]✓ Available[/green]"
         else:
             status = "[red]✗ Not Available[/red]"
-        
+
         # Build the row
         if verbose:
             if p.is_available:
                 requirements = "[dim]All satisfied[/dim]"
             else:
-                requirements = "\n".join([
-                    f"[yellow]• {dep}[/yellow]" for dep in p.missing_dependencies
-                ])
+                requirements = "\n".join(
+                    [
+                        f"[yellow]• {dep}[/yellow]"
+                        for dep in (p.missing_dependencies or [])
+                    ]
+                )
                 if p.install_hint:
                     requirements += f"\n[dim]{p.install_hint}[/dim]"
             table.add_row(p.name, status, p.description, requirements)
         else:
             table.add_row(p.name, status, p.description)
-    
+
     console.print(table)
-    
+
     # Summary
     available_count = sum(1 for p in providers if p.is_available)
     total_count = len(providers)
     console.print(f"\n[dim]{available_count}/{total_count} providers available[/dim]")
-    
+
     if not verbose and available_count < total_count:
-        console.print("[dim]Use --verbose to see installation instructions for missing providers.[/dim]")
+        console.print(
+            "[dim]Use --verbose to see installation instructions for missing providers.[/dim]"
+        )
 
 
 @cli.command(name="list-voices")
-@click.option("--provider", default="all", help="Provider to list voices for (default: all)")
-@click.option("--language", "-l", multiple=True, help="Filter voices by language code (e.g., tr-TR)")
-def list_voices(provider: str, language: tuple):
+@click.option(
+    "--provider", default="all", help="Provider to list voices for (default: all)"
+)
+@click.option(
+    "--language",
+    "-l",
+    multiple=True,
+    help="Filter voices by language code (e.g., tr-TR)",
+)
+def list_voices(provider: str, language: tuple[str, ...]) -> None:
     """
     Lists available voices for the specified provider(s).
-    
+
     You can see which voices are available for generation.
     Some providers have hundreds of voices!
-    
+
     Examples:
         wakegen list-voices                 # List all voices from all providers
         wakegen list-voices --provider edge_tts  # List only Edge TTS voices
@@ -129,7 +155,7 @@ def list_voices(provider: str, language: tuple):
     asyncio.run(run_list_voices(provider, language))
 
 
-async def run_list_voices(provider_name: str, languages: tuple):
+async def run_list_voices(provider_name: str, languages: tuple[str, ...]) -> None:
     """
     Async implementation of list-voices.
     """
@@ -139,49 +165,59 @@ async def run_list_voices(provider_name: str, languages: tuple):
         providers_to_check = [p.name for p in list_available_providers()]
     else:
         providers_to_check = [provider_name]
-    
+
     provider_config = get_provider_config()
     total_voices = 0
-    
+
     for p_name in providers_to_check:
         try:
             # Get the provider instance
             p_type = ProviderType(p_name.lower())
             provider = get_provider(p_type, provider_config)
-            
+
             # Fetch voices
             console.print(f"[dim]Fetching voices for {p_name}...[/dim]")
             voices = await provider.list_voices()
-            
+
             # Filter by language if requested
             if languages:
-                voices = [v for v in voices if any(l.lower() in v.language.lower() for l in languages)]
-            
+                voices = [
+                    v
+                    for v in voices
+                    if any(l.lower() in v.language.lower() for l in languages)
+                ]
+
             if not voices:
                 if languages:
-                    console.print(f"[yellow]No voices found for {p_name} matching languages: {', '.join(languages)}[/yellow]")
+                    console.print(
+                        f"[yellow]No voices found for {p_name} matching languages: {', '.join(languages)}[/yellow]"
+                    )
                 else:
                     console.print(f"[yellow]No voices found for {p_name}[/yellow]")
                 continue
-            
+
             total_voices += len(voices)
-            
+
             # Display table
-            table = Table(title=f"Voices for {p_name} ({len(voices)})", show_header=True, header_style="bold cyan")
+            table = Table(
+                title=f"Voices for {p_name} ({len(voices)})",
+                show_header=True,
+                header_style="bold cyan",
+            )
             table.add_column("ID", style="cyan")
             table.add_column("Name", style="bold")
             table.add_column("Language")
             table.add_column("Gender")
-            
+
             # Show top 50 to avoid spamming
             for v in voices[:50]:
                 table.add_row(v.id, v.name, v.language, v.gender.value)
-            
+
             console.print(table)
             if len(voices) > 50:
                 console.print(f"[dim]... and {len(voices) - 50} more[/dim]")
             console.print("")
-            
+
         except Exception as e:
             console.print(f"[red]Error listing voices for {p_name}: {e}[/red]")
 
@@ -189,28 +225,45 @@ async def run_list_voices(provider_name: str, languages: tuple):
 @cli.command()
 @click.option("--text", "-t", help="The wake word or phrase to generate")
 @click.option("--count", "-n", default=10, help="Number of samples to generate")
-@click.option("--output-dir", "-o", default="./output", help="Directory to save generated files")
-@click.option("--provider", "-p", default="edge_tts", help="TTS provider to use (default: edge_tts)")
+@click.option(
+    "--output-dir", "-o", default="./output", help="Directory to save generated files"
+)
+@click.option(
+    "--provider",
+    "-p",
+    default="edge_tts",
+    help="TTS provider to use (default: edge_tts)",
+)
 @click.option("--voice", "-v", help="Specific voice ID to use (optional)")
-@click.option("--config", "-c", type=click.Path(exists=True), help="Path to a wakegen.yaml config file")
-@click.option("--language", "-l", multiple=True, help="Filter voices by language code (e.g., tr-TR)")
+@click.option(
+    "--config",
+    "-c",
+    type=click.Path(exists=True),
+    help="Path to a wakegen.yaml config file",
+)
+@click.option(
+    "--language",
+    "-l",
+    multiple=True,
+    help="Filter voices by language code (e.g., tr-TR)",
+)
 def generate(
-    text: Optional[str],
+    text: str | None,
     count: int,
     output_dir: str,
     provider: str,
-    voice: Optional[str],
-    config: Optional[str],
-    language: tuple
-):
+    voice: str | None,
+    config: str | None,
+    language: tuple[str, ...],
+) -> None:
     """
     Generates audio samples for a wake word.
-    
+
     This is the main command! You can use it in three ways:
     1. Interactive Wizard: Run 'wakegen generate' without arguments
     2. Command Line: Provide arguments like --text "hey computer"
     3. Config File: Use --config wakegen.yaml for reproducible runs
-    
+
     Examples:
         wakegen generate  # Starts wizard
         wakegen generate --text "hello world" --count 5
@@ -224,26 +277,47 @@ def generate(
 
     # Mode 2: Command line arguments
     if text:
-        asyncio.run(run_generation(
-            text=text,
-            count=count,
-            output_dir=output_dir,
-            provider_name=provider,
-            voice_id=voice,
-            languages=list(language) if language else None
-        ))
+        asyncio.run(
+            run_generation(
+                text=text,
+                count=count,
+                output_dir=output_dir,
+                provider_name=provider,
+                voice_id=voice,
+                languages=list(language) if language else None,
+            )
+        )
         return
 
     # Mode 3: Interactive Wizard
     asyncio.run(run_interactive_generation())
 
 
-async def run_interactive_generation():
+@cli.command()
+def wizard() -> None:
+    """
+    Interactive wizard for generating wake word samples.
+
+    This launches a step-by-step guide that helps you:
+    - Choose your wake word(s)
+    - Select TTS providers and voices
+    - Configure sample count and output location
+    - Start generation with sensible defaults
+
+    Perfect for new users or quick one-off generations!
+
+    Example:
+        wakegen wizard
+    """
+    asyncio.run(run_interactive_generation())
+
+
+async def run_interactive_generation() -> None:
     """
     Runs the generation process using the interactive wizard.
     """
     config = await run_wizard()
-    
+
     if not config:
         return
 
@@ -251,96 +325,119 @@ async def run_interactive_generation():
     await run_generation(
         text=config["wake_word"],
         count=config["count"],
-        preset=None, # Wizard builds custom config
+        preset=None,  # Wizard builds custom config
         output_dir=config["output_dir"],
-        provider_name="edge_tts", # Default for wizard for now
-        voice_id=None
+        provider_name="edge_tts",  # Default for wizard for now
+        voice_id=None,
     )
 
 
 async def run_generation_from_config(
-    config_path: str,
-    language_override: Optional[tuple] = None
-):
+    config_path: str, language_override: tuple[str, ...] | None = None
+) -> None:
     """
     Runs generation based on a YAML configuration file.
     """
     try:
         # Load configuration
         config = load_config(Path(config_path))
-        
-        console.print(Panel(
-            f"[bold]Project:[/bold] {config.project.name} v{config.project.version}\n"
-            f"[bold]Wake Words:[/bold] {config.generation.wake_words}\n"
-            f"[bold]Providers:[/bold] {len(config.providers)} configured",
-            title="Starting Generation from Config",
-            border_style="green"
-        ))
-        
+
+        console.print(
+            Panel(
+                f"[bold]Project:[/bold] {config.project.name} v{config.project.version}\n"
+                f"[bold]Wake Words:[/bold] {config.generation.wake_words}\n"
+                f"[bold]Providers:[/bold] {len(config.providers)} configured",
+                title="Starting Generation from Config",
+                border_style="green",
+            )
+        )
+
         # Use languages from config, or override if provided
         languages = list(language_override) if language_override else None
-        
+
         # Iterate over providers in config
         for p_config in config.providers:
             try:
                 # Initialize provider
-                provider = get_provider(p_config.type, get_provider_config())
-                
+                provider = get_provider(
+                    ProviderType(p_config.type), get_provider_config()
+                )
+
                 # Determine voices to use
                 voices_to_use = []
                 if p_config.voices:
                     # Use specific voices from config
                     all_voices = await provider.list_voices()
-                    voices_to_use = [v for v in all_voices if v.id in p_config.voices or v.name in p_config.voices]
+                    voices_to_use = [
+                        v
+                        for v in all_voices
+                        if v.id in p_config.voices or v.name in p_config.voices
+                    ]
                 else:
                     # Auto-select voices
                     all_voices = await provider.list_voices()
-                    
+
                     # Filter by language if specified in provider config or override
                     filter_langs = languages or p_config.languages
                     if filter_langs:
-                         all_voices = [v for v in all_voices if any(l.lower() in v.language.lower() for l in filter_langs)]
-                    
+                        all_voices = [
+                            v
+                            for v in all_voices
+                            if any(
+                                l.lower() in v.language.lower() for l in filter_langs
+                            )
+                        ]
+
                     if not all_voices:
-                        console.print(f"[yellow]No voices found for {p_config.type} matching criteria. Skipping.[/yellow]")
+                        console.print(
+                            f"[yellow]No voices found for {p_config.type} matching criteria. Skipping.[/yellow]"
+                        )
                         continue
-                        
+
                     # Default to first few voices if no specific ones selected
                     # If languages specified, use all matching. If not, limit to avoid explosion?
-                    # Let's limit to top 5 if no specific voices and no language filter, 
+                    # Let's limit to top 5 if no specific voices and no language filter,
                     # but if language filter is present, maybe user wants all of them?
                     # Let's stick to a reasonable default or just the first one if not specified.
                     # For now, let's pick the first one to be safe, or top 3.
-                    voices_to_use = all_voices[:1] 
-                
+                    voices_to_use = all_voices[:1]
+
                 if not voices_to_use:
-                    console.print(f"[yellow]No valid voices found for {p_config.type}. Skipping.[/yellow]")
+                    console.print(
+                        f"[yellow]No valid voices found for {p_config.type}. Skipping.[/yellow]"
+                    )
                     continue
-                
+
                 # Generate for each wake word and each voice
                 for wake_word in config.generation.wake_words:
                     for voice in voices_to_use:
-                        console.print(f"[bold]Generating:[/bold] '{wake_word}' with {p_config.type} ({voice.name})")
-                        
+                        console.print(
+                            f"[bold]Generating:[/bold] '{wake_word}' with {p_config.type} ({voice.name})"
+                        )
+
                         # Calculate count based on weight
                         count = int(config.generation.count * p_config.weight)
-                        if count < 1: count = 1
-                        
+                        if count < 1:
+                            count = 1
+
                         # Output directory
-                        word_dir = os.path.join(config.generation.output_dir, wake_word.replace(" ", "_").lower())
-                        
+                        word_dir = os.path.join(
+                            config.generation.output_dir,
+                            wake_word.replace(" ", "_").lower(),
+                        )
+
                         await run_generation(
                             text=wake_word,
                             count=count,
                             output_dir=word_dir,
                             provider_name=p_config.type,
                             voice_id=voice.id,
-                            languages=None # Already filtered
+                            languages=None,  # Already filtered
                         )
-                        
+
             except Exception as e:
                 console.print(f"[red]Error with provider {p_config.type}: {e}[/red]")
-                
+
     except ConfigError as e:
         console.print(f"[bold red]Configuration Error:[/bold red] {e}")
     except Exception as e:
@@ -352,10 +449,10 @@ async def run_generation(
     count: int,
     output_dir: str,
     provider_name: str,
-    voice_id: Optional[str] = None,
-    preset: Optional[str] = None,
-    languages: Optional[list[str]] = None
-):
+    voice_id: str | None = None,
+    preset: str | None = None,
+    languages: list[str] | None = None,
+) -> None:
     """
     Core generation logic.
     """
@@ -364,57 +461,75 @@ async def run_generation(
         p_type = ProviderType(provider_name.lower())
         provider_config = get_provider_config()
         provider = get_provider(p_type, provider_config)
-        
+
         # 2. Get Voice
         selected_voice = None
         if voice_id:
             # Verify voice exists
             voices = await provider.list_voices()
-            selected_voice = next((v for v in voices if v.id == voice_id or v.name == voice_id), None)
+            selected_voice = next(
+                (v for v in voices if v.id == voice_id or v.name == voice_id), None
+            )
             if not selected_voice:
-                console.print(f"[yellow]Voice '{voice_id}' not found. Falling back to auto-selection.[/yellow]")
-        
+                console.print(
+                    f"[yellow]Voice '{voice_id}' not found. Falling back to auto-selection.[/yellow]"
+                )
+
         if not selected_voice:
             # Auto-select
             voices = await provider.list_voices()
-            
+
             # Filter by language if requested
             if languages:
-                filtered_voices = [v for v in voices if any(l.lower() in v.language.lower() for l in languages)]
+                filtered_voices = [
+                    v
+                    for v in voices
+                    if any(l.lower() in v.language.lower() for l in languages)
+                ]
                 if not filtered_voices:
-                    console.print(f"[bold red]No voices found matching languages: {', '.join(languages)}[/bold red]")
+                    console.print(
+                        f"[bold red]No voices found matching languages: {', '.join(languages)}[/bold red]"
+                    )
                     return
                 voices = filtered_voices
-            
+
             # Prefer English US if no language specified, or just pick first
             if not languages:
-                selected_voice = next((v for v in voices if "en-US" in v.language), voices[0])
+                selected_voice = next(
+                    (v for v in voices if "en-US" in v.language), voices[0]
+                )
             else:
                 selected_voice = voices[0]
-        
-        console.print(f"Using voice: [cyan]{selected_voice.name}[/cyan] ({selected_voice.id})")
+
+        console.print(
+            f"Using voice: [cyan]{selected_voice.name}[/cyan] ({selected_voice.id})"
+        )
 
         # 3. Generate Samples
-        gen_config = get_generation_config() # Load defaults
+        gen_config = get_generation_config()  # Load defaults
         # Override with arguments
         gen_config.output_dir = output_dir
-        
+
         os.makedirs(output_dir, exist_ok=True)
-        
+
         # Simple cache simulation for now (in real app, use the Cache class)
         from wakegen.utils.caching import GenerationCache
+
         cache = GenerationCache()
-        
+
         cache_hits = 0
         for i in track(range(count), description="Generating samples..."):
-            filename = f"{text.replace(' ', '_').lower()}_{i+1}.{gen_config.audio_format}"
+            filename = (
+                f"{text.replace(' ', '_').lower()}_{i + 1}.{gen_config.audio_format}"
+            )
             file_path = os.path.join(output_dir, filename)
-            
+
             # Check cache first
             cached_path = cache.get(text, selected_voice.id, p_type.value)
             if cached_path:
                 # Copy from cache to target location
                 import shutil
+
                 shutil.copy2(cached_path, file_path)
                 cache_hits += 1
             else:
@@ -422,70 +537,208 @@ async def run_generation(
                 await provider.generate(text, selected_voice.id, file_path)
                 # Add to cache
                 cache.put(text, selected_voice.id, p_type.value, file_path, copy=True)
-            
+
             # Resample if needed (Edge TTS usually outputs 24kHz, we might want 16kHz)
             if gen_config.sample_rate:
                 resample_audio(file_path, gen_config.sample_rate)
-        
+
         # Save cache metadata
         cache.save_metadata()
-        
+
         # Report results
         if cache_hits > 0:
-            console.print(f"[bold green]Successfully generated {count} samples![/bold green] [dim]({cache_hits} from cache)[/dim]")
+            console.print(
+                f"[bold green]Successfully generated {count} samples![/bold green] [dim]({cache_hits} from cache)[/dim]"
+            )
         else:
-            console.print(f"[bold green]Successfully generated {count} samples![/bold green]")
+            console.print(
+                f"[bold green]Successfully generated {count} samples![/bold green]"
+            )
 
     except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        console.print(f"[bold red]Error:[/bold red] {e!s}")
         # In a real app, we might want to print the full traceback here
         # console.print_exception()
 
 
-
 @cli.command()
-@click.option("--input-dir", required=True, help="Directory containing audio files to augment")
-@click.option("--output-dir", required=True, help="Directory to save augmented files")
-def augment(input_dir: str, output_dir: str):
+@click.option("--input-dir", required=True, help="Directory containing original audio")
+@click.option("--output-dir", required=True, help="Directory to save augmented audio")
+@click.option(
+    "--profile",
+    default="default",
+    help="Augmentation profile (default, noisy, reverberant)",
+)
+@click.option(
+    "--count", default=1, help="Number of augmented copies per original file"
+)
+def augment(
+    input_dir: str, output_dir: str, profile: str, count: int
+) -> None:
     """
     Applies augmentation effects (noise, reverb) to existing audio files.
     """
-    console.print("[yellow]Augmentation command not yet fully implemented.[/yellow]")
-    console.print(f"Would augment files from {input_dir} to {output_dir}")
-    # TODO: Connect to wakegen.augmentation.pipeline
+    from wakegen.augmentation.pipeline import AugmentationPipeline
+    from wakegen.augmentation.profiles import get_profile
+    import asyncio
+    from pathlib import Path
+
+    input_path = Path(input_dir)
+    output_path = Path(output_dir)
+
+    if not input_path.exists():
+        console.print(f"[bold red]Error:[/bold red] Input directory {input_dir} not found")
+        return
+
+    try:
+        # Load profile
+        aug_profile = get_profile(profile)
+        pipeline = AugmentationPipeline(aug_profile)
+        
+        # Get all wav files
+        files = list(input_path.glob("*.wav"))
+        if not files:
+            console.print(f"[yellow]No .wav files found in {input_dir}[/yellow]")
+            return
+
+        console.print(f"Found {len(files)} files. Generating {count} augmented copies each.")
+        
+        async def run_augmentation():
+            with Progress() as progress:
+                task = progress.add_task("[cyan]Augmenting...", total=len(files) * count)
+                
+                for file in files:
+                    for i in range(count):
+                        # Create output filename: original_aug_{profile}_{i}.wav
+                        out_name = f"{file.stem}_aug_{profile}_{i}{file.suffix}"
+                        out_file = output_path / out_name
+                        
+                        await pipeline.apply(str(file), str(out_file))
+                        progress.advance(task)
+                        
+        asyncio.run(run_augmentation())
+        console.print(f"[bold green]Augmentation complete![/bold green] Output: {output_dir}")
+
+    except Exception as e:
+        console.print(f"[bold red]Augmentation failed:[/bold red] {e}")
+
 
 @cli.command()
 @click.option("--data-dir", required=True, help="Directory containing the dataset")
-def validate(data_dir: str):
+def validate(data_dir: str) -> None:
     """
     Runs quality assurance checks on the dataset.
     """
-    console.print("[yellow]Validation command not yet fully implemented.[/yellow]")
-    console.print(f"Would validate dataset in {data_dir}")
-    # TODO: Connect to wakegen.quality.validator
+    from wakegen.quality.validator import validate_sample
+    from wakegen.quality.statistics import calculate_dataset_statistics
+    import asyncio
+    from pathlib import Path
+
+    path = Path(data_dir)
+    if not path.exists():
+        console.print(f"[bold red]Error:[/bold red] Directory {data_dir} not found")
+        return
+
+    try:
+        files = list(path.rglob("*.wav"))
+        if not files:
+            console.print("[yellow]No audio files found to validate.[/yellow]")
+            return
+
+        console.print(f"Validating {len(files)} files...")
+        
+        async def run_validation():
+            valid_count = 0
+            results = []
+            
+            with Progress() as progress:
+                task = progress.add_task("[cyan]Validating...", total=len(files))
+                
+                for file in files:
+                    result = await validate_sample(str(file))
+                    results.append(result)
+                    if result.is_valid:
+                        valid_count += 1
+                    progress.advance(task)
+            
+            # Calculate stats
+            stats = calculate_dataset_statistics(results)
+            
+            # Display report
+            console.print("\n[bold]Validation Results:[/bold]")
+            console.print(f"Total Files: {len(files)}")
+            console.print(f"Valid Files: [green]{valid_count}[/green]")
+            console.print(f"Invalid Files: [red]{len(files) - valid_count}[/red]")
+            console.print(f"Pass Rate: {valid_count / len(files) * 100:.1f}%")
+            
+            if stats.get("issues"):
+                console.print("\n[bold yellow]Common Issues:[/bold yellow]")
+                for issue, count in stats["issues"].items():
+                    console.print(f"  - {issue}: {count}")
+
+        asyncio.run(run_validation())
+
+    except Exception as e:
+        console.print(f"[bold red]Validation failed:[/bold red] {e}")
+
 
 @cli.command()
 @click.option("--data-dir", required=True, help="Directory containing the dataset")
-@click.option("--format", default="openwakeword", help="Export format (default: openwakeword)")
-@click.option("--output-path", required=True, help="Path to save the exported manifest/files")
-def export(data_dir: str, format: str, output_path: str):
+@click.option(
+    "--format", default="openwakeword", help="Export format (openwakeword, pytorch, tensorflow)"
+)
+@click.option(
+    "--output-path", required=True, help="Path to save the exported manifest/files"
+)
+def export(data_dir: str, format: str, output_path: str) -> None:
     """
     Exports the dataset to a specific format for training.
     """
-    console.print("[yellow]Export command not yet fully implemented.[/yellow]")
-    console.print(f"Would export {data_dir} as {format} to {output_path}")
-    # TODO: Connect to wakegen.export
+    from wakegen.export import export_dataset
+    from wakegen.core.types import AudioFormat
+    import asyncio
+
+    try:
+        console.print(f"Exporting dataset from {data_dir} to {output_path} ({format})...")
+        
+        async def run_export():
+            await export_dataset(
+                source_dir=data_dir,
+                output_dir=output_path,
+                format=format,
+                split_ratios=(0.8, 0.1, 0.1) # Default 80/10/10 split
+            )
+            
+        asyncio.run(run_export())
+        console.print(f"[bold green]Export complete![/bold green]")
+
+    except Exception as e:
+        console.print(f"[bold red]Export failed:[/bold red] {e}")
+
 
 @cli.command()
-@click.option("--model-type", default="openwakeword", help="Type of model to train")
-@click.option("--output-script", default="train.sh", help="Path to save the training script")
-def train_script(model_type: str, output_script: str):
+@click.option("--export-dir", required=True, help="Directory containing the exported dataset (train.json)")
+@click.option("--model-name", default="my_wakeword", help="Name for the trained model")
+@click.option(
+    "--output-script", default="train_script.py", help="Path to save the training script"
+)
+def train_script(export_dir: str, model_name: str, output_script: str) -> None:
     """
-    Generates a training script for the selected model type.
+    Generates a training script for the exported dataset.
     """
-    console.print("[yellow]Training script generation not yet fully implemented.[/yellow]")
-    console.print(f"Would generate {model_type} training script at {output_script}")
-    # TODO: Connect to wakegen.training.script_generator
+    from wakegen.training.script_generator import generate_training_script
+    import asyncio
+    
+    try:
+        asyncio.run(
+            generate_training_script(
+                export_dir=export_dir,
+                output_script_path=output_script,
+                model_name=model_name
+            )
+        )
+    except Exception as e:
+        console.print(f"[bold red]Script generation failed:[/bold red] {e}")
 
 
 # =============================================================================
@@ -500,86 +753,98 @@ def train_script(model_type: str, output_script: str):
     "-i",
     "input_file",
     type=click.Path(exists=True),
-    help="File containing wake words (one per line) or a wakegen.yaml config"
+    help="File containing wake words (one per line) or a wakegen.yaml config",
 )
-@click.option("--count", "-n", default=100, help="Number of samples to generate per wake word")
-@click.option("--output-dir", "-o", default="./output", help="Directory to save generated files")
+@click.option(
+    "--count", "-n", default=100, help="Number of samples to generate per wake word"
+)
+@click.option(
+    "--output-dir", "-o", default="./output", help="Directory to save generated files"
+)
 @click.option("--provider", "-p", default="edge_tts", help="TTS provider to use")
 @click.option("--voice", "-v", help="Specific voice ID to use")
 @click.option(
     "--split-by-provider",
     is_flag=True,
-    help="Use multiple providers and distribute samples among them"
+    help="Use multiple providers and distribute samples among them",
 )
 @click.option(
     "--providers",
     multiple=True,
-    help="List of providers to use when --split-by-provider is set (e.g., --providers edge_tts --providers piper)"
+    help="List of providers to use when --split-by-provider is set (e.g., --providers edge_tts --providers piper)",
 )
 def batch(
-    input_file: Optional[str],
+    input_file: str | None,
     count: int,
     output_dir: str,
     provider: str,
-    voice: Optional[str],
+    voice: str | None,
     split_by_provider: bool,
-    providers: tuple
-):
+    providers: tuple[str, ...],
+) -> None:
     """
     Generate samples for multiple wake words in batch mode.
-    
+
     This command is optimized for generating large datasets with multiple wake words.
     You can provide wake words via:
-    
+
     1. A text file (one wake word per line)
     2. A wakegen.yaml configuration file (uses generation.wake_words)
-    
+
     If no input file is provided, it will prompt for wake words interactively.
-    
+
     Examples:
         # From a text file
         wakegen batch --input words.txt --count 100 --output-dir ./dataset
-        
+
         # From a config file
         wakegen batch --input wakegen.yaml
-        
+
         # With multiple providers
         wakegen batch --input words.txt --split-by-provider --providers edge_tts --providers piper
     """
-    asyncio.run(run_batch_generation(
-        input_file=input_file,
-        count=count,
-        output_dir=output_dir,
-        provider_name=provider,
-        voice_id=voice,
-        split_by_provider=split_by_provider,
-        provider_list=list(providers) if providers else None
-    ))
+    asyncio.run(
+        run_batch_generation(
+            input_file=input_file,
+            count=count,
+            output_dir=output_dir,
+            provider_name=provider,
+            voice_id=voice,
+            split_by_provider=split_by_provider,
+            provider_list=list(providers) if providers else None,
+        )
+    )
 
 
 async def run_batch_generation(
-    input_file: Optional[str],
+    input_file: str | None,
     count: int,
     output_dir: str,
     provider_name: str,
-    voice_id: Optional[str],
+    voice_id: str | None,
     split_by_provider: bool,
-    provider_list: Optional[list]
-):
+    provider_list: list[str] | None,
+) -> None:
     """
     Async implementation of batch generation.
-    
+
     This handles the logic for reading wake words from various sources
     and distributing generation across providers.
     """
-    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
-    
+    from rich.progress import (
+        BarColumn,
+        Progress,
+        SpinnerColumn,
+        TextColumn,
+        TimeElapsedColumn,
+    )
+
     wake_words: list[str] = []
-    
+
     # 1. Load wake words from input source
     if input_file:
         input_path = Path(input_file)
-        
+
         # Check if it's a YAML config file
         if input_path.suffix.lower() in (".yaml", ".yml"):
             try:
@@ -590,23 +855,33 @@ async def run_batch_generation(
                     output_dir = config.generation.output_dir
                 if count == 100:
                     count = config.generation.count
-                console.print(f"[green]Loaded {len(wake_words)} wake words from config[/green]")
+                console.print(
+                    f"[green]Loaded {len(wake_words)} wake words from config[/green]"
+                )
             except ConfigError as e:
                 console.print(f"[bold red]Error loading config:[/bold red] {e}")
                 return
         else:
             # It's a text file - read one wake word per line
             try:
-                with open(input_path, "r", encoding="utf-8") as f:
+                with open(input_path, encoding="utf-8") as f:
                     lines = f.readlines()
-                wake_words = [line.strip() for line in lines if line.strip() and not line.startswith("#")]
-                console.print(f"[green]Loaded {len(wake_words)} wake words from text file[/green]")
+                wake_words = [
+                    line.strip()
+                    for line in lines
+                    if line.strip() and not line.startswith("#")
+                ]
+                console.print(
+                    f"[green]Loaded {len(wake_words)} wake words from text file[/green]"
+                )
             except Exception as e:
                 console.print(f"[bold red]Error reading file:[/bold red] {e}")
                 return
     else:
         # Interactive mode - prompt for wake words
-        console.print("[bold cyan]Enter wake words (one per line, empty line to finish):[/bold cyan]")
+        console.print(
+            "[bold cyan]Enter wake words (one per line, empty line to finish):[/bold cyan]"
+        )
         while True:
             try:
                 line = input("> ").strip()
@@ -615,14 +890,14 @@ async def run_batch_generation(
                 wake_words.append(line)
             except (EOFError, KeyboardInterrupt):
                 break
-    
+
     if not wake_words:
         console.print("[yellow]No wake words provided. Exiting.[/yellow]")
         return
-    
+
     # 2. Determine providers to use
     providers_to_use: list[tuple[ProviderType, float]] = []
-    
+
     if split_by_provider:
         # Use multiple providers with equal weights
         if provider_list:
@@ -631,7 +906,9 @@ async def run_batch_generation(
                     p_type = ProviderType(p_name.lower())
                     providers_to_use.append((p_type, 1.0 / len(provider_list)))
                 except ValueError:
-                    console.print(f"[yellow]Warning: Unknown provider '{p_name}', skipping[/yellow]")
+                    console.print(
+                        f"[yellow]Warning: Unknown provider '{p_name}', skipping[/yellow]"
+                    )
         else:
             # Default to a few common providers
             default_providers = [ProviderType.EDGE_TTS]
@@ -643,59 +920,72 @@ async def run_batch_generation(
             p_type = ProviderType(provider_name.lower())
             providers_to_use.append((p_type, 1.0))
         except ValueError:
-            console.print(f"[bold red]Error:[/bold red] Unknown provider '{provider_name}'")
+            console.print(
+                f"[bold red]Error:[/bold red] Unknown provider '{provider_name}'"
+            )
             return
-    
+
     # 3. Display generation plan
     total_samples = len(wake_words) * count
-    console.print(Panel(
-        f"[bold]Wake Words:[/bold] {len(wake_words)}\n"
-        f"[bold]Samples per word:[/bold] {count}\n"
-        f"[bold]Total samples:[/bold] {total_samples}\n"
-        f"[bold]Output:[/bold] {output_dir}\n"
-        f"[bold]Providers:[/bold] {', '.join(p[0].value for p in providers_to_use)}",
-        title="Batch Generation Plan",
-        border_style="cyan"
-    ))
-    
+    console.print(
+        Panel(
+            f"[bold]Wake Words:[/bold] {len(wake_words)}\n"
+            f"[bold]Samples per word:[/bold] {count}\n"
+            f"[bold]Total samples:[/bold] {total_samples}\n"
+            f"[bold]Output:[/bold] {output_dir}\n"
+            f"[bold]Providers:[/bold] {', '.join(p[0].value for p in providers_to_use)}",
+            title="Batch Generation Plan",
+            border_style="cyan",
+        )
+    )
+
     # 4. Create output directory
     os.makedirs(output_dir, exist_ok=True)
-    
+
     # 5. Initialize providers and get voices
     provider_config = get_provider_config()
-    provider_instances: dict[ProviderType, tuple[TTSProvider, Optional[any]]] = {}
-    
+    provider_instances: dict[ProviderType, tuple[TTSProvider, Any | None]] = {}
+
     for p_type, _ in providers_to_use:
         try:
             provider = get_provider(p_type, provider_config)
-            
+
             # Get voice to use
             selected_voice = None
             if voice_id:
-                from wakegen.core.protocols import Voice
                 from wakegen.core.types import Gender
-                selected_voice = Voice(id=voice_id, name=voice_id, language="unknown", gender=Gender.NEUTRAL)
+                from wakegen.models.audio import Voice
+
+                selected_voice = Voice(
+                    id=voice_id,
+                    name=voice_id,
+                    language="unknown",
+                    gender=Gender.NEUTRAL,
+                    provider=p_type,
+                    supports_cloning=False,
+                )
             else:
                 voices = await provider.list_voices()
                 if voices:
                     selected_voice = next(
-                        (v for v in voices if v.language.startswith("en-")),
-                        voices[0]
+                        (v for v in voices if v.language.startswith("en-")), voices[0]
                     )
-            
+
             provider_instances[p_type] = (provider, selected_voice)
-            console.print(f"  [green]✓[/green] {p_type.value}: {selected_voice.name if selected_voice else 'no voice'}")
+            console.print(
+                f"  [green]✓[/green] {p_type.value}: {selected_voice.name if selected_voice else 'no voice'}"
+            )
         except Exception as e:
             console.print(f"  [red]✗[/red] {p_type.value}: {e}")
-    
+
     if not provider_instances:
         console.print("[bold red]No providers available. Exiting.[/bold red]")
         return
-    
+
     # 6. Generate samples with progress tracking
     total_generated = 0
     total_failed = 0
-    
+
     # Use Rich progress for nice display
     with Progress(
         SpinnerColumn(),
@@ -703,57 +993,58 @@ async def run_batch_generation(
         BarColumn(),
         TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
         TimeElapsedColumn(),
-        console=console
+        console=console,
     ) as progress:
-        
         overall_task = progress.add_task("[bold]Overall Progress", total=total_samples)
-        
+
         for wake_word in wake_words:
             word_dir = os.path.join(output_dir, wake_word.replace(" ", "_").lower())
             os.makedirs(word_dir, exist_ok=True)
-            
+
             word_task = progress.add_task(f"  '{wake_word}'", total=count)
             sample_index = 0
-            
+
             # Distribute samples across providers
             for p_type, weight in providers_to_use:
                 if p_type not in provider_instances:
                     continue
-                
+
                 provider, voice = provider_instances[p_type]
                 if not voice:
                     continue
-                
+
                 provider_count = int(count * weight)
-                
+
                 for _ in range(provider_count):
                     sample_index += 1
                     filename = f"{wake_word.replace(' ', '_').lower()}_{sample_index:04d}_{p_type.value}.wav"
                     file_path = os.path.join(word_dir, filename)
-                    
+
                     try:
                         await provider.generate(wake_word, voice.id, file_path)
                         total_generated += 1
-                    except Exception as e:
+                    except Exception:
                         total_failed += 1
                         # Log but don't stop
                         pass
-                    
+
                     progress.update(word_task, advance=1)
                     progress.update(overall_task, advance=1)
-            
+
             progress.remove_task(word_task)
-    
+
     # 7. Summary
-    console.print(Panel(
-        f"[bold green]✓ Batch generation complete![/bold green]\n\n"
-        f"[bold]Generated:[/bold] {total_generated} samples\n"
-        f"[bold]Failed:[/bold] {total_failed}\n"
-        f"[bold]Wake words processed:[/bold] {len(wake_words)}\n"
-        f"[bold]Output directory:[/bold] {output_dir}",
-        title="Summary",
-        border_style="green"
-    ))
+    console.print(
+        Panel(
+            f"[bold green]✓ Batch generation complete![/bold green]\n\n"
+            f"[bold]Generated:[/bold] {total_generated} samples\n"
+            f"[bold]Failed:[/bold] {total_failed}\n"
+            f"[bold]Wake words processed:[/bold] {len(wake_words)}\n"
+            f"[bold]Output directory:[/bold] {output_dir}",
+            title="Summary",
+            border_style="green",
+        )
+    )
 
 
 # =============================================================================
@@ -765,14 +1056,14 @@ async def run_batch_generation(
 
 
 @cli.group()
-def config():
+def config() -> None:
     """
     Manage wakegen configuration files.
-    
+
     Use these commands to create and validate wakegen.yaml configuration files.
     A config file lets you define all generation settings in one place instead
     of passing many command-line arguments.
-    
+
     Examples:
         wakegen config init              # Create a starter config file
         wakegen config validate my.yaml  # Check if a config file is valid
@@ -785,132 +1076,138 @@ def config():
     "--output",
     "-o",
     default="wakegen.yaml",
-    help="Output file path (default: wakegen.yaml in current directory)"
+    help="Output file path (default: wakegen.yaml in current directory)",
 )
 @click.option(
-    "--force",
-    "-f",
-    is_flag=True,
-    help="Overwrite existing file without asking"
+    "--force", "-f", is_flag=True, help="Overwrite existing file without asking"
 )
-def config_init(output: str, force: bool):
+def config_init(output: str, force: bool) -> None:
     """
     Generate a template wakegen.yaml configuration file.
-    
+
     Creates a well-commented starter configuration with sensible defaults.
     Edit the generated file to customize your wake word generation settings.
-    
+
     The template includes:
     - Project metadata (name, version)
     - Generation settings (wake words, count, output)
     - Provider configuration (TTS services)
     - Augmentation profiles (noise, reverb)
     - Export settings (train/val/test splits)
-    
+
     Examples:
         wakegen config init                    # Create wakegen.yaml
         wakegen config init -o my_project.yaml # Custom filename
         wakegen config init --force            # Overwrite existing
     """
     output_path = Path(output)
-    
+
     # Check if file already exists
     if output_path.exists() and not force:
         console.print(f"[yellow]File already exists:[/yellow] {output_path}")
-        console.print("Use [cyan]--force[/cyan] to overwrite or choose a different name with [cyan]--output[/cyan].")
+        console.print(
+            "Use [cyan]--force[/cyan] to overwrite or choose a different name with [cyan]--output[/cyan]."
+        )
         raise SystemExit(1)
-    
+
     # Get the template content
     template = get_template_config()
-    
+
     try:
         # Create parent directories if needed
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # Write the template
         output_path.write_text(template, encoding="utf-8")
-        
+
         # Success message with next steps
-        console.print(Panel(
-            f"[bold green]✓ Created configuration file:[/bold green] {output_path}\n\n"
-            "[dim]Next steps:[/dim]\n"
-            f"  1. Edit [cyan]{output_path}[/cyan] to customize your settings\n"
-            f"  2. Run [cyan]wakegen config validate {output_path}[/cyan] to check for errors\n"
-            f"  3. Run [cyan]wakegen generate --config {output_path}[/cyan] to start generating",
-            title="Configuration Created",
-            border_style="green"
-        ))
-        
+        console.print(
+            Panel(
+                f"[bold green]✓ Created configuration file:[/bold green] {output_path}\n\n"
+                "[dim]Next steps:[/dim]\n"
+                f"  1. Edit [cyan]{output_path}[/cyan] to customize your settings\n"
+                f"  2. Run [cyan]wakegen config validate {output_path}[/cyan] to check for errors\n"
+                f"  3. Run [cyan]wakegen generate --config {output_path}[/cyan] to start generating",
+                title="Configuration Created",
+                border_style="green",
+            )
+        )
+
     except PermissionError:
-        console.print(f"[bold red]Error:[/bold red] Permission denied writing to: {output_path}")
+        console.print(
+            f"[bold red]Error:[/bold red] Permission denied writing to: {output_path}"
+        )
         console.print("Try a different location or check your permissions.")
         raise SystemExit(1)
     except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] Failed to create configuration file: {e}")
+        console.print(
+            f"[bold red]Error:[/bold red] Failed to create configuration file: {e}"
+        )
         raise SystemExit(1)
 
 
 @config.command(name="validate")
 @click.argument("path", type=click.Path(exists=False))
 @click.option(
-    "--verbose",
-    "-v",
-    is_flag=True,
-    help="Show detailed configuration values"
+    "--verbose", "-v", is_flag=True, help="Show detailed configuration values"
 )
-def config_validate(path: str, verbose: bool):
+def config_validate(path: str, verbose: bool) -> None:
     """
     Validate a wakegen configuration file.
-    
+
     Checks your YAML configuration for:
     - Syntax errors (missing colons, bad indentation)
     - Missing required fields (project name, wake words)
     - Invalid values (negative counts, bad ratios)
     - Unknown fields (catches typos)
     - Environment variable resolution
-    
+
     Exit code:
     - 0: Configuration is valid
     - 1: Configuration has errors
-    
+
     Examples:
         wakegen config validate wakegen.yaml
         wakegen config validate wakegen.yaml --verbose
     """
     config_path = Path(path)
-    
+
     # Check file exists first (more helpful error message)
     if not config_path.exists():
         console.print(f"[bold red]Error:[/bold red] File not found: {config_path}")
         console.print("\nTo create a new configuration file, run:")
         console.print(f"  [cyan]wakegen config init --output {config_path}[/cyan]")
         raise SystemExit(1)
-    
+
     # Try to load and validate the configuration
     try:
         config_obj = load_config(config_path)
-        
+
         # Success! Show validation passed
-        console.print(Panel(
-            f"[bold green]✓ Configuration is valid![/bold green]\n\n"
-            f"[dim]File:[/dim] {config_path}",
-            title="Validation Passed",
-            border_style="green"
-        ))
-        
+        console.print(
+            Panel(
+                f"[bold green]✓ Configuration is valid![/bold green]\n\n"
+                f"[dim]File:[/dim] {config_path}",
+                title="Validation Passed",
+                border_style="green",
+            )
+        )
+
         # If verbose, show the parsed configuration
         if verbose:
             _print_config_summary(config_obj)
-        
+
     except ConfigError as e:
         # Show validation error with helpful message
-        console.print(Panel(
-            f"[bold red]✗ Configuration validation failed[/bold red]\n\n"
-            f"[dim]File:[/dim] {config_path}\n\n"
-            f"{e}",
-            title="Validation Error",
-            border_style="red"
-        ))
+        console.print(
+            Panel(
+                f"[bold red]✗ Configuration validation failed[/bold red]\n\n"
+                f"[dim]File:[/dim] {config_path}\n\n"
+                f"{e}",
+                title="Validation Error",
+                border_style="red",
+            )
+        )
         raise SystemExit(1)
     except Exception as e:
         # Unexpected error
@@ -921,50 +1218,58 @@ def config_validate(path: str, verbose: bool):
 def _print_config_summary(config: WakegenConfig) -> None:
     """
     Print a human-readable summary of the configuration.
-    
+
     This helper function displays the validated configuration in a nice format,
     useful for debugging and verification.
-    
+
     Args:
         config: Validated WakegenConfig object to display.
     """
     console.print("\n[bold cyan]Configuration Summary:[/bold cyan]\n")
-    
+
     # Project section
     console.print("[bold]Project:[/bold]")
     console.print(f"  Name: [green]{config.project.name}[/green]")
     console.print(f"  Version: {config.project.version}")
     if config.project.description:
         console.print(f"  Description: {config.project.description}")
-    
+
     # Generation section
     console.print("\n[bold]Generation:[/bold]")
     console.print(f"  Wake Words: {config.generation.wake_words}")
     console.print(f"  Count per word: {config.generation.count}")
     console.print(f"  Output: {config.generation.output_dir}")
-    console.print(f"  Format: {config.generation.audio_format} @ {config.generation.sample_rate}Hz")
-    
+    console.print(
+        f"  Format: {config.generation.audio_format} @ {config.generation.sample_rate}Hz"
+    )
+
     # Providers section
     console.print("\n[bold]Providers:[/bold]")
     for p in config.providers:
         voices_str = ", ".join(p.voices[:3]) if p.voices else "default"
         if len(p.voices) > 3:
             voices_str += f" (+{len(p.voices) - 3} more)"
-        console.print(f"  • [cyan]{p.type}[/cyan] (weight: {p.weight:.1%}) - {voices_str}")
-    
+        console.print(
+            f"  • [cyan]{p.type}[/cyan] (weight: {p.weight:.1%}) - {voices_str}"
+        )
+
     # Augmentation section
     console.print("\n[bold]Augmentation:[/bold]")
-    console.print(f"  Enabled: {'[green]yes[/green]' if config.augmentation.enabled else '[red]no[/red]'}")
+    console.print(
+        f"  Enabled: {'[green]yes[/green]' if config.augmentation.enabled else '[red]no[/red]'}"
+    )
     if config.augmentation.enabled:
         console.print(f"  Profiles: {config.augmentation.profiles}")
-        console.print(f"  Copies per original: {config.augmentation.augmented_per_original}")
-    
+        console.print(
+            f"  Copies per original: {config.augmentation.augmented_per_original}"
+        )
+
     # Export section
     console.print("\n[bold]Export:[/bold]")
     console.print(f"  Format: {config.export.format}")
     train, val, test = config.export.split_ratio
     console.print(f"  Split: train {train:.0%} / val {val:.0%} / test {test:.0%}")
-    
+
     console.print("")  # Final newline
 
 
@@ -976,13 +1281,13 @@ def _print_config_summary(config: WakegenConfig) -> None:
 
 
 @cli.group()
-def plugin():
+def plugin() -> None:
     """
     Manage third-party TTS provider plugins.
-    
+
     Plugins allow the community to add new TTS providers to wakegen.
     Install plugins via pip and they'll be automatically discovered.
-    
+
     Examples:
         wakegen plugin list              # Show all installed plugins
         wakegen plugin info my-plugin    # Details about a specific plugin
@@ -993,58 +1298,60 @@ def plugin():
 
 @plugin.command(name="list")
 @click.option("--verbose", "-v", is_flag=True, help="Show detailed plugin information")
-def plugin_list(verbose: bool):
+def plugin_list(verbose: bool) -> None:
     """
     List all installed wakegen plugins.
-    
+
     Shows all discovered TTS provider plugins with their status.
     Plugins are auto-discovered from installed Python packages that
     register the 'wakegen.plugins' entry point.
-    
+
     Examples:
         wakegen plugin list
         wakegen plugin list --verbose
     """
-    from wakegen.plugins import discover_plugins, PluginLoadError
-    
+    from wakegen.plugins import discover_plugins
+
     try:
         plugins = discover_plugins()
     except Exception as e:
         console.print(f"[bold red]Error discovering plugins:[/bold red] {e}")
         return
-    
+
     if not plugins:
-        console.print(Panel(
-            "[yellow]No plugins installed.[/yellow]\n\n"
-            "Plugins extend wakegen with additional TTS providers.\n"
-            "Install plugins via pip:\n"
-            "  [cyan]pip install wakegen-plugin-example[/cyan]\n\n"
-            "Or create your own! See the documentation for details.",
-            title="No Plugins Found",
-            border_style="yellow"
-        ))
+        console.print(
+            Panel(
+                "[yellow]No plugins installed.[/yellow]\n\n"
+                "Plugins extend wakegen with additional TTS providers.\n"
+                "Install plugins via pip:\n"
+                "  [cyan]pip install wakegen-plugin-example[/cyan]\n\n"
+                "Or create your own! See the documentation for details.",
+                title="No Plugins Found",
+                border_style="yellow",
+            )
+        )
         return
-    
+
     # Create table
     table = Table(title="Installed Plugins", show_header=True, header_style="bold cyan")
     table.add_column("Name", style="bold")
     table.add_column("Version")
     table.add_column("Status")
     table.add_column("Description")
-    
+
     if verbose:
         table.add_column("Author")
         table.add_column("Requirements")
-    
+
     for p in plugins:
         # Status indicator
         if p.is_enabled:
             status = "[green]✓ Enabled[/green]"
         elif p.load_error:
-            status = f"[red]✗ Error[/red]"
+            status = "[red]✗ Error[/red]"
         else:
             status = "[yellow]○ Disabled[/yellow]"
-        
+
         if verbose:
             # Build requirements string
             reqs = []
@@ -1053,53 +1360,59 @@ def plugin_list(verbose: bool):
             if p.metadata.requires_gpu:
                 reqs.append("GPU")
             req_str = ", ".join(reqs) if reqs else "[dim]None[/dim]"
-            
+
             table.add_row(
                 p.name,
                 p.metadata.version,
                 status,
-                p.metadata.description[:50] + "..." if len(p.metadata.description) > 50 else p.metadata.description,
+                p.metadata.description[:50] + "..."
+                if len(p.metadata.description) > 50
+                else p.metadata.description,
                 p.metadata.author,
-                req_str
+                req_str,
             )
         else:
             table.add_row(
                 p.name,
                 p.metadata.version,
                 status,
-                p.metadata.description[:60] + "..." if len(p.metadata.description) > 60 else p.metadata.description
+                p.metadata.description[:60] + "..."
+                if len(p.metadata.description) > 60
+                else p.metadata.description,
             )
-    
+
     console.print(table)
     console.print(f"\n[dim]Found {len(plugins)} plugin(s)[/dim]")
 
 
 @plugin.command(name="info")
 @click.argument("name")
-def plugin_info(name: str):
+def plugin_info(name: str) -> None:
     """
     Show detailed information about a specific plugin.
-    
+
     Displays the plugin's metadata, capabilities, supported languages,
     and usage instructions.
-    
+
     Examples:
         wakegen plugin info my-tts-plugin
     """
     from wakegen.plugins import discover_plugins, get_plugin
-    
+
     # Ensure plugins are discovered
     discover_plugins()
-    
+
     plugin = get_plugin(name)
-    
+
     if not plugin:
         console.print(f"[bold red]Plugin not found:[/bold red] {name}")
-        console.print("\nUse [cyan]wakegen plugin list[/cyan] to see installed plugins.")
+        console.print(
+            "\nUse [cyan]wakegen plugin list[/cyan] to see installed plugins."
+        )
         raise SystemExit(1)
-    
+
     meta = plugin.metadata
-    
+
     # Build info panel
     info_lines = [
         f"[bold]Name:[/bold] {meta.name}",
@@ -1116,52 +1429,50 @@ def plugin_info(name: str):
         "",
         f"[bold]Supported Languages:[/bold] {', '.join(meta.supported_languages)}",
     ]
-    
+
     if meta.homepage:
         info_lines.append(f"\n[bold]Homepage:[/bold] {meta.homepage}")
-    
+
     if plugin.load_error:
         info_lines.append(f"\n[bold red]Load Error:[/bold red] {plugin.load_error}")
-    
-    console.print(Panel(
-        "\n".join(info_lines),
-        title=f"Plugin: {meta.name}",
-        border_style="cyan"
-    ))
-    
+
+    console.print(
+        Panel("\n".join(info_lines), title=f"Plugin: {meta.name}", border_style="cyan")
+    )
+
     # Usage example
     console.print("\n[bold]Usage:[/bold]")
-    console.print(f"  wakegen generate --provider plugin:{meta.name} --text \"hello\"")
+    console.print(f'  wakegen generate --provider plugin:{meta.name} --text "hello"')
 
 
 @plugin.command(name="reload")
-def plugin_reload():
+def plugin_reload() -> None:
     """
     Reload all plugins.
-    
+
     Rescans for installed plugins without restarting wakegen.
     Useful after installing new plugins via pip.
-    
+
     Examples:
         pip install wakegen-plugin-new
         wakegen plugin reload
         wakegen plugin list  # Now shows the new plugin
     """
     from wakegen.plugins import reload_plugins
-    
+
     console.print("[dim]Reloading plugins...[/dim]")
-    
+
     try:
         plugins = reload_plugins()
         console.print(f"[bold green]✓ Reloaded {len(plugins)} plugin(s)[/bold green]")
-        
+
         if plugins:
             for p in plugins:
                 status = "[green]✓[/green]" if p.is_enabled else "[red]✗[/red]"
                 console.print(f"  {status} {p.name} v{p.metadata.version}")
         else:
             console.print("[dim]No plugins found.[/dim]")
-            
+
     except Exception as e:
         console.print(f"[bold red]Error reloading plugins:[/bold red] {e}")
         raise SystemExit(1)
@@ -1170,36 +1481,38 @@ def plugin_reload():
 @plugin.command(name="create")
 @click.argument("name")
 @click.option("--output-dir", "-o", default=".", help="Directory to create plugin in")
-def plugin_create(name: str, output_dir: str):
+def plugin_create(name: str, output_dir: str) -> None:
     """
     Create a template for a new wakegen plugin.
-    
+
     Generates a starter plugin package with all the boilerplate code needed
     to create a new TTS provider plugin.
-    
+
     Examples:
         wakegen plugin create my-tts-plugin
         wakegen plugin create my-tts-plugin --output-dir ./plugins
     """
     import os
-    
+
     # Normalize name
     plugin_name = name.lower().replace("_", "-").replace(" ", "-")
     module_name = plugin_name.replace("-", "_")
-    class_name = "".join(word.capitalize() for word in plugin_name.split("-")) + "Plugin"
-    
+    class_name = (
+        "".join(word.capitalize() for word in plugin_name.split("-")) + "Plugin"
+    )
+
     # Create directory structure
     plugin_dir = os.path.join(output_dir, plugin_name)
     src_dir = os.path.join(plugin_dir, module_name)
-    
+
     if os.path.exists(plugin_dir):
         console.print(f"[bold red]Directory already exists:[/bold red] {plugin_dir}")
         raise SystemExit(1)
-    
+
     os.makedirs(src_dir)
-    
+
     # Create pyproject.toml
-    pyproject_content = f'''[build-system]
+    pyproject_content = f"""[build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
@@ -1215,13 +1528,13 @@ dependencies = [
 
 [project.entry-points."wakegen.plugins"]
 {plugin_name} = "{module_name}.provider:{class_name}"
-'''
-    
+"""
+
     with open(os.path.join(plugin_dir, "pyproject.toml"), "w") as f:
         f.write(pyproject_content)
-    
+
     # Create README.md
-    readme_content = f'''# {plugin_name}
+    readme_content = f"""# {plugin_name}
 
 A wakegen TTS provider plugin.
 
@@ -1236,11 +1549,11 @@ pip install {plugin_name}
 ```bash
 wakegen generate --provider plugin:{plugin_name} --text "hello"
 ```
-'''
-    
+"""
+
     with open(os.path.join(plugin_dir, "README.md"), "w") as f:
         f.write(readme_content)
-    
+
     # Create __init__.py
     init_content = f'''"""
 {plugin_name} - A wakegen TTS provider plugin.
@@ -1250,10 +1563,10 @@ from {module_name}.provider import {class_name}
 
 __all__ = ["{class_name}"]
 '''
-    
+
     with open(os.path.join(src_dir, "__init__.py"), "w") as f:
         f.write(init_content)
-    
+
     # Create provider.py
     provider_content = f'''"""
 {class_name} - TTS Provider Implementation
@@ -1282,7 +1595,7 @@ class {class_name}(TTSPlugin):
             version="0.1.0",
             description="A custom TTS provider for wakegen",
             author="Your Name",
-            homepage="https://github.com/yourusername/{plugin_name}",
+            homepage="https://github.com/sarpel/{plugin_name}",
             requires_api_key=False,
             requires_gpu=False,
             supported_languages=["en"],
@@ -1333,23 +1646,25 @@ class {class_name}(TTSPlugin):
         # TODO: Add any validation checks
         pass
 '''
-    
+
     with open(os.path.join(src_dir, "provider.py"), "w") as f:
         f.write(provider_content)
-    
-    console.print(Panel(
-        f"[bold green]✓ Created plugin template![/bold green]\n\n"
-        f"[bold]Directory:[/bold] {plugin_dir}\n"
-        f"[bold]Module:[/bold] {module_name}\n"
-        f"[bold]Class:[/bold] {class_name}\n\n"
-        "[dim]Next steps:[/dim]\n"
-        f"  1. cd {plugin_dir}\n"
-        f"  2. Edit {module_name}/provider.py to implement your TTS logic\n"
-        "  3. pip install -e .  # Install in development mode\n"
-        "  4. wakegen plugin list  # Verify it's discovered",
-        title="Plugin Created",
-        border_style="green"
-    ))
+
+    console.print(
+        Panel(
+            f"[bold green]✓ Created plugin template![/bold green]\n\n"
+            f"[bold]Directory:[/bold] {plugin_dir}\n"
+            f"[bold]Module:[/bold] {module_name}\n"
+            f"[bold]Class:[/bold] {class_name}\n\n"
+            "[dim]Next steps:[/dim]\n"
+            f"  1. cd {plugin_dir}\n"
+            f"  2. Edit {module_name}/provider.py to implement your TTS logic\n"
+            "  3. pip install -e .  # Install in development mode\n"
+            "  4. wakegen plugin list  # Verify it's discovered",
+            title="Plugin Created",
+            border_style="green",
+        )
+    )
 
 
 # =============================================================================
@@ -1360,13 +1675,13 @@ class {class_name}(TTSPlugin):
 
 
 @cli.group()
-def cache():
+def cache() -> None:
     """
     Manage the audio generation cache.
-    
+
     Wakegen caches generated audio files to avoid redundant TTS calls.
     This saves time and API costs when regenerating similar datasets.
-    
+
     Examples:
         wakegen cache stats    # Show cache statistics
         wakegen cache clear    # Remove all cached files
@@ -1377,119 +1692,134 @@ def cache():
 
 @cache.command(name="stats")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def cache_stats(as_json: bool):
+def cache_stats(as_json: bool) -> None:
     """
     Show cache statistics.
-    
+
     Displays information about the cache including:
     - Number of cached files
     - Total cache size
     - Hit/miss ratio
     - Number of evictions
-    
+
     Examples:
         wakegen cache stats
         wakegen cache stats --json
     """
-    from wakegen.utils.caching import GenerationCache
     import json
-    
+
+    from wakegen.utils.caching import GenerationCache
+
     cache = GenerationCache()
     stats = cache.get_stats()
-    
+
     if as_json:
         console.print(json.dumps(stats.to_dict(), indent=2))
     else:
-        console.print(Panel(
-            f"[bold]Cache Statistics[/bold]\n\n"
-            f"[bold]Files:[/bold] {stats.file_count}\n"
-            f"[bold]Size:[/bold] {stats.total_size_mb:.2f} MB\n"
-            f"[bold]Hits:[/bold] {stats.hits}\n"
-            f"[bold]Misses:[/bold] {stats.misses}\n"
-            f"[bold]Hit Rate:[/bold] {stats.hit_rate:.1%}\n"
-            f"[bold]Evictions:[/bold] {stats.evictions}",
-            title="Cache Stats",
-            border_style="cyan"
-        ))
+        console.print(
+            Panel(
+                f"[bold]Cache Statistics[/bold]\n\n"
+                f"[bold]Files:[/bold] {stats.file_count}\n"
+                f"[bold]Size:[/bold] {stats.total_size_mb:.2f} MB\n"
+                f"[bold]Hits:[/bold] {stats.hits}\n"
+                f"[bold]Misses:[/bold] {stats.misses}\n"
+                f"[bold]Hit Rate:[/bold] {stats.hit_rate:.1%}\n"
+                f"[bold]Evictions:[/bold] {stats.evictions}",
+                title="Cache Stats",
+                border_style="cyan",
+            )
+        )
 
 
 @cache.command(name="clear")
 @click.option("--force", "-f", is_flag=True, help="Skip confirmation")
-def cache_clear(force: bool):
+def cache_clear(force: bool) -> None:
     """
     Clear all cached files.
-    
+
     This removes all cached audio files. Use this if you want to
     force regeneration of all samples or free up disk space.
-    
+
     Examples:
         wakegen cache clear
         wakegen cache clear --force
     """
     from wakegen.utils.caching import GenerationCache
-    
+
     cache = GenerationCache()
     stats = cache.get_stats()
-    
+
     if stats.file_count == 0:
         console.print("[yellow]Cache is already empty.[/yellow]")
         return
-    
+
     if not force:
-        console.print(f"[yellow]Warning:[/yellow] This will delete {stats.file_count} cached files ({stats.total_size_mb:.2f} MB).")
+        console.print(
+            f"[yellow]Warning:[/yellow] This will delete {stats.file_count} cached files ({stats.total_size_mb:.2f} MB)."
+        )
         if not click.confirm("Continue?"):
             console.print("[dim]Cancelled.[/dim]")
             return
-    
+
     cache.clear()
     console.print("[bold green]✓ Cache cleared successfully.[/bold green]")
 
 
 @cache.command(name="path")
-def cache_path():
+def cache_path() -> None:
     """
     Show the cache directory location.
-    
+
     Use this to find where cached files are stored, for example
     to back them up or examine individual files.
-    
+
     Examples:
         wakegen cache path
     """
     from wakegen.utils.caching import GenerationCache
-    
+
     cache = GenerationCache()
     console.print(f"[bold]Cache directory:[/bold] {cache.cache_dir.absolute()}")
-    
+
     if cache.cache_dir.exists():
-        console.print(f"[dim]Directory exists with {len(list(cache.cache_dir.glob('*')))} files[/dim]")
+        console.print(
+            f"[dim]Directory exists with {len(list(cache.cache_dir.glob('*')))} files[/dim]"
+        )
     else:
-        console.print("[dim]Directory does not exist yet (will be created on first use)[/dim]")
+        console.print(
+            "[dim]Directory does not exist yet (will be created on first use)[/dim]"
+        )
 
 
 @cache.command(name="list")
 @click.option("--limit", "-n", default=20, help="Maximum entries to show")
-@click.option("--sort", "-s", type=click.Choice(["recent", "oldest", "size"]), default="recent", help="Sort order")
-def cache_list(limit: int, sort: str):
+@click.option(
+    "--sort",
+    "-s",
+    type=click.Choice(["recent", "oldest", "size"]),
+    default="recent",
+    help="Sort order",
+)
+def cache_list(limit: int, sort: str) -> None:
     """
     List cached files.
-    
+
     Shows the most recently cached files with their metadata.
-    
+
     Examples:
         wakegen cache list
         wakegen cache list --limit 50
         wakegen cache list --sort size
     """
     from wakegen.utils.caching import GenerationCache
-    
+
     cache = GenerationCache()
     entries = list(cache._entries.values())
-    
+
     if not entries:
         console.print("[yellow]Cache is empty.[/yellow]")
         return
-    
+
     # Sort entries
     if sort == "recent":
         entries.sort(key=lambda e: e.last_accessed, reverse=True)
@@ -1497,18 +1827,22 @@ def cache_list(limit: int, sort: str):
         entries.sort(key=lambda e: e.last_accessed)
     elif sort == "size":
         entries.sort(key=lambda e: e.file_size, reverse=True)
-    
+
     # Limit entries
     entries = entries[:limit]
-    
+
     # Display as table
-    table = Table(title=f"Cached Files (showing {len(entries)} of {cache._stats.file_count})", show_header=True, header_style="bold cyan")
+    table = Table(
+        title=f"Cached Files (showing {len(entries)} of {cache._stats.file_count})",
+        show_header=True,
+        header_style="bold cyan",
+    )
     table.add_column("Text", max_width=30)
     table.add_column("Provider")
     table.add_column("Voice")
     table.add_column("Size")
     table.add_column("Accesses")
-    
+
     for entry in entries:
         text_preview = entry.text[:27] + "..." if len(entry.text) > 30 else entry.text
         size_str = f"{entry.file_size / 1024:.1f} KB"
@@ -1517,9 +1851,9 @@ def cache_list(limit: int, sort: str):
             entry.provider,
             entry.voice_id[:15] + "..." if len(entry.voice_id) > 15 else entry.voice_id,
             size_str,
-            str(entry.access_count)
+            str(entry.access_count),
         )
-    
+
     console.print(table)
 
 
@@ -1531,71 +1865,82 @@ def cache_list(limit: int, sort: str):
 
 @cli.command(name="gpu-status")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def gpu_status(as_json: bool):
+def gpu_status(as_json: bool) -> None:
     """
     Show GPU status and availability.
-    
+
     Displays information about available GPUs including:
     - Number of GPUs
     - GPU names and memory
     - Backend (CUDA, MPS, or CPU)
-    
+
     This helps you understand which TTS providers will run on GPU
     vs CPU for your system.
-    
+
     Examples:
         wakegen gpu-status
         wakegen gpu-status --json
     """
-    from wakegen.utils.gpu import detect_gpu_status, GPUBackend
     import json
-    
+
+    from wakegen.utils.gpu import detect_gpu_status
+
     status = detect_gpu_status()
-    
+
     if as_json:
         console.print(json.dumps(status.to_dict(), indent=2))
         return
-    
+
     # Display GPU information
     if not status.has_gpu:
-        console.print(Panel(
-            "[yellow]No GPU detected.[/yellow]\n\n"
-            "TTS models will run on CPU.\n"
-            "For faster generation with GPU-based models (Coqui XTTS, StyleTTS2, etc.),\n"
-            "consider using a system with NVIDIA GPU and PyTorch CUDA support.",
-            title="GPU Status",
-            border_style="yellow"
-        ))
+        console.print(
+            Panel(
+                "[yellow]No GPU detected.[/yellow]\n\n"
+                "TTS models will run on CPU.\n"
+                "For faster generation with GPU-based models (Coqui XTTS, StyleTTS2, etc.),\n"
+                "consider using a system with NVIDIA GPU and PyTorch CUDA support.",
+                title="GPU Status",
+                border_style="yellow",
+            )
+        )
         return
-    
+
     # Build GPU table
-    table = Table(title=f"GPU Status ({status.backend.value.upper()})", show_header=True, header_style="bold cyan")
+    table = Table(
+        title=f"GPU Status ({status.backend.value.upper()})",
+        show_header=True,
+        header_style="bold cyan",
+    )
     table.add_column("ID")
     table.add_column("Name")
     table.add_column("Total Memory")
     table.add_column("Free Memory")
     table.add_column("Utilization")
     table.add_column("Status")
-    
+
     for gpu in status.gpus:
         utilization = f"{gpu.utilization:.1%}"
-        status_str = "[green]✓ Available[/green]" if gpu.is_available else "[yellow]⚠ Low Memory[/yellow]"
+        status_str = (
+            "[green]✓ Available[/green]"
+            if gpu.is_available
+            else "[yellow]⚠ Low Memory[/yellow]"
+        )
         table.add_row(
             str(gpu.id),
             gpu.name,
             f"{gpu.total_memory_mb:.0f} MB",
             f"{gpu.free_memory_mb:.0f} MB",
             utilization,
-            status_str
+            status_str,
         )
-    
+
     console.print(table)
-    
+
     # Summary
     console.print(f"\n[bold]Total GPUs:[/bold] {status.num_gpus}")
     console.print(f"[bold]Total Memory:[/bold] {status.total_memory_mb:.0f} MB")
     console.print(f"[bold]Total Free:[/bold] {status.total_free_mb:.0f} MB")
-    
+
     # Provider recommendations
     console.print("\n[bold]Provider GPU Support:[/bold]")
     console.print("  [green]✓[/green] coqui_xtts - GPU recommended (large model)")
@@ -1603,3 +1948,94 @@ def gpu_status(as_json: bool):
     console.print("  [green]✓[/green] piper - CPU-friendly (lightweight)")
     console.print("  [green]✓[/green] mimic3 - CPU-friendly (lightweight)")
     console.print("  [dim]○[/dim] edge_tts - Cloud-based (no local GPU)")
+
+
+# =============================================================================
+# SERVE COMMAND (Web UI)
+# =============================================================================
+# Starts the WakeGen Web UI server using FastAPI + Uvicorn.
+# This provides a beautiful browser-based interface for all functionality.
+
+
+@cli.command()
+@click.option(
+    "--host",
+    "-h",
+    default="127.0.0.1",
+    help="Host address to bind to (default: 127.0.0.1 for local only)",
+)
+@click.option(
+    "--port",
+    "-p",
+    default=8080,
+    type=int,
+    help="Port number to listen on (default: 8080)",
+)
+@click.option(
+    "--reload",
+    is_flag=True,
+    help="Enable auto-reload on code changes (development mode)",
+)
+@click.option("--debug", is_flag=True, help="Enable debug mode with verbose logging")
+def serve(host: str, port: int, reload: bool, debug: bool) -> None:
+    """
+    Start the WakeGen Web UI server.
+
+    This launches a beautiful web interface for all WakeGen functionality,
+    including provider management, audio generation, augmentation configuration,
+    and dataset export.
+
+    The Web UI runs on FastAPI with real-time WebSocket updates for generation
+    progress. Open your browser to the displayed URL after starting.
+
+    Examples:
+        wakegen serve                     # Start on localhost:8080
+        wakegen serve --port 9000         # Use custom port
+        wakegen serve --host 0.0.0.0      # Allow network access
+        wakegen serve --reload            # Auto-reload for development
+    """
+    # Try to import web dependencies (they're optional)
+    try:
+        import uvicorn
+
+        from wakegen.web.app import create_app
+        from wakegen.web.config import WebConfig
+    except ImportError as e:
+        console.print(
+            "[bold red]Error:[/bold red] Web UI dependencies not installed!\n\n"
+            "Install them with:\n"
+            "  [cyan]pip install wakegen[web][/cyan]\n\n"
+            f"Missing: {e}"
+        )
+        return
+
+    # Create configuration with CLI options
+    config = WebConfig(host=host, port=port, debug=debug, reload=reload)
+
+    # Display startup banner
+    console.print(
+        Panel(
+            f"[bold]🎤 WakeGen Web UI[/bold]\n\n"
+            f"[bold]URL:[/bold] [cyan]http://{host}:{port}[/cyan]\n"
+            f"[bold]API Docs:[/bold] [cyan]http://{host}:{port}/api/docs[/cyan]\n\n"
+            f"[dim]Press Ctrl+C to stop the server[/dim]",
+            title="Starting Server",
+            border_style="green",
+        )
+    )
+
+    # Create the FastAPI app
+    app = create_app(config)
+
+    # Run with uvicorn
+    # uvicorn.run() is a blocking call that starts the server
+    uvicorn.run(
+        # When reload=True, we pass the app as a string import path
+        # When reload=False, we can pass the app object directly
+        # Note: create_app returns an app instance, not a factory, so factory=False
+        "wakegen.web.app:app" if reload else app,
+        host=host,
+        port=port,
+        reload=reload,
+        log_level="debug" if debug else "info",
+    )

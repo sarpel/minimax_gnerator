@@ -9,7 +9,7 @@ __pycache__/
 .wakegen_cache/
 # C extensions
 *.so
-
+minimax_docs/
 # Distribution / packaging
 .Python
 build/
@@ -25,7 +25,7 @@ sdist/
 var/
 wheels/
 share/python-wheels/
-
+voices-v1.0.bin
 dev_roadmap/
 .installed.cfg
 *.egg

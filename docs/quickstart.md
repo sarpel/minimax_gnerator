@@ -11,7 +11,7 @@ This guide will get you up and running with **WakeGen** in under 5 minutes.
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/wakegen.git
+git clone https://github.com/sarpel/wakegen.git
 cd wakegen
 
 # Create virtual environment

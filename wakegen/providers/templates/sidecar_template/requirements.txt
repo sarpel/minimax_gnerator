@@ -1,0 +1,5 @@
+fastapi
+uvicorn
+# Add your specific incompatible libraries here
+# e.g., coqui-tts==0.0.1
+# e.g., numpy==1.22.0

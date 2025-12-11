@@ -14,17 +14,22 @@ Key Features:
 """
 
 from __future__ import annotations
+
+import warnings
+from dataclasses import dataclass
+from typing import Any, cast
+
+import librosa
 import numpy as np
 import pyroomacoustics as pra
-from typing import Optional, Tuple, Dict, Any
-from dataclasses import dataclass
+import soundfile as sf
+
 from wakegen.core.exceptions import RoomSimulationError
 from wakegen.utils.audio import load_audio
-import soundfile as sf
-import warnings
 
 # Suppress pyroomacoustics warnings for cleaner output
 warnings.filterwarnings("ignore", category=UserWarning, module="pyroomacoustics")
+
 
 @dataclass
 class RoomParameters:
@@ -41,14 +46,16 @@ class RoomParameters:
         mic_position: Microphone position as (x, y, z).
         source_position: Sound source position as (x, y, z).
     """
+
     length: float
     width: float
     height: float
     rt60: float
     absorption: float
     max_order: int
-    mic_position: Tuple[float, float, float]
-    source_position: Tuple[float, float, float]
+    mic_position: tuple[float, float, float]
+    source_position: tuple[float, float, float]
+
 
 class RoomSimulator:
     """
@@ -71,12 +78,13 @@ class RoomSimulator:
     def _validate_sample_rate(self, sample_rate: int) -> None:
         """Validate that the sample rate is suitable for room simulation."""
         if not (16000 <= sample_rate <= 48000):
-            raise RoomSimulationError(f"Sample rate {sample_rate}Hz is out of valid range for room simulation (16000-48000Hz)")
+            raise RoomSimulationError(
+                f"Sample rate {sample_rate}Hz is out of valid range for room simulation (16000-48000Hz)"
+            )
 
     def create_room_impulse_response(
-        self,
-        room_params: RoomParameters
-    ) -> np.ndarray:
+        self, room_params: RoomParameters
+    ) -> np.ndarray[Any, Any]:
         """
         Generate a room impulse response using the image method.
 
@@ -93,33 +101,26 @@ class RoomSimulator:
             # Validate room parameters
             self._validate_room_parameters(room_params)
 
-            # Create room corners array [[x1, y1], [x2, y2], ...]
-            corners = np.array([
-                [0, 0],
-                [room_params.length, 0],
-                [room_params.length, room_params.width],
-                [0, room_params.width]
-            ]).T  # Transpose to get shape (2, 4)
-
             # Create the room
+            # Fix: pyroomacoustics ShoeBox takes dimensions as first arg, not corners
+            # corners are for the generic Room class
             room = pra.ShoeBox(
-                corners,
+                [room_params.length, room_params.width, room_params.height],
                 fs=self.sample_rate,
                 materials=pra.Material(room_params.absorption),
-                max_order=room_params.max_order
+                max_order=room_params.max_order,
             )
 
             # Add microphone and source
             room.add_microphone_array(
                 pra.MicrophoneArray(
-                    np.array([room_params.mic_position])[:, np.newaxis],
-                    room.fs
+                    np.array([room_params.mic_position])[:, np.newaxis], room.fs
                 )
             )
 
             room.add_source(
                 room_params.source_position,
-                signal=np.array([1.0])  # Impulse signal
+                signal=np.array([1.0]),  # Impulse signal
             )
 
             # Compute RIR (Room Impulse Response)
@@ -128,10 +129,12 @@ class RoomSimulator:
             # Get the impulse response
             rir = room.rir[0][0]  # Get first microphone, first source
 
-            return rir
+            return cast(np.ndarray[Any, Any], rir)
 
         except Exception as e:
-            raise RoomSimulationError(f"Failed to generate room impulse response: {str(e)}") from e
+            raise RoomSimulationError(
+                f"Failed to generate room impulse response: {e!s}"
+            ) from e
 
     def _validate_room_parameters(self, room_params: RoomParameters) -> None:
         """Validate room parameters are physically reasonable."""
@@ -142,24 +145,28 @@ class RoomSimulator:
             raise RoomSimulationError("RT60 must be between 0 and 5 seconds")
 
         if not (0.0 <= room_params.absorption <= 1.0):
-            raise RoomSimulationError("Absorption coefficient must be between 0.0 and 1.0")
+            raise RoomSimulationError(
+                "Absorption coefficient must be between 0.0 and 1.0"
+            )
 
         if room_params.max_order < 1 or room_params.max_order > 10:
             raise RoomSimulationError("Max reflection order must be between 1 and 10")
 
         # Check positions are within room bounds
         for pos in [room_params.mic_position, room_params.source_position]:
-            if (not 0 <= pos[0] <= room_params.length or
-                not 0 <= pos[1] <= room_params.width or
-                not 0 <= pos[2] <= room_params.height):
+            if (
+                not 0 <= pos[0] <= room_params.length
+                or not 0 <= pos[1] <= room_params.width
+                or not 0 <= pos[2] <= room_params.height
+            ):
                 raise RoomSimulationError(f"Position {pos} is outside room bounds")
 
     def apply_room_simulation(
         self,
-        audio: np.ndarray,
-        rir: np.ndarray,
-        wet_dry_mix: float = 0.5
-    ) -> np.ndarray:
+        audio: np.ndarray[Any, Any],
+        rir: np.ndarray[Any, Any],
+        wet_dry_mix: float = 0.5,
+    ) -> np.ndarray[Any, Any]:
         """
         Apply room simulation to audio using convolution with impulse response.
 
@@ -193,12 +200,14 @@ class RoomSimulator:
             if max_val > 0:
                 mixed = mixed / max_val * 0.95  # 5% headroom
 
-            return mixed
+            return cast(np.ndarray[Any, Any], mixed)
 
         except Exception as e:
-            raise RoomSimulationError(f"Failed to apply room simulation: {str(e)}") from e
+            raise RoomSimulationError(f"Failed to apply room simulation: {e!s}") from e
 
-    def _fft_convolve(self, signal: np.ndarray, kernel: np.ndarray) -> np.ndarray:
+    def _fft_convolve(
+        self, signal: np.ndarray[Any, Any], kernel: np.ndarray[Any, Any]
+    ) -> np.ndarray[Any, Any]:
         """
         Perform FFT-based convolution for efficient processing.
 
@@ -232,14 +241,14 @@ class RoomSimulator:
         result = np.fft.irfft(fft_result, n=fft_size)
 
         # Return only the valid part
-        return result[:total_length]
+        return cast(np.ndarray[Any, Any], result[:total_length])
 
     async def simulate_room_effects(
         self,
         input_path: str,
         output_path: str,
         room_params: RoomParameters,
-        wet_dry_mix: float = 0.5
+        wet_dry_mix: float = 0.5,
     ) -> None:
         """
         Apply room simulation to an audio file and save the result.
@@ -271,7 +280,7 @@ class RoomSimulator:
             sf.write(output_path, processed_audio, self.sample_rate)
 
         except Exception as e:
-            raise RoomSimulationError(f"Failed to simulate room effects: {str(e)}") from e
+            raise RoomSimulationError(f"Failed to simulate room effects: {e!s}") from e
 
     def get_preset_room(self, preset_name: str) -> RoomParameters:
         """
@@ -291,53 +300,73 @@ class RoomSimulator:
 
         if preset_name not in presets:
             available = list(presets.keys())
-            raise RoomSimulationError(f"Unknown room preset '{preset_name}'. Available: {available}")
+            raise RoomSimulationError(
+                f"Unknown room preset '{preset_name}'. Available: {available}"
+            )
 
         return presets[preset_name]
 
-    def _get_room_presets(self) -> Dict[str, RoomParameters]:
+    def _get_room_presets(self) -> dict[str, RoomParameters]:
         """Define standard room presets with typical parameters."""
         return {
             "small_room": RoomParameters(
-                length=3.0, width=2.5, height=2.4,
-                rt60=0.3, absorption=0.2,
+                length=3.0,
+                width=2.5,
+                height=2.4,
+                rt60=0.3,
+                absorption=0.2,
                 max_order=3,
                 mic_position=(1.5, 1.25, 1.2),
-                source_position=(0.5, 0.5, 1.0)
+                source_position=(0.5, 0.5, 1.0),
             ),
             "medium_room": RoomParameters(
-                length=5.0, width=4.0, height=2.8,
-                rt60=0.5, absorption=0.15,
+                length=5.0,
+                width=4.0,
+                height=2.8,
+                rt60=0.5,
+                absorption=0.15,
                 max_order=4,
                 mic_position=(2.5, 2.0, 1.4),
-                source_position=(1.0, 1.0, 1.0)
+                source_position=(1.0, 1.0, 1.0),
             ),
             "large_room": RoomParameters(
-                length=8.0, width=6.0, height=3.0,
-                rt60=0.8, absorption=0.1,
+                length=8.0,
+                width=6.0,
+                height=3.0,
+                rt60=0.8,
+                absorption=0.1,
                 max_order=5,
                 mic_position=(4.0, 3.0, 1.5),
-                source_position=(2.0, 2.0, 1.0)
+                source_position=(2.0, 2.0, 1.0),
             ),
             "bathroom": RoomParameters(
-                length=2.5, width=2.0, height=2.4,
-                rt60=1.2, absorption=0.05,  # Hard surfaces, very reverberant
+                length=2.5,
+                width=2.0,
+                height=2.4,
+                rt60=1.2,
+                absorption=0.05,  # Hard surfaces, very reverberant
                 max_order=4,
                 mic_position=(1.25, 1.0, 1.2),
-                source_position=(0.5, 0.5, 1.0)
+                source_position=(0.5, 0.5, 1.0),
             ),
             "living_room": RoomParameters(
-                length=6.0, width=4.5, height=2.6,
-                rt60=0.4, absorption=0.2,
+                length=6.0,
+                width=4.5,
+                height=2.6,
+                rt60=0.4,
+                absorption=0.2,
                 max_order=4,
                 mic_position=(3.0, 2.25, 1.3),
-                source_position=(1.0, 1.0, 1.0)
+                source_position=(1.0, 1.0, 1.0),
             ),
             "office": RoomParameters(
-                length=10.0, width=8.0, height=2.8,
-                rt60=0.3, absorption=0.3,  # Carpeted, acoustic treatment
+                length=10.0,
+                width=8.0,
+                height=2.8,
+                rt60=0.3,
+                absorption=0.3,  # Carpeted, acoustic treatment
                 max_order=3,
                 mic_position=(5.0, 4.0, 1.4),
-                source_position=(2.0, 2.0, 1.0)
-            )
+                source_position=(2.0, 2.0, 1.0),
+            ),
         }

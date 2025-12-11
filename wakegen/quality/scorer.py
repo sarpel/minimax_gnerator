@@ -6,20 +6,21 @@ using weighted composite scoring across multiple dimensions.
 
 from __future__ import annotations
 
-import asyncio
 import math
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any
 
 import numpy as np
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from wakegen.core.exceptions import QualityAssuranceError
-from wakegen.quality.validator import validate_sample, SampleValidationResult
+from wakegen.quality.validator import SampleValidationResult, validate_sample
 from wakegen.utils.audio import load_audio_file
+
 
 class QualityScoringError(QualityAssuranceError):
     """Custom exception for quality scoring failures."""
+
 
 @dataclass
 class QualityScoreResult:
@@ -32,40 +33,55 @@ class QualityScoreResult:
     diversity_score: float
     technical_score: float
     validation_result: SampleValidationResult
-    error_message: Optional[str] = None
+    error_message: str | None = None
+
 
 class QualityScoringConfig(BaseModel):
     """Configuration for quality scoring."""
 
     # Weight factors for composite scoring (must sum to 1.0)
-    clarity_weight: float = Field(0.25, description="Weight for clarity score")
-    snr_weight: float = Field(0.20, description="Weight for SNR score")
-    naturalness_weight: float = Field(0.20, description="Weight for naturalness score")
-    diversity_weight: float = Field(0.15, description="Weight for diversity score")
-    technical_weight: float = Field(0.20, description="Weight for technical score")
+    clarity_weight: float = Field(default=0.25, description="Weight for clarity score")
+    snr_weight: float = Field(default=0.20, description="Weight for SNR score")
+    naturalness_weight: float = Field(
+        default=0.20, description="Weight for naturalness score"
+    )
+    diversity_weight: float = Field(
+        default=0.15, description="Weight for diversity score"
+    )
+    technical_weight: float = Field(
+        default=0.20, description="Weight for technical score"
+    )
 
     # Scoring thresholds
-    min_clarity: float = Field(0.7, description="Minimum clarity score (0-1)")
-    min_snr: float = Field(0.6, description="Minimum SNR score (0-1)")
-    min_naturalness: float = Field(0.6, description="Minimum naturalness score (0-1)")
-    min_diversity: float = Field(0.5, description="Minimum diversity score (0-1)")
-    min_technical: float = Field(0.8, description="Minimum technical score (0-1)")
+    min_clarity: float = Field(default=0.7, description="Minimum clarity score (0-1)")
+    min_snr: float = Field(default=0.6, description="Minimum SNR score (0-1)")
+    min_naturalness: float = Field(
+        default=0.6, description="Minimum naturalness score (0-1)"
+    )
+    min_diversity: float = Field(
+        default=0.5, description="Minimum diversity score (0-1)"
+    )
+    min_technical: float = Field(
+        default=0.8, description="Minimum technical score (0-1)"
+    )
 
-    def __post_init__(self):
+    @model_validator(mode="after")
+    def validate_weights(self) -> QualityScoringConfig:
         """Validate that weights sum to 1.0."""
         total_weight = (
-            self.clarity_weight +
-            self.snr_weight +
-            self.naturalness_weight +
-            self.diversity_weight +
-            self.technical_weight
+            self.clarity_weight
+            + self.snr_weight
+            + self.naturalness_weight
+            + self.diversity_weight
+            + self.technical_weight
         )
         if not math.isclose(total_weight, 1.0, rel_tol=1e-6):
             raise ValueError(f"Weights must sum to 1.0, got {total_weight}")
+        return self
+
 
 async def calculate_quality_score(
-    file_path: str,
-    config: Optional[QualityScoringConfig] = None
+    file_path: str, config: QualityScoringConfig | None = None
 ) -> QualityScoreResult:
     """Calculate comprehensive quality score for an audio sample.
 
@@ -102,17 +118,23 @@ async def calculate_quality_score(
                 diversity_score=0.0,
                 technical_score=0.0,
                 validation_result=validation_result,
-                error_message=f"Sample failed validation: {validation_result.error_message}"
+                error_message=f"Sample failed validation: {validation_result.error_message}",
             )
 
         # Load audio data for analysis
         audio_data, sample_rate = await load_audio_file(file_path)
 
-        # Calculate individual component scores
-        clarity_score = _calculate_clarity_score(audio_data, sample_rate)
+        # PERF: Pre-compute FFT once and share between scorers
+        # ELI5: Instead of doing the same expensive calculation (FFT) multiple times,
+        # we do it once and reuse the result. Like photocopying a document once
+        # instead of scanning it multiple times.
+        fft_cache = _compute_fft_cache(audio_data, sample_rate)
+
+        # Calculate individual component scores (passing FFT cache)
+        clarity_score = _calculate_clarity_score(audio_data, sample_rate, fft_cache)
         snr_score = _calculate_snr_score(validation_result.signal_to_noise_ratio_db)
         naturalness_score = _calculate_naturalness_score(audio_data, sample_rate)
-        diversity_score = _calculate_diversity_score(audio_data)
+        diversity_score = _calculate_diversity_score(audio_data, fft_cache)
         technical_score = _calculate_technical_score(validation_result)
 
         # Apply minimum thresholds
@@ -124,11 +146,11 @@ async def calculate_quality_score(
 
         # Calculate weighted composite score
         overall_score = (
-            clarity_score * config.clarity_weight +
-            snr_score * config.snr_weight +
-            naturalness_score * config.naturalness_weight +
-            diversity_score * config.diversity_weight +
-            technical_score * config.technical_weight
+            clarity_score * config.clarity_weight
+            + snr_score * config.snr_weight
+            + naturalness_score * config.naturalness_weight
+            + diversity_score * config.diversity_weight
+            + technical_score * config.technical_weight
         )
 
         return QualityScoreResult(
@@ -139,13 +161,56 @@ async def calculate_quality_score(
             diversity_score=diversity_score,
             technical_score=technical_score,
             validation_result=validation_result,
-            error_message=None
+            error_message=None,
         )
 
     except Exception as e:
-        raise QualityScoringError(f"Quality scoring failed for {file_path}: {str(e)}") from e
+        raise QualityScoringError(
+            f"Quality scoring failed for {file_path}: {e!s}"
+        ) from e
 
-def _calculate_clarity_score(audio_data: np.ndarray, sample_rate: int) -> float:
+
+@dataclass
+class FFTCache:
+    """Cached FFT results to avoid redundant computations.
+
+    PERF: Stores pre-computed FFT data that multiple scorers need.
+    """
+
+    fft_result: np.ndarray[Any, Any]
+    frequencies: np.ndarray[Any, Any]
+    magnitudes: np.ndarray[Any, Any]
+
+
+def _compute_fft_cache(audio_data: np.ndarray[Any, Any], sample_rate: int) -> FFTCache:
+    """Pre-compute FFT and related data for reuse.
+
+    PERF: Computes FFT once instead of multiple times across scorers.
+
+    Args:
+        audio_data: Audio signal
+        sample_rate: Sample rate in Hz
+
+    Returns:
+        FFTCache with pre-computed FFT data
+    """
+    if len(audio_data.shape) > 1:
+        audio_data = audio_data[0]
+
+    fft_result = np.fft.rfft(audio_data)
+    frequencies = np.fft.rfftfreq(len(audio_data), 1.0 / sample_rate)
+    magnitudes = np.abs(fft_result)
+
+    return FFTCache(
+        fft_result=fft_result, frequencies=frequencies, magnitudes=magnitudes
+    )
+
+
+def _calculate_clarity_score(
+    audio_data: np.ndarray[Any, Any],
+    sample_rate: int,
+    fft_cache: FFTCache | None = None,
+) -> float:
     """Calculate clarity score based on spectral characteristics.
 
     Clarity measures speech intelligibility and lack of distortion.
@@ -154,6 +219,7 @@ def _calculate_clarity_score(audio_data: np.ndarray, sample_rate: int) -> float:
     Args:
         audio_data: Audio signal
         sample_rate: Sample rate in Hz
+        fft_cache: Optional pre-computed FFT data (PERF optimization)
 
     Returns:
         Clarity score (0-1)
@@ -162,10 +228,15 @@ def _calculate_clarity_score(audio_data: np.ndarray, sample_rate: int) -> float:
         # Use first channel for mono analysis
         audio_data = audio_data[0]
 
-    # Calculate spectral centroid (measure of brightness)
-    fft_result = np.fft.rfft(audio_data)
-    frequencies = np.fft.rfftfreq(len(audio_data), 1.0/sample_rate)
-    magnitudes = np.abs(fft_result)
+    # PERF: Use cached FFT if available
+    if fft_cache is not None:
+        frequencies = fft_cache.frequencies
+        magnitudes = fft_cache.magnitudes
+    else:
+        # Fallback: compute FFT if not cached
+        fft_result = np.fft.rfft(audio_data)
+        frequencies = np.fft.rfftfreq(len(audio_data), 1.0 / sample_rate)
+        magnitudes = np.abs(fft_result)
 
     # Weighted average frequency (spectral centroid)
     spectral_centroid = np.sum(frequencies * magnitudes) / np.sum(magnitudes)
@@ -183,11 +254,12 @@ def _calculate_clarity_score(audio_data: np.ndarray, sample_rate: int) -> float:
     flatness_score = 1.0 - spectral_flatness
 
     # Combine metrics (equal weighting)
-    clarity_score = (normalized_centroid * 0.6 + flatness_score * 0.4)
+    clarity_score = normalized_centroid * 0.6 + flatness_score * 0.4
 
-    return max(0.0, min(1.0, clarity_score))
+    return float(max(0.0, min(1.0, clarity_score)))
 
-def _calculate_snr_score(snr_db: Optional[float]) -> float:
+
+def _calculate_snr_score(snr_db: float | None) -> float:
     """Calculate SNR score from SNR in dB.
 
     Converts SNR dB to normalized score.
@@ -206,9 +278,12 @@ def _calculate_snr_score(snr_db: Optional[float]) -> float:
     normalized_snr = min(snr_db / 40.0, 1.0)
 
     # Apply sigmoid to emphasize middle range
-    return 1.0 / (1.0 + np.exp(-5.0 * (normalized_snr - 0.5)))
+    return float(1.0 / (1.0 + np.exp(-5.0 * (normalized_snr - 0.5))))
 
-def _calculate_naturalness_score(audio_data: np.ndarray, sample_rate: int) -> float:
+
+def _calculate_naturalness_score(
+    audio_data: np.ndarray[Any, Any], sample_rate: int
+) -> float:
     """Calculate naturalness score based on temporal characteristics.
 
     Naturalness measures how human-like and smooth the speech sounds.
@@ -234,7 +309,7 @@ def _calculate_naturalness_score(audio_data: np.ndarray, sample_rate: int) -> fl
     # Calculate RMS in each window
     rms_values = []
     for i in range(num_windows):
-        window = audio_data[i*window_size : (i+1)*window_size]
+        window = audio_data[i * window_size : (i + 1) * window_size]
         rms = np.sqrt(np.mean(window**2))
         rms_values.append(rms)
 
@@ -245,7 +320,7 @@ def _calculate_naturalness_score(audio_data: np.ndarray, sample_rate: int) -> fl
     # Calculate zero-crossing rate consistency
     zcr_values = []
     for i in range(num_windows):
-        window = audio_data[i*window_size : (i+1)*window_size]
+        window = audio_data[i * window_size : (i + 1) * window_size]
         zcr = np.sum(np.abs(np.diff(np.sign(window)))) / (2 * len(window))
         zcr_values.append(zcr)
 
@@ -253,17 +328,21 @@ def _calculate_naturalness_score(audio_data: np.ndarray, sample_rate: int) -> fl
     zcr_consistency = 1.0 / (1.0 + zcr_variance * 50.0)  # Normalize
 
     # Combine metrics
-    naturalness_score = (smoothness * 0.6 + zcr_consistency * 0.4)
+    naturalness_score = smoothness * 0.6 + zcr_consistency * 0.4
 
-    return max(0.0, min(1.0, naturalness_score))
+    return float(max(0.0, min(1.0, naturalness_score)))
 
-def _calculate_diversity_score(audio_data: np.ndarray) -> float:
+
+def _calculate_diversity_score(
+    audio_data: np.ndarray[Any, Any], fft_cache: FFTCache | None = None
+) -> float:
     """Calculate spectral diversity score.
 
     Diversity measures the richness and variety of frequency content.
 
     Args:
         audio_data: Audio signal
+        fft_cache: Optional pre-computed FFT data (PERF optimization)
 
     Returns:
         Diversity score (0-1)
@@ -272,9 +351,13 @@ def _calculate_diversity_score(audio_data: np.ndarray) -> float:
         # Use first channel for mono analysis
         audio_data = audio_data[0]
 
-    # Calculate spectral entropy (measure of frequency distribution)
-    fft_result = np.fft.rfft(audio_data)
-    magnitudes = np.abs(fft_result)
+    # PERF: Use cached FFT if available
+    if fft_cache is not None:
+        magnitudes = fft_cache.magnitudes
+    else:
+        # Fallback: compute FFT if not cached
+        fft_result = np.fft.rfft(audio_data)
+        magnitudes = np.abs(fft_result)
 
     # Normalize magnitudes to probability distribution
     magnitudes = magnitudes + 1e-10  # Avoid log(0)
@@ -288,7 +371,8 @@ def _calculate_diversity_score(audio_data: np.ndarray) -> float:
     normalized_entropy = entropy / max_entropy
 
     # Higher entropy = more diverse = better
-    return max(0.0, min(1.0, normalized_entropy))
+    return float(max(0.0, min(1.0, normalized_entropy)))
+
 
 def _calculate_technical_score(validation_result: SampleValidationResult) -> float:
     """Calculate technical compliance score.
@@ -323,4 +407,4 @@ def _calculate_technical_score(validation_result: SampleValidationResult) -> flo
         rms_bonus = min(validation_result.rms_amplitude * 50.0, 0.1)
         score = min(1.0, score + rms_bonus)
 
-    return max(0.0, min(1.0, score))
+    return float(max(0.0, min(1.0, score)))

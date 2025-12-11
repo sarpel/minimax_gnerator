@@ -12,15 +12,21 @@ Key Features:
 - Auto-discover which providers are actually usable (dependencies installed)
 """
 
-from dataclasses import dataclass
-from typing import Dict, Type, List, Optional
 import importlib.util
+import os
 import sys
+from dataclasses import dataclass
+from typing import Any, cast
 
-from wakegen.core.types import ProviderType
-from wakegen.core.protocols import TTSProvider
+from dotenv import load_dotenv
+
 from wakegen.core.exceptions import ConfigError
+from wakegen.core.protocols import TTSProvider
+from wakegen.core.types import ProviderType
 from wakegen.models.config import ProviderConfig
+
+# Load .env file into os.environ so API keys are available for availability checks
+load_dotenv()
 
 
 # =============================================================================
@@ -32,19 +38,20 @@ from wakegen.models.config import ProviderConfig
 class ProviderInfo:
     """
     Information about a TTS provider's availability and requirements.
-    
+
     This is like a product spec sheet - tells you what you need to use it.
     """
+
     type: ProviderType
     name: str
     description: str
     requires_gpu: bool = False
     requires_api_key: bool = False
     is_available: bool = False
-    missing_dependencies: List[str] = None
-    install_hint: Optional[str] = None
-    
-    def __post_init__(self):
+    missing_dependencies: list[str] | None = None
+    install_hint: str | None = None
+
+    def __post_init__(self) -> None:
         if self.missing_dependencies is None:
             self.missing_dependencies = []
 
@@ -56,27 +63,43 @@ class ProviderInfo:
 
 # The registry is a dictionary that maps ProviderType (e.g., "edge_tts")
 # to the class that implements it (e.g., EdgeTTSProvider).
-_PROVIDER_REGISTRY: Dict[ProviderType, Type[TTSProvider]] = {}
+_PROVIDER_REGISTRY: dict[ProviderType, type[TTSProvider]] = {}
 
 # Cache for provider dependency checks (so we don't re-check every time)
-_PROVIDER_AVAILABILITY_CACHE: Dict[ProviderType, ProviderInfo] = {}
+_PROVIDER_AVAILABILITY_CACHE: dict[ProviderType, ProviderInfo] = {}
 
 
-def register_provider(provider_type: ProviderType, provider_class: Type[TTSProvider]) -> None:
+def register_provider(
+    provider_type: ProviderType, provider_class: type[TTSProvider]
+) -> None:
     """
     Registers a provider class for a given type.
-    
+
     This is called when provider modules are imported. It adds the provider
     to our "phone book" so we can look it up later.
-    
+
     Args:
         provider_type: The enum value identifying this provider (e.g., ProviderType.EDGE_TTS)
         provider_class: The class that implements the TTSProvider protocol
     """
     _PROVIDER_REGISTRY[provider_type] = provider_class
     # Invalidate cache when new provider is registered
-    if provider_type in _PROVIDER_AVAILABILITY_CACHE:
-        del _PROVIDER_AVAILABILITY_CACHE[provider_type]
+    _PROVIDER_AVAILABILITY_CACHE.pop(provider_type, None)
+
+
+def clear_availability_cache() -> None:
+    """
+    Clear the entire provider availability cache.
+
+    This should be called after installing a new provider via pip
+    so that the next availability check will detect the newly installed module.
+
+    Example:
+        >>> # After running `pip install piper-tts`
+        >>> clear_availability_cache()
+        >>> # Now check_provider_availability will detect piper
+    """
+    _PROVIDER_AVAILABILITY_CACHE.clear()
 
 
 def get_provider(provider_type: ProviderType, config: ProviderConfig) -> TTSProvider:
@@ -98,23 +121,70 @@ def get_provider(provider_type: ProviderType, config: ProviderConfig) -> TTSProv
     """
     if provider_type not in _PROVIDER_REGISTRY:
         raise ConfigError(f"Unknown provider type: {provider_type}")
-    
+
     provider_class = _PROVIDER_REGISTRY[provider_type]
     # We assume the provider class accepts 'config' in its constructor
     return provider_class(config)  # type: ignore
 
 
-def list_available_providers() -> List[ProviderType]:
+def get_any_provider(provider_name: str, config: ProviderConfig) -> TTSProvider:
+    """
+    Get a provider by name, supporting both built-in and plugin providers.
+
+    Issue 15: This unified lookup function tries built-in providers first,
+    then falls back to plugin providers. Supports both enum-based names
+    (e.g., "edge_tts") and plugin names (e.g., "my-custom-plugin").
+
+    Args:
+        provider_name: Name of the provider (enum value or plugin name)
+        config: Provider configuration
+
+    Returns:
+        TTSProvider instance
+
+    Raises:
+        ConfigError: If provider is not found in either registry
+
+    Example:
+        # Built-in provider
+        provider = get_any_provider("edge_tts", config)
+
+        # Plugin provider
+        provider = get_any_provider("my-custom-plugin", config)
+    """
+    # Try built-in providers first
+    try:
+        provider_type = ProviderType(provider_name)
+        return get_provider(provider_type, config)
+    except ValueError:
+        # Not a built-in provider, try plugins
+        try:
+            from wakegen.plugins.discovery import get_plugin_provider
+
+            return cast(TTSProvider, get_plugin_provider(provider_name, config))
+        except ImportError as e:
+            raise ConfigError(
+                f"Provider '{provider_name}' not found. "
+                f"It's not a built-in provider and plugin system is not available."
+            ) from e
+        except ConfigError as e:
+            raise ConfigError(
+                f"Provider '{provider_name}' not found in built-in or plugin providers. "
+                f"Available built-in: {[p.value for p in list_available_providers()]}"
+            ) from e
+
+
+def list_available_providers() -> list[ProviderType]:
     """
     Returns a list of all registered provider types.
-    
+
     This allows the CLI to dynamically show which providers are supported
     without hardcoding the list.
-    
+
     Note: This returns ALL registered providers, even if their dependencies
     aren't installed. Use discover_available_providers() to get only the
     ones that are actually usable.
-    
+
     Returns:
         List of ProviderType enum values for all registered providers.
     """
@@ -129,20 +199,20 @@ def list_available_providers() -> List[ProviderType]:
 def _check_module_available(module_name: str) -> bool:
     """
     Check if a Python module is available for import.
-    
+
     This doesn't actually import the module (which could be slow or have side effects),
     it just checks if the module exists in the system.
-    
+
     Args:
         module_name: The name of the module to check (e.g., "kokoro_onnx")
-    
+
     Returns:
         True if the module can be imported, False otherwise.
     """
     # Check if it's already imported
     if module_name in sys.modules:
         return True
-    
+
     # Check if it can be found
     spec = importlib.util.find_spec(module_name)
     return spec is not None
@@ -150,7 +220,7 @@ def _check_module_available(module_name: str) -> bool:
 
 # Define what each provider needs to work
 # Format: {ProviderType: (required_modules, optional_modules, api_key_env_var, gpu_required, install_hint)}
-_PROVIDER_REQUIREMENTS: Dict[ProviderType, dict] = {
+_PROVIDER_REQUIREMENTS: dict[ProviderType, dict[str, Any]] = {
     ProviderType.EDGE_TTS: {
         "required": ["edge_tts"],
         "optional": [],
@@ -245,54 +315,57 @@ _PROVIDER_REQUIREMENTS: Dict[ProviderType, dict] = {
 def check_provider_availability(provider_type: ProviderType) -> ProviderInfo:
     """
     Check if a specific provider is available and ready to use.
-    
+
     This checks:
     1. Is the provider registered?
     2. Are the required Python packages installed?
     3. If it needs an API key, is the environment variable set?
-    
+
     Results are cached for performance.
-    
+
     Args:
         provider_type: The provider to check.
-    
+
     Returns:
         ProviderInfo with availability status and any missing dependencies.
     """
     # Return cached result if available
     if provider_type in _PROVIDER_AVAILABILITY_CACHE:
         return _PROVIDER_AVAILABILITY_CACHE[provider_type]
-    
+
     # Get requirements for this provider
-    requirements = _PROVIDER_REQUIREMENTS.get(provider_type, {
-        "required": [],
-        "optional": [],
-        "api_key_env": None,
-        "gpu_required": False,
-        "description": "Unknown provider",
-        "install_hint": None,
-    })
-    
+    requirements = _PROVIDER_REQUIREMENTS.get(
+        provider_type,
+        {
+            "required": [],
+            "optional": [],
+            "api_key_env": None,
+            "gpu_required": False,
+            "description": "Unknown provider",
+            "install_hint": None,
+        },
+    )
+
     missing_deps = []
     is_available = True
-    
+
     # Check if provider is registered
     if provider_type not in _PROVIDER_REGISTRY:
         is_available = False
         missing_deps.append(f"Provider '{provider_type.value}' not registered")
-    
+
     # Check required modules
     for module in requirements.get("required", []):
         if not _check_module_available(module):
             is_available = False
             missing_deps.append(module)
-    
+
     # Check API key if required
     api_key_env = requirements.get("api_key_env")
     if api_key_env and not os.environ.get(api_key_env):
         is_available = False
         missing_deps.append(f"Missing {api_key_env} environment variable")
-    
+
     # Create and cache the result
     info = ProviderInfo(
         type=provider_type,
@@ -304,26 +377,26 @@ def check_provider_availability(provider_type: ProviderType) -> ProviderInfo:
         missing_dependencies=missing_deps,
         install_hint=requirements.get("install_hint"),
     )
-    
+
     _PROVIDER_AVAILABILITY_CACHE[provider_type] = info
     return info
 
 
-def discover_available_providers() -> List[ProviderInfo]:
+def discover_available_providers() -> list[ProviderInfo]:
     """
     Automatically discover which providers are available and ready to use.
-    
+
     This is the main function for provider auto-discovery. It checks each
     registered provider to see if its dependencies are installed and
     any required credentials are configured.
-    
+
     Use this when you want to know what providers the user can actually use
     right now, not just what's theoretically supported.
-    
+
     Returns:
         List of ProviderInfo objects for all registered providers,
         with availability status for each.
-    
+
     Example:
         providers = discover_available_providers()
         for p in providers:
@@ -333,41 +406,23 @@ def discover_available_providers() -> List[ProviderInfo]:
                 print(f"✗ {p.name}: Missing {p.missing_dependencies}")
     """
     all_providers = []
-    
+
     # Check all known provider types (from the enum)
     for provider_type in ProviderType:
         info = check_provider_availability(provider_type)
         all_providers.append(info)
-    
+
     return all_providers
 
 
-def get_available_provider_types() -> List[ProviderType]:
+def get_available_provider_types() -> list[ProviderType]:
     """
     Get a list of provider types that are currently available for use.
-    
+
     This is a convenience function that filters discover_available_providers()
     to return only the types that can actually be used.
-    
+
     Returns:
         List of ProviderType values for providers that are available.
     """
-    return [
-        info.type 
-        for info in discover_available_providers() 
-        if info.is_available
-    ]
-
-
-def clear_availability_cache() -> None:
-    """
-    Clear the provider availability cache.
-    
-    Call this if the environment changes (e.g., after installing a package
-    or setting an environment variable) to force re-checking availability.
-    """
-    _PROVIDER_AVAILABILITY_CACHE.clear()
-
-
-# Need to import os for API key checking
-import os
+    return [info.type for info in discover_available_providers() if info.is_available]

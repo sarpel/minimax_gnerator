@@ -13,10 +13,14 @@ Key Features:
 """
 
 from __future__ import annotations
-from typing import Dict, Any, List
+
+import random
 from dataclasses import dataclass
-from wakegen.core.types import EnvironmentProfile
+from typing import Any
+
 from wakegen.core.exceptions import NoiseError
+from wakegen.core.types import EnvironmentProfile
+
 
 @dataclass
 class NoiseProfile:
@@ -32,13 +36,15 @@ class NoiseProfile:
         typical_events: List of event types that commonly occur.
         intensity_range: Typical intensity range for events.
     """
+
     name: str
     description: str
     base_noise_type: str
     snr_range: tuple[float, float]
     event_density: float
-    typical_events: List[str]
+    typical_events: list[str]
     intensity_range: tuple[float, float]
+
 
 class NoiseProfileManager:
     """
@@ -48,11 +54,11 @@ class NoiseProfileManager:
     custom profile creation.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize with default profiles."""
         self.profiles = self._create_default_profiles()
 
-    def _create_default_profiles(self) -> Dict[EnvironmentProfile, NoiseProfile]:
+    def _create_default_profiles(self) -> dict[EnvironmentProfile, NoiseProfile]:
         """
         Create the default set of noise profiles for common environments.
         """
@@ -64,7 +70,7 @@ class NoiseProfileManager:
                 snr_range=(12.0, 20.0),
                 event_density=0.8,
                 typical_events=["dish_clink", "water_running", "chair_scrape"],
-                intensity_range=(0.4, 0.7)
+                intensity_range=(0.4, 0.7),
             ),
             EnvironmentProfile.EVENING_LIVING_ROOM: NoiseProfile(
                 name="Evening Living Room",
@@ -73,7 +79,7 @@ class NoiseProfileManager:
                 snr_range=(15.0, 25.0),
                 event_density=0.3,
                 typical_events=["footstep", "chair_scrape"],
-                intensity_range=(0.3, 0.5)
+                intensity_range=(0.3, 0.5),
             ),
             EnvironmentProfile.OFFICE_SPACE: NoiseProfile(
                 name="Office Space",
@@ -82,7 +88,7 @@ class NoiseProfileManager:
                 snr_range=(10.0, 18.0),
                 event_density=0.5,
                 typical_events=["chair_scrape", "door_close"],
-                intensity_range=(0.3, 0.6)
+                intensity_range=(0.3, 0.6),
             ),
             EnvironmentProfile.CAR_INTERIOR: NoiseProfile(
                 name="Car Interior",
@@ -91,7 +97,7 @@ class NoiseProfileManager:
                 snr_range=(8.0, 15.0),
                 event_density=0.2,
                 typical_events=["door_close"],
-                intensity_range=(0.5, 0.8)
+                intensity_range=(0.5, 0.8),
             ),
             EnvironmentProfile.OUTDOOR_PARK: NoiseProfile(
                 name="Outdoor Park",
@@ -100,7 +106,7 @@ class NoiseProfileManager:
                 snr_range=(5.0, 12.0),
                 event_density=0.1,
                 typical_events=["footstep"],
-                intensity_range=(0.2, 0.4)
+                intensity_range=(0.2, 0.4),
             ),
             EnvironmentProfile.BEDROOM_NIGHT: NoiseProfile(
                 name="Bedroom at Night",
@@ -109,8 +115,8 @@ class NoiseProfileManager:
                 snr_range=(20.0, 30.0),
                 event_density=0.1,
                 typical_events=[],
-                intensity_range=(0.1, 0.3)
-            )
+                intensity_range=(0.1, 0.3),
+            ),
         }
 
     def get_profile(self, profile_id: EnvironmentProfile) -> NoiseProfile:
@@ -153,8 +159,8 @@ class NoiseProfileManager:
         base_noise_type: str,
         snr_range: tuple[float, float],
         event_density: float,
-        typical_events: List[str],
-        intensity_range: tuple[float, float]
+        typical_events: list[str],
+        intensity_range: tuple[float, float],
     ) -> EnvironmentProfile:
         """
         Create a custom noise profile and add it to the manager.
@@ -195,12 +201,12 @@ class NoiseProfileManager:
             snr_range=snr_range,
             event_density=event_density,
             typical_events=typical_events,
-            intensity_range=intensity_range
+            intensity_range=intensity_range,
         )
 
         return profile_id
 
-    def list_profiles(self) -> List[Dict[str, Any]]:
+    def list_profiles(self) -> list[dict[str, Any]]:
         """
         List all available noise profiles with their key characteristics.
 
@@ -209,16 +215,19 @@ class NoiseProfileManager:
         """
         result = []
         for profile_id, profile in self.profiles.items():
-            result.append({
-                "id": str(profile_id),
-                "name": profile.name,
-                "description": profile.description,
-                "base_noise": profile.base_noise_type,
-                "snr_range": profile.snr_range,
-                "event_density": profile.event_density,
-                "typical_events": profile.typical_events
-            })
+            result.append(
+                {
+                    "id": str(profile_id),
+                    "name": profile.name,
+                    "description": profile.description,
+                    "base_noise": profile.base_noise_type,
+                    "snr_range": profile.snr_range,
+                    "event_density": profile.event_density,
+                    "typical_events": profile.typical_events,
+                }
+            )
         return result
+
 
 # Global instance for easy access
 noise_profile_manager = NoiseProfileManager()

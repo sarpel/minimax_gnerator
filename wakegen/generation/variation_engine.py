@@ -13,12 +13,12 @@ The variation engine is responsible for:
 from __future__ import annotations
 
 import itertools
-import random
-from typing import List, Dict, Any, Tuple, Optional, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass
 
-from wakegen.models.generation import GenerationParameters
 from wakegen.core.exceptions import GenerationError
+from wakegen.models.generation import GenerationParameters
+
 
 @dataclass
 class VariationParameters:
@@ -32,14 +32,15 @@ class VariationParameters:
         prosody_variations: Different intonation patterns
         emphasis_positions: Positions to emphasize in the text
     """
-    text_variations: List[str]
-    voice_ids: List[str]
-    speed_range: Tuple[float, float] = (0.8, 1.2)
-    pitch_range: Tuple[float, float] = (0.9, 1.1)
-    prosody_variations: List[str] = None
-    emphasis_positions: List[int] = None
 
-    def __post_init__(self):
+    text_variations: list[str]
+    voice_ids: list[str]
+    speed_range: tuple[float, float] = (0.8, 1.2)
+    pitch_range: tuple[float, float] = (0.9, 1.1)
+    prosody_variations: list[str] | None = None
+    emphasis_positions: list[int] | None = None
+
+    def __post_init__(self) -> None:
         """Initialize default variations if not provided."""
         if self.prosody_variations is None:
             # Default prosody variations for natural speech
@@ -47,6 +48,7 @@ class VariationParameters:
         if self.emphasis_positions is None:
             # Default emphasis positions (none by default)
             self.emphasis_positions = []
+
 
 class VariationEngine:
     """Engine for generating diverse parameter combinations for wake word samples.
@@ -85,7 +87,7 @@ class VariationEngine:
         if len(self.parameters.voice_ids) > 50:
             raise GenerationError("Too many voice IDs (max 50)")
 
-    def _generate_speed_values(self, count: int = 3) -> List[float]:
+    def _generate_speed_values(self, count: int = 3) -> list[float]:
         """Generate speed values within the specified range.
 
         Args:
@@ -97,7 +99,7 @@ class VariationEngine:
         start, end = self.parameters.speed_range
         return [start + (end - start) * (i / (count - 1)) for i in range(count)]
 
-    def _generate_pitch_values(self, count: int = 3) -> List[float]:
+    def _generate_pitch_values(self, count: int = 3) -> list[float]:
         """Generate pitch values within the specified range.
 
         Args:
@@ -109,7 +111,7 @@ class VariationEngine:
         start, end = self.parameters.pitch_range
         return [start + (end - start) * (i / (count - 1)) for i in range(count)]
 
-    def _generate_text_with_emphasis(self, text: str) -> List[str]:
+    def _generate_text_with_emphasis(self, text: str) -> list[str]:
         """Generate text variations with different emphasis patterns.
 
         Args:
@@ -133,7 +135,9 @@ class VariationEngine:
 
         return variations if variations else [text]
 
-    def generate_variations(self, max_combinations: Optional[int] = None) -> Iterator[GenerationParameters]:
+    def generate_variations(
+        self, max_combinations: int | None = None
+    ) -> Iterator[GenerationParameters]:
         """Generate all parameter combinations as GenerationParameters objects.
 
         This method creates the Cartesian product of:
@@ -163,12 +167,16 @@ class VariationEngine:
         pitch_values = self._generate_pitch_values()
 
         # Create Cartesian product of all parameters
+        combinations: (
+            itertools.product[tuple[str, str, float, float, str]]
+            | itertools.islice[tuple[str, str, float, float, str]]
+        )
         combinations = itertools.product(
             all_texts,
             self.parameters.voice_ids,
             speed_values,
             pitch_values,
-            self.parameters.prosody_variations
+            self.parameters.prosody_variations or ["normal"],
         )
 
         # Limit combinations if requested
@@ -183,7 +191,7 @@ class VariationEngine:
                 speed=speed,
                 pitch=pitch,
                 prosody=prosody,
-                emphasis_positions=self.parameters.emphasis_positions
+                emphasis_positions=self.parameters.emphasis_positions or [],
             )
 
     def estimate_total_combinations(self) -> int:
@@ -200,12 +208,12 @@ class VariationEngine:
 
         speed_count = 3  # Default number of speed values
         pitch_count = 3  # Default number of pitch values
-        prosody_count = len(self.parameters.prosody_variations)
+        prosody_count = len(self.parameters.prosody_variations or ["normal"])
         voice_count = len(self.parameters.voice_ids)
 
         return text_count * voice_count * speed_count * pitch_count * prosody_count
 
-    def generate_turkish_variations(self, base_word: str) -> List[str]:
+    def generate_turkish_variations(self, base_word: str) -> list[str]:
         """Generate Turkish-specific variations for wake words.
 
         Args:
@@ -223,7 +231,7 @@ class VariationEngine:
             f"{base_word}!",
             f"hey {base_word}!",
             f"{base_word}, lütfen",
-            f"hey {base_word}, lütfen"
+            f"hey {base_word}, lütfen",
         ]
 
         # Add some informal variations
@@ -231,12 +239,14 @@ class VariationEngine:
             f"hey {base_word} canım",
             f"{base_word} canım",
             f"hey {base_word} abla",
-            f"hey {base_word} abi"
+            f"hey {base_word} abi",
         ]
 
         return variations + informal_variations
 
-    def create_turkish_parameters(self, wake_words: List[str], voice_ids: List[str]) -> VariationParameters:
+    def create_turkish_parameters(
+        self, wake_words: list[str], voice_ids: list[str]
+    ) -> VariationParameters:
         """Create Turkish-specific variation parameters.
 
         Args:
@@ -257,5 +267,5 @@ class VariationEngine:
             speed_range=(0.7, 1.3),  # Wider range for Turkish intonation
             pitch_range=(0.8, 1.2),  # Wider range for Turkish pitch
             prosody_variations=["normal", "friendly", "polite", "urgent"],
-            emphasis_positions=[0, 1]  # Emphasize first and second words
+            emphasis_positions=[0, 1],  # Emphasize first and second words
         )

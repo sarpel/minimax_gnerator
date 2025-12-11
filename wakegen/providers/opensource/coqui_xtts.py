@@ -1,18 +1,19 @@
 from __future__ import annotations
-import os
-import tempfile
-import asyncio
-from typing import List, Any, Optional, Dict
-from pathlib import Path
 
-from wakegen.core.types import ProviderType, Gender
+import os
+import shutil  # OS-001 Fix: Moved from inside function to module level
+import tempfile
+from typing import Any
+
 from wakegen.core.exceptions import ProviderError
+from wakegen.core.types import Gender, ProviderType
+from wakegen.models.audio import Voice
 from wakegen.providers.base import BaseProvider
 from wakegen.providers.registry import register_provider
-from wakegen.models.audio import Voice
 
 # We implement the 'BaseProvider' class to create our Coqui XTTS provider.
 # Coqui XTTS is a zero-shot voice cloning TTS system with multilingual support including Turkish.
+
 
 class CoquiXTTSProvider(BaseProvider):
     """
@@ -25,7 +26,7 @@ class CoquiXTTSProvider(BaseProvider):
     - RAM: Minimum 4GB (8GB+ recommended)
     - GPU: Highly recommended (NVIDIA CUDA). CPU generation is very slow.
     - Storage: ~2GB for model weights.
-    
+
     This provider is NOT recommended for Raspberry Pi Zero or older hardware.
     """
 
@@ -35,8 +36,8 @@ class CoquiXTTSProvider(BaseProvider):
         """
         super().__init__(config)
         # We'll store the XTTS model and voice cache
-        self._xtts_model: Optional[Any] = None
-        self._voice_cache: Dict[str, Any] = {}
+        self._xtts_model: Any | None = None
+        self._voice_cache: dict[str, Any] = {}
         self._model_loaded: bool = False
 
     @property
@@ -51,7 +52,9 @@ class CoquiXTTSProvider(BaseProvider):
             # Try to import TTS to ensure it's installed
             import TTS  # noqa: F401
         except ImportError:
-            raise ProviderError("Coqui TTS library is not installed. Please install with: pip install TTS")
+            raise ProviderError(
+                "Coqui TTS library is not installed. Please install with: pip install TTS"
+            )
 
     async def _load_xtts_model(self) -> Any:
         """
@@ -66,13 +69,15 @@ class CoquiXTTSProvider(BaseProvider):
 
             # Load the XTTS model (this may take time and memory)
             # We use the multilingual model which supports Turkish
-            self._xtts_model = TTSAPI(model_name="tts_models/multilingual/multi-dataset/xtts_v2")
+            self._xtts_model = TTSAPI(
+                model_name="tts_models/multilingual/multi-dataset/xtts_v2"
+            )
 
             self._model_loaded = True
             return self._xtts_model
 
         except Exception as e:
-            raise ProviderError(f"Failed to load XTTS model: {str(e)}") from e
+            raise ProviderError(f"Failed to load XTTS model: {e!s}") from e
 
     async def generate(self, text: str, voice_id: str, output_path: str) -> None:
         """
@@ -87,15 +92,15 @@ class CoquiXTTSProvider(BaseProvider):
             text: The text to speak (e.g., "Hey Katya").
             voice_id: REQUIRED - File path to reference audio for voice cloning.
                       Example: "/path/to/reference_voice.wav"
-                      
+
                       The reference audio should be:
                       - Clear speech (minimal background noise)
                       - 5-30 seconds long (optimal)
                       - The language/accent will be preserved in output
-                      
+
                       NOTE: This is NOT a preset name like "tr_female_1".
                       You provide an actual audio file to clone.
-                      
+
             output_path: The full path where the generated audio file should be saved.
                         Will be created as WAV format by XTTS internally.
 
@@ -104,7 +109,7 @@ class CoquiXTTSProvider(BaseProvider):
 
         Example:
             provider = CoquiXTTSProvider(config)
-            
+
             # Clone a Turkish voice
             await provider.generate(
                 text="Merhaba, hoşgeldiniz",
@@ -133,9 +138,11 @@ class CoquiXTTSProvider(BaseProvider):
             await self._generate_with_voice_cloning(model, text, voice_id, output_path)
 
         except Exception as e:
-            raise ProviderError(f"Coqui XTTS generation failed: {str(e)}") from e
+            raise ProviderError(f"Coqui XTTS generation failed: {e!s}") from e
 
-    async def _generate_with_voice_cloning(self, model: Any, text: str, reference_audio_path: str, output_path: str) -> None:
+    async def _generate_with_voice_cloning(
+        self, model: Any, text: str, reference_audio_path: str, output_path: str
+    ) -> None:
         """
         Generate audio using voice cloning from a reference audio file.
 
@@ -154,12 +161,14 @@ class CoquiXTTSProvider(BaseProvider):
             try:
                 # Use XTTS voice cloning
                 # The reference audio provides the voice characteristics to clone
-                # We explicitly set language to Turkish ('tr') as per requirements
+                # Issue 7 fix: Language is configurable via config, defaults to 'en'
+                # Supported: en, es, fr, de, it, pt, pl, tr, ru, nl, cs, ar, zh-cn, ja, hu, ko
+                language = getattr(self.config, "language", "en")
                 model.tts_to_file(
                     text=text,
                     speaker_wav=reference_audio_path,
-                    language="tr",
-                    file_path=temp_path
+                    language=language,
+                    file_path=temp_path,
                 )
 
                 # Move the temporary file to the final location
@@ -170,35 +179,37 @@ class CoquiXTTSProvider(BaseProvider):
                 # Clean up temp file if synthesis failed to avoid disk clutter
                 if os.path.exists(temp_path):
                     os.unlink(temp_path)
-                raise ProviderError(f"XTTS voice cloning failed: {str(synth_error)}") from synth_error
+                raise ProviderError(
+                    f"XTTS voice cloning failed: {synth_error!s}"
+                ) from synth_error
 
         except Exception as e:
-            raise ProviderError(f"Voice cloning generation failed: {str(e)}") from e
+            raise ProviderError(f"Voice cloning generation failed: {e!s}") from e
 
-    async def list_voices(self) -> List[Voice]:
+    async def list_voices(self) -> list[Voice]:
         """
         Lists available voices from Coqui XTTS.
-        
+
         IMPORTANT: Coqui XTTS is a VOICE CLONING model, NOT a preset-based model.
-        
+
         Unlike other TTS providers (e.g., Edge TTS, Piper), XTTS does NOT have:
         - Predefined speaker presets (e.g., "tr_female", "tr_male")
         - Named voice profiles
         - Built-in voice selection
-        
+
         Instead, XTTS works by:
         1. Taking a reference audio file (any voice sample)
         2. Analyzing the speaker characteristics
         3. Cloning that voice for new text
-        
+
         This means you can generate ANY voice you have an audio sample for.
         It's like "voice morphing" - provide a reference, get that voice speaking new text.
-        
+
         Usage:
             # First, provide a reference audio file
             voice_id = "/path/to/turkish_speaker.wav"
             await provider.generate("Hey Katya", voice_id, "output.wav")
-        
+
         Returns:
             A placeholder voice object indicating voice cloning mode.
         """
@@ -212,12 +223,12 @@ class CoquiXTTSProvider(BaseProvider):
                     gender=Gender.NEUTRAL,
                     language="tr-TR",
                     provider=self.provider_type,
-                    supports_cloning=True
+                    supports_cloning=True,
                 )
             ]
 
         except Exception as e:
-            raise ProviderError(f"Failed to list XTTS voices: {str(e)}") from e
+            raise ProviderError(f"Failed to list XTTS voices: {e!s}") from e
 
     async def validate_config(self) -> None:
         """
@@ -228,9 +239,13 @@ class CoquiXTTSProvider(BaseProvider):
             # Try to load the model to ensure everything works
             await self._load_xtts_model()
         except Exception as e:
-            raise ProviderError(f"Coqui XTTS configuration validation failed: {str(e)}") from e
+            raise ProviderError(
+                f"Coqui XTTS configuration validation failed: {e!s}"
+            ) from e
 
-    async def clone_voice(self, reference_audio_path: str, output_embedding_path: str) -> str:
+    async def clone_voice(
+        self, reference_audio_path: str, output_embedding_path: str
+    ) -> str:
         """
         Create a voice embedding from reference audio for voice cloning.
 
@@ -249,7 +264,9 @@ class CoquiXTTSProvider(BaseProvider):
             # For explicit embedding creation, we can use the model's speaker manager
             # But for simplicity, we'll just verify the reference audio exists
             if not os.path.isfile(reference_audio_path):
-                raise ProviderError(f"Reference audio file not found: {reference_audio_path}")
+                raise ProviderError(
+                    f"Reference audio file not found: {reference_audio_path}"
+                )
 
             # Create a simple embedding file (XTTS handles this internally)
             # For our purposes, we'll just copy the reference audio path as the "embedding"
@@ -257,14 +274,32 @@ class CoquiXTTSProvider(BaseProvider):
             if not os.path.exists(os.path.dirname(output_embedding_path)):
                 os.makedirs(os.path.dirname(output_embedding_path), exist_ok=True)
 
+            # OS-001 Fix: shutil is now imported at module level
             # Copy the reference audio as the embedding (simplified approach)
-            import shutil
             shutil.copy2(reference_audio_path, output_embedding_path)
 
             return output_embedding_path
 
         except Exception as e:
-            raise ProviderError(f"Voice cloning failed: {str(e)}") from e
+            raise ProviderError(f"Voice cloning failed: {e!s}") from e
+
+    async def cleanup(self) -> None:
+        """
+        Release XTTS model from memory.
+
+        Issue 18: XTTS models are large (~2GB). This method releases
+        the model and triggers garbage collection to free memory.
+        """
+        self._xtts_model = None
+        self._voice_cache.clear()
+        self._model_loaded = False
+
+        # Force garbage collection to free memory
+        import gc
+
+        gc.collect()
+
 
 # Register this provider so the factory knows about it
+
 register_provider(ProviderType.COQUI_XTTS, CoquiXTTSProvider)

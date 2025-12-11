@@ -9,22 +9,25 @@ This module provides comprehensive validation for audio samples including:
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
-import os
-import wave
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any
 
 import numpy as np
 from pydantic import BaseModel, Field
 
 from wakegen.core.exceptions import QualityAssuranceError
-from wakegen.utils.audio import load_audio_file, get_audio_duration
+from wakegen.utils.audio import get_audio_duration, load_audio_file
 
-class ValidationError(QualityAssuranceError):
-    """Custom exception for validation failures."""
+
+class SampleValidationError(QualityAssuranceError):
+    """Custom exception for sample validation failures.
+
+    Named SampleValidationError (not ValidationError) to avoid collision
+    with pydantic.ValidationError which is commonly imported.
+    """
+
 
 @dataclass
 class SampleValidationResult:
@@ -37,25 +40,32 @@ class SampleValidationResult:
     channels: int
     bit_depth: int
     file_hash: str
-    signal_to_noise_ratio_db: Optional[float] = None
-    peak_amplitude: Optional[float] = None
-    rms_amplitude: Optional[float] = None
-    zero_crossing_rate: Optional[float] = None
-    error_message: Optional[str] = None
+    signal_to_noise_ratio_db: float | None = None
+    peak_amplitude: float | None = None
+    rms_amplitude: float | None = None
+    zero_crossing_rate: float | None = None
+    error_message: str | None = None
+
 
 class SampleValidationConfig(BaseModel):
     """Configuration for sample validation."""
 
-    min_duration: float = Field(0.5, description="Minimum duration in seconds")
-    max_duration: float = Field(10.0, description="Maximum duration in seconds")
-    required_sample_rate: int = Field(16000, description="Required sample rate in Hz")
-    min_snr_db: float = Field(15.0, description="Minimum signal-to-noise ratio in dB")
-    max_peak_amplitude: float = Field(0.95, description="Maximum peak amplitude (0-1)")
-    min_rms_amplitude: float = Field(0.01, description="Minimum RMS amplitude")
+    min_duration: float = Field(default=0.5, description="Minimum duration in seconds")
+    max_duration: float = Field(default=10.0, description="Maximum duration in seconds")
+    required_sample_rate: int = Field(
+        default=16000, description="Required sample rate in Hz"
+    )
+    min_snr_db: float = Field(
+        default=15.0, description="Minimum signal-to-noise ratio in dB"
+    )
+    max_peak_amplitude: float = Field(
+        default=0.95, description="Maximum peak amplitude (0-1)"
+    )
+    min_rms_amplitude: float = Field(default=0.01, description="Minimum RMS amplitude")
+
 
 async def validate_sample(
-    file_path: str | Path,
-    config: Optional[SampleValidationConfig] = None
+    file_path: str | Path, config: SampleValidationConfig | None = None
 ) -> SampleValidationResult:
     """Validate an audio sample with comprehensive quality checks.
 
@@ -84,7 +94,7 @@ async def validate_sample(
             channels=0,
             bit_depth=0,
             file_hash="",
-            error_message=f"File does not exist: {file_path}"
+            error_message=f"File does not exist: {file_path}",
         )
 
     if not file_path.is_file():
@@ -96,7 +106,7 @@ async def validate_sample(
             channels=0,
             bit_depth=0,
             file_hash="",
-            error_message=f"Path is not a file: {file_path}"
+            error_message=f"Path is not a file: {file_path}",
         )
 
     # File size validation
@@ -110,7 +120,7 @@ async def validate_sample(
             channels=0,
             bit_depth=0,
             file_hash="",
-            error_message="File is empty"
+            error_message="File is empty",
         )
 
     # Calculate file hash for integrity
@@ -133,7 +143,7 @@ async def validate_sample(
                 channels=channels,
                 bit_depth=bit_depth,
                 file_hash=file_hash,
-                error_message=f"Duration {duration:.2f}s is below minimum {config.min_duration}s"
+                error_message=f"Duration {duration:.2f}s is below minimum {config.min_duration}s",
             )
 
         if duration > config.max_duration:
@@ -145,7 +155,7 @@ async def validate_sample(
                 channels=channels,
                 bit_depth=bit_depth,
                 file_hash=file_hash,
-                error_message=f"Duration {duration:.2f}s exceeds maximum {config.max_duration}s"
+                error_message=f"Duration {duration:.2f}s exceeds maximum {config.max_duration}s",
             )
 
         # Sample rate validation
@@ -158,7 +168,7 @@ async def validate_sample(
                 channels=channels,
                 bit_depth=bit_depth,
                 file_hash=file_hash,
-                error_message=f"Sample rate {sample_rate}Hz != required {config.required_sample_rate}Hz"
+                error_message=f"Sample rate {sample_rate}Hz != required {config.required_sample_rate}Hz",
             )
 
         # Audio quality metrics
@@ -171,10 +181,14 @@ async def validate_sample(
         validation_errors = []
 
         if peak_amplitude > config.max_peak_amplitude:
-            validation_errors.append(f"Peak amplitude {peak_amplitude:.3f} > {config.max_peak_amplitude}")
+            validation_errors.append(
+                f"Peak amplitude {peak_amplitude:.3f} > {config.max_peak_amplitude}"
+            )
 
         if rms_amplitude < config.min_rms_amplitude:
-            validation_errors.append(f"RMS amplitude {rms_amplitude:.6f} < {config.min_rms_amplitude}")
+            validation_errors.append(
+                f"RMS amplitude {rms_amplitude:.6f} < {config.min_rms_amplitude}"
+            )
 
         if snr_db < config.min_snr_db:
             validation_errors.append(f"SNR {snr_db:.2f}dB < {config.min_snr_db}dB")
@@ -195,11 +209,12 @@ async def validate_sample(
             peak_amplitude=peak_amplitude,
             rms_amplitude=rms_amplitude,
             zero_crossing_rate=zero_crossing_rate,
-            error_message=error_message
+            error_message=error_message,
         )
 
     except Exception as e:
-        raise ValidationError(f"Validation failed for {file_path}: {str(e)}") from e
+        raise SampleValidationError(f"Validation failed for {file_path}: {e!s}") from e
+
 
 async def _calculate_file_hash(file_path: Path) -> str:
     """Calculate SHA256 hash of file for integrity verification.
@@ -223,7 +238,8 @@ async def _calculate_file_hash(file_path: Path) -> str:
 
     return hash_sha256.hexdigest()
 
-def _calculate_zero_crossing_rate(audio_data: np.ndarray) -> float:
+
+def _calculate_zero_crossing_rate(audio_data: np.ndarray[Any, Any]) -> float:
     """Calculate zero crossing rate for audio signal.
 
     Zero crossing rate measures how often the signal changes sign,
@@ -241,9 +257,10 @@ def _calculate_zero_crossing_rate(audio_data: np.ndarray) -> float:
 
     # Count sign changes
     sign_changes = np.sum(np.abs(np.diff(np.sign(audio_data)))) / 2
-    return sign_changes / len(audio_data)
+    return float(sign_changes / len(audio_data))
 
-def _calculate_signal_to_noise_ratio(audio_data: np.ndarray) -> float:
+
+def _calculate_signal_to_noise_ratio(audio_data: np.ndarray[Any, Any]) -> float:
     """Calculate signal-to-noise ratio in decibels.
 
     Args:
@@ -265,14 +282,14 @@ def _calculate_signal_to_noise_ratio(audio_data: np.ndarray) -> float:
     noise_power = np.inf
 
     for i in range(num_windows):
-        window = audio_data[i*window_size : (i+1)*window_size]
+        window = audio_data[i * window_size : (i + 1) * window_size]
         window_power = np.mean(window**2)
         if window_power < noise_power:
             noise_power = window_power
 
     # Avoid division by zero and calculate SNR in dB
     if noise_power == 0:
-        return float('inf')
+        return float("inf")
 
     snr = signal_power / noise_power
-    return 10 * np.log10(snr)
+    return float(10 * np.log10(snr))

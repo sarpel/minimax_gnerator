@@ -8,26 +8,26 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import os
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Any
 
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel, Field
 
 from wakegen.core.exceptions import QualityAssuranceError
-from wakegen.quality.validator import validate_sample
 from wakegen.quality.scorer import calculate_quality_score
-from wakegen.utils.audio import load_audio_file
+from wakegen.quality.validator import validate_sample
 
 # Suppress pandas warnings for cleaner output
 warnings.filterwarnings("ignore", category=UserWarning, module="pandas")
 
+
 class StatisticsError(QualityAssuranceError):
     """Custom exception for statistics calculation failures."""
+
 
 @dataclass
 class DatasetStatisticsResult:
@@ -38,42 +38,44 @@ class DatasetStatisticsResult:
     average_duration_seconds: float
     min_duration_seconds: float
     max_duration_seconds: float
-    sample_rate_distribution: Dict[int, int]
-    quality_score_distribution: Dict[str, int]
-    snr_distribution: Dict[str, int]
-    file_size_distribution: Dict[str, int]
-    metadata: Dict[str, Any]
-    detailed_stats: Optional[pd.DataFrame] = None
-    error_message: Optional[str] = None
+    sample_rate_distribution: dict[int, int]
+    quality_score_distribution: dict[str, int]
+    snr_distribution: dict[str, int]
+    file_size_distribution: dict[str, int]
+    metadata: dict[str, Any]
+    detailed_stats: pd.DataFrame | None = None
+    error_message: str | None = None
+
 
 class DatasetStatisticsConfig(BaseModel):
     """Configuration for dataset statistics calculation."""
 
     # Quality score ranges for distribution
-    quality_ranges: List[float] = Field(
-        [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
-        description="Quality score range boundaries"
+    quality_ranges: list[float] = Field(
+        default=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+        description="Quality score range boundaries",
     )
 
     # SNR ranges for distribution
-    snr_ranges: List[float] = Field(
-        [0, 10, 20, 30, 40, 50, 100],
-        description="SNR range boundaries in dB"
+    snr_ranges: list[float] = Field(
+        default=[0, 10, 20, 30, 40, 50, 100], description="SNR range boundaries in dB"
     )
 
     # File size ranges for distribution (bytes)
-    size_ranges: List[int] = Field(
-        [0, 10000, 50000, 100000, 500000, 1000000],
-        description="File size range boundaries in bytes"
+    size_ranges: list[int] = Field(
+        default=[0, 10000, 50000, 100000, 500000, 1000000],
+        description="File size range boundaries in bytes",
     )
 
     # Performance optimization
-    max_concurrent_files: int = Field(10, description="Maximum concurrent file processing")
-    batch_size: int = Field(100, description="Batch size for processing")
+    max_concurrent_files: int = Field(
+        default=10, description="Maximum concurrent file processing"
+    )
+    batch_size: int = Field(default=100, description="Batch size for processing")
+
 
 async def calculate_dataset_statistics(
-    dataset_path: str | Path,
-    config: Optional[DatasetStatisticsConfig] = None
+    dataset_path: str | Path, config: DatasetStatisticsConfig | None = None
 ) -> DatasetStatisticsResult:
     """Calculate comprehensive statistics for an audio dataset.
 
@@ -101,8 +103,8 @@ async def calculate_dataset_statistics(
         raise StatisticsError(f"Dataset path is not a directory: {dataset_path}")
 
     # Find all audio files
-    audio_files = []
-    for ext in ['*.wav', '*.mp3', '*.ogg', '*.flac']:
+    audio_files: list[Path] = []
+    for ext in ["*.wav", "*.mp3", "*.ogg", "*.flac"]:
         audio_files.extend(dataset_path.glob(ext))
 
     if not audio_files:
@@ -117,25 +119,23 @@ async def calculate_dataset_statistics(
             snr_distribution={},
             file_size_distribution={},
             metadata={},
-            error_message="No audio files found in dataset"
+            error_message="No audio files found in dataset",
         )
 
     try:
         # Process files in batches for memory efficiency
-        results = await _process_files_in_batches(
-            audio_files, config
-        )
+        results = await _process_files_in_batches(audio_files, config)
 
         # Calculate statistics from results
         return _calculate_statistics_from_results(results, config)
 
     except Exception as e:
-        raise StatisticsError(f"Dataset statistics calculation failed: {str(e)}") from e
+        raise StatisticsError(f"Dataset statistics calculation failed: {e!s}") from e
+
 
 async def _process_files_in_batches(
-    audio_files: List[Path],
-    config: DatasetStatisticsConfig
-) -> List[Dict[str, Any]]:
+    audio_files: list[Path], config: DatasetStatisticsConfig
+) -> list[dict[str, Any]]:
     """Process audio files in batches for memory efficiency.
 
     Args:
@@ -148,20 +148,21 @@ async def _process_files_in_batches(
     results = []
     semaphore = asyncio.Semaphore(config.max_concurrent_files)
 
-    async def process_file(file_path: Path) -> Dict[str, Any]:
+    async def process_file(file_path: Path) -> dict[str, Any]:
         """Process single file with rate limiting."""
         async with semaphore:
             return await _analyze_single_file(file_path)
 
     # Process files concurrently with batching
     for i in range(0, len(audio_files), config.batch_size):
-        batch = audio_files[i:i + config.batch_size]
+        batch = audio_files[i : i + config.batch_size]
         batch_results = await asyncio.gather(*[process_file(file) for file in batch])
         results.extend(batch_results)
 
     return results
 
-async def _analyze_single_file(file_path: Path) -> Dict[str, Any]:
+
+async def _analyze_single_file(file_path: Path) -> dict[str, Any]:
     """Analyze single audio file and extract statistics.
 
     Args:
@@ -200,16 +201,17 @@ async def _analyze_single_file(file_path: Path) -> Dict[str, Any]:
             "naturalness_score": quality_result.naturalness_score,
             "diversity_score": quality_result.diversity_score,
             "technical_score": quality_result.technical_score,
-            "error": validation_result.error_message or quality_result.error_message
+            "error": validation_result.error_message or quality_result.error_message,
         }
 
     except Exception as e:
         return {
             "file_path": str(file_path),
             "file_name": file_path.name,
-            "error": f"Analysis failed: {str(e)}",
-            "is_valid": False
+            "error": f"Analysis failed: {e!s}",
+            "is_valid": False,
         }
+
 
 async def _calculate_file_hash(file_path: Path) -> str:
     """Calculate file hash for uniqueness tracking.
@@ -233,9 +235,9 @@ async def _calculate_file_hash(file_path: Path) -> str:
 
     return hash_sha256.hexdigest()
 
+
 def _calculate_statistics_from_results(
-    results: List[Dict[str, Any]],
-    config: DatasetStatisticsConfig
+    results: list[dict[str, Any]], config: DatasetStatisticsConfig
 ) -> DatasetStatisticsResult:
     """Calculate comprehensive statistics from file analysis results.
 
@@ -261,7 +263,7 @@ def _calculate_statistics_from_results(
             snr_distribution={},
             file_size_distribution={},
             metadata={"failed_files": len(results)},
-            error_message="No valid audio files found"
+            error_message="No valid audio files found",
         )
 
     # Basic duration statistics
@@ -302,8 +304,12 @@ def _calculate_statistics_from_results(
         "quality_std": np.std(quality_scores),
         "average_snr": np.mean(snr_values) if snr_values else 0.0,
         "snr_std": np.std(snr_values) if len(snr_values) > 1 else 0.0,
-        "channel_distribution": _count_distribution([r["channels"] for r in valid_results]),
-        "bit_depth_distribution": _count_distribution([r["bit_depth"] for r in valid_results])
+        "channel_distribution": _count_distribution(
+            [r["channels"] for r in valid_results]
+        ),
+        "bit_depth_distribution": _count_distribution(
+            [r["bit_depth"] for r in valid_results]
+        ),
     }
 
     return DatasetStatisticsResult(
@@ -318,10 +324,13 @@ def _calculate_statistics_from_results(
         file_size_distribution=size_dist,
         metadata=metadata,
         detailed_stats=detailed_df,
-        error_message=None if valid_results else "No valid files for statistics"
+        error_message=None if valid_results else "No valid files for statistics",
     )
 
-def _create_distribution(values: List[float], ranges: List[float]) -> Dict[str, int]:
+
+def _create_distribution(
+    values: list[float] | list[int] | list[Any], ranges: list[float] | list[int]
+) -> dict[str, int]:
     """Create distribution histogram from values and ranges.
 
     Args:
@@ -351,7 +360,8 @@ def _create_distribution(values: List[float], ranges: List[float]) -> Dict[str, 
 
     return distribution
 
-def _count_distribution(values: List[Any]) -> Dict[Any, int]:
+
+def _count_distribution(values: list[Any]) -> dict[Any, int]:
     """Count distribution of discrete values.
 
     Args:
@@ -360,15 +370,16 @@ def _count_distribution(values: List[Any]) -> Dict[Any, int]:
     Returns:
         Dictionary with values as keys and counts as values
     """
-    distribution = {}
+    distribution: dict[str, int] = {}
     for value in values:
         distribution[value] = distribution.get(value, 0) + 1
     return distribution
 
+
 async def generate_dataset_report(
     dataset_path: str | Path,
     output_path: str | Path,
-    config: Optional[DatasetStatisticsConfig] = None
+    config: DatasetStatisticsConfig | None = None,
 ) -> Path:
     """Generate comprehensive dataset report with statistics and visualizations.
 
@@ -388,7 +399,9 @@ async def generate_dataset_report(
         stats_result = await calculate_dataset_statistics(dataset_path, config)
 
         if stats_result.error_message:
-            raise StatisticsError(f"Statistics calculation failed: {stats_result.error_message}")
+            raise StatisticsError(
+                f"Statistics calculation failed: {stats_result.error_message}"
+            )
 
         # Generate HTML report
         report_content = _generate_html_report(stats_result)
@@ -404,7 +417,8 @@ async def generate_dataset_report(
         return output_path
 
     except Exception as e:
-        raise StatisticsError(f"Report generation failed: {str(e)}") from e
+        raise StatisticsError(f"Report generation failed: {e!s}") from e
+
 
 def _generate_html_report(stats_result: DatasetStatisticsResult) -> str:
     """Generate HTML report content from statistics.
@@ -441,7 +455,7 @@ def _generate_html_report(stats_result: DatasetStatisticsResult) -> str:
     <div class="stats-box">
         <h2>📊 Basic Statistics</h2>
         <p><span class="metric">Total Files:</span> <span class="value">{stats_result.file_count}</span></p>
-        <p><span class="metric">Total Duration:</span> <span class="value">{stats_result.total_duration_seconds:.2f} seconds ({stats_result.total_duration_seconds/3600:.2f} hours)</span></p>
+        <p><span class="metric">Total Duration:</span> <span class="value">{stats_result.total_duration_seconds:.2f} seconds ({stats_result.total_duration_seconds / 3600:.2f} hours)</span></p>
         <p><span class="metric">Average Duration:</span> <span class="value">{stats_result.average_duration_seconds:.2f} seconds</span></p>
         <p><span class="metric">Duration Range:</span> <span class="value">{stats_result.min_duration_seconds:.2f}s - {stats_result.max_duration_seconds:.2f}s</span></p>
     </div>
@@ -489,7 +503,8 @@ def _generate_html_report(stats_result: DatasetStatisticsResult) -> str:
 
     return html_content
 
-def _generate_table_rows(distribution: Dict, total: int) -> str:
+
+def _generate_table_rows(distribution: dict[Any, int], total: int) -> str:
     """Generate HTML table rows from distribution data.
 
     Args:
@@ -502,10 +517,13 @@ def _generate_table_rows(distribution: Dict, total: int) -> str:
     rows = []
     for key, count in distribution.items():
         percentage = (count / total * 100) if total > 0 else 0
-        rows.append(f"<tr><td>{key}</td><td>{count}</td><td>{percentage:.1f}%</td></tr>")
+        rows.append(
+            f"<tr><td>{key}</td><td>{count}</td><td>{percentage:.1f}%</td></tr>"
+        )
     return "\n".join(rows)
 
-def _format_metadata(metadata: Dict[str, Any]) -> str:
+
+def _format_metadata(metadata: dict[str, Any]) -> str:
     """Format metadata dictionary for HTML display.
 
     Args:
@@ -524,6 +542,7 @@ def _format_metadata(metadata: Dict[str, Any]) -> str:
         else:
             lines.append(f"{key}: {value}")
     return "\n".join(lines)
+
 
 def _generate_error_section(stats_result: DatasetStatisticsResult) -> str:
     """Generate error section if there are issues.
@@ -544,7 +563,9 @@ def _generate_error_section(stats_result: DatasetStatisticsResult) -> str:
 
     # Check for files with errors in detailed stats
     if stats_result.detailed_stats is not None:
-        error_files = stats_result.detailed_stats[stats_result.detailed_stats["error"].notna()]
+        error_files = stats_result.detailed_stats[
+            stats_result.detailed_stats["error"].notna()
+        ]
         if not error_files.empty:
             error_list_items = []
             for _, row in error_files.iterrows():

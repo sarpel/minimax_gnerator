@@ -17,25 +17,48 @@ keywords = ["wake-word", "tts", "dataset", "audio", "generation"]
 
 # These are the libraries our project depends on to run.
 # We are using specific versions to ensure stability.
+#
+# IMPORTANT: Some TTS providers require special installation and are NOT included here.
+# Use the "Install" button in the Providers panel to install them, or run manually:
+#   - Bark: pip install git+https://github.com/suno-ai/bark.git
+#   - Mimic3: pip install mycroft-mimic3-tts (Linux only, requires eSpeak)
+#   - ChatTTS: pip install ChatTTS
+#   - F5-TTS: pip install f5-tts
+#   - StyleTTS2: pip install styletts2
+#   - Kokoro: pip install kokoro-onnx
+#   - Orpheus: pip install orpheus-tts
+#
 dependencies = [
+    # ===== Core Dependencies =====
+    "numpy<2.0.0",              # PINNED: Version 2.0.0+ breaks F5-TTS and others
+    "pydantic>=2.5.0,<2.11.0",  # PINNED: F5-TTS requires <=2.10.6
     "httpx>=0.27.0",            # For making HTTP requests (web calls)
     "soundfile>=0.12.0",        # For saving audio files
     "librosa>=0.10.0",          # For audio processing (resampling, etc.)
-    "pydantic>=2.5.0",          # For data validation and settings
     "pydantic-settings>=2.1.0", # For managing configuration from .env files
     "python-dotenv>=1.0.0",     # For loading environment variables from .env
     "pyyaml>=6.0.0",            # For reading YAML configuration files
     "click>=8.1.0",             # For creating the Command Line Interface (CLI)
     "rich>=13.7.0",             # For beautiful terminal output (colors, tables)
-    "edge-tts>=6.1.0",          # The free Text-to-Speech engine we use in Phase 1A
     "scipy>=1.11.0",            # For scientific computing and signal processing
     "pyroomacoustics>=0.7.0",   # For room impulse response simulation and reverb
-    "piper-tts>=1.2.0",         # Piper TTS for CPU-friendly, fast inference with Turkish support
-    "coqui-tts>=0.24.0",        # Community fork of Coqui TTS that supports modern pandas/numpy
-    "onnxruntime>=1.16.0",      # ONNX runtime for efficient model inference
     "pandas>=2.1.0",            # For data manipulation and CSV export
     "scikit-learn>=1.3.0",      # For stratified dataset splitting
     "jinja2>=3.1.0",            # For generating training scripts from templates
+    "tenacity>=8.0.0",          # For retry logic in batch processing
+    "aiosqlite>=0.19.0",        # For async SQLite operations in checkpoint system
+    
+    # ===== Deep Learning Core =====
+    "torch>=2.0.0",             # PyTorch - required for most GPU-based TTS providers
+    "torchaudio>=2.0.0",        # Audio processing with PyTorch
+    "onnxruntime>=1.16.0",      # ONNX runtime for efficient CPU model inference
+    
+    # ===== TTS Providers (Windows 11 Compatible) =====
+    "edge-tts>=6.1.0",          # Microsoft Edge TTS (free, cloud-based, no GPU)
+    "piper-tts>=1.2.0",         # Piper TTS - fast CPU inference, uses onnxruntime
+    "coqui-tts>=0.24.0,<0.25.0", # Coqui XTTS - Pin <0.25.0 to avoid numpy>=2 conflict
+    "kokoro-onnx<=0.3.1",       # Kokoro TTS - Version 0.4.9+ requires numpy>=2.0.2 which breaks compatibility
+    "f5-tts>=1.1.10",           # F5 TTS - voice cloning, uses torch/torchaudio
 ]
 
 [project.optional-dependencies]
@@ -46,6 +69,14 @@ dev = [
     "black",            # For code formatting
     "isort",            # For sorting imports
     "mypy",             # For static type checking
+]
+# Dependencies for the Web UI (optional, install with: pip install wakegen[web])
+web = [
+    "fastapi>=0.109.0",        # Modern async web framework for building APIs
+    "uvicorn[standard]>=0.27.0",  # ASGI server to run FastAPI with WebSocket support
+    "python-multipart>=0.0.6", # For handling file uploads in FastAPI
+    "websockets>=12.0",        # WebSocket protocol for real-time updates
+    "aiofiles>=23.0.0",        # Async file operations for serving audio files
 ]
 
 [project.scripts]

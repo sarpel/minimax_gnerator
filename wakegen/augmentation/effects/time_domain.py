@@ -14,12 +14,16 @@ Key Features:
 """
 
 from __future__ import annotations
-import numpy as np
+
+from typing import Any
+
 import librosa
-from typing import Optional, Tuple
+import numpy as np
+import soundfile as sf
+
 from wakegen.core.exceptions import AugmentationError
 from wakegen.utils.audio import load_audio
-import soundfile as sf
+
 
 class TimeDomainEffects:
     """
@@ -41,14 +45,16 @@ class TimeDomainEffects:
     def _validate_sample_rate(self, sample_rate: int) -> None:
         """Validate sample rate is suitable for time domain effects."""
         if not (8000 <= sample_rate <= 48000):
-            raise AugmentationError(f"Sample rate {sample_rate}Hz is out of valid range (8000-48000Hz)")
+            raise AugmentationError(
+                f"Sample rate {sample_rate}Hz is out of valid range (8000-48000Hz)"
+            )
 
     def pitch_shift(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         n_steps: float,
-        preserve_formants: bool = True
-    ) -> np.ndarray:
+        preserve_formants: bool = True,
+    ) -> np.ndarray[Any, Any]:
         """
         Shift the pitch of audio by specified number of semitones.
 
@@ -64,7 +70,9 @@ class TimeDomainEffects:
             AugmentationError: If pitch shifting fails.
         """
         if n_steps < -12 or n_steps > 12:
-            raise AugmentationError("Pitch shift range must be between -12 and +12 semitones")
+            raise AugmentationError(
+                "Pitch shift range must be between -12 and +12 semitones"
+            )
 
         try:
             # Use librosa's pitch shift with phase vocoder
@@ -75,25 +83,20 @@ class TimeDomainEffects:
                     sr=self.sample_rate,
                     n_steps=n_steps,
                     bins_per_octave=36,
-                    res_type='soxr_hq'
+                    res_type="soxr_hq",
                 )
             else:
                 # For general audio, simple pitch shift
                 return librosa.effects.pitch_shift(
-                    audio,
-                    sr=self.sample_rate,
-                    n_steps=n_steps,
-                    res_type='soxr_hq'
+                    audio, sr=self.sample_rate, n_steps=n_steps, res_type="soxr_hq"
                 )
 
         except Exception as e:
-            raise AugmentationError(f"Failed to pitch shift audio: {str(e)}") from e
+            raise AugmentationError(f"Failed to pitch shift audio: {e!s}") from e
 
     def time_stretch(
-        self,
-        audio: np.ndarray,
-        rate: float
-    ) -> np.ndarray:
+        self, audio: np.ndarray[Any, Any], rate: float
+    ) -> np.ndarray[Any, Any]:
         """
         Stretch or compress audio in time without changing pitch.
 
@@ -114,20 +117,14 @@ class TimeDomainEffects:
 
         try:
             # Use librosa's time stretch with phase vocoder
-            return librosa.effects.time_stretch(
-                audio,
-                rate=rate,
-                res_type='soxr_hq'
-            )
+            return librosa.effects.time_stretch(audio, rate=rate, res_type="soxr_hq")
 
         except Exception as e:
-            raise AugmentationError(f"Failed to time stretch audio: {str(e)}") from e
+            raise AugmentationError(f"Failed to time stretch audio: {e!s}") from e
 
     def change_speed(
-        self,
-        audio: np.ndarray,
-        speed_factor: float
-    ) -> np.ndarray:
+        self, audio: np.ndarray[Any, Any], speed_factor: float
+    ) -> np.ndarray[Any, Any]:
         """
         Change the speed of audio (affects both pitch and duration).
 
@@ -158,18 +155,18 @@ class TimeDomainEffects:
             return librosa.resample(
                 audio,
                 orig_sr=self.sample_rate,
-                target_sr=int(self.sample_rate * speed_factor)
+                target_sr=int(self.sample_rate * speed_factor),
             )
 
         except Exception as e:
-            raise AugmentationError(f"Failed to change audio speed: {str(e)}") from e
+            raise AugmentationError(f"Failed to change audio speed: {e!s}") from e
 
     def apply_tempo_variation(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         tempo_factor: float,
-        preserve_pitch: bool = True
-    ) -> np.ndarray:
+        preserve_pitch: bool = True,
+    ) -> np.ndarray[Any, Any]:
         """
         Apply tempo variation while optionally preserving pitch.
 
@@ -198,7 +195,7 @@ class TimeDomainEffects:
                 return self.change_speed(audio, tempo_factor)
 
         except Exception as e:
-            raise AugmentationError(f"Failed to apply tempo variation: {str(e)}") from e
+            raise AugmentationError(f"Failed to apply tempo variation: {e!s}") from e
 
     async def apply_time_effects(
         self,
@@ -206,7 +203,7 @@ class TimeDomainEffects:
         output_path: str,
         pitch_steps: float = 0.0,
         time_stretch_factor: float = 1.0,
-        speed_factor: float = 1.0
+        speed_factor: float = 1.0,
     ) -> None:
         """
         Apply time domain effects to an audio file and save the result.
@@ -243,9 +240,9 @@ class TimeDomainEffects:
             sf.write(output_path, audio, self.sample_rate)
 
         except Exception as e:
-            raise AugmentationError(f"Failed to apply time effects: {str(e)}") from e
+            raise AugmentationError(f"Failed to apply time effects: {e!s}") from e
 
-    def get_effect_preset(self, preset_name: str) -> dict:
+    def get_effect_preset(self, preset_name: str) -> dict[str, Any]:
         """
         Get pre-configured effect parameters for common scenarios.
 
@@ -261,45 +258,47 @@ class TimeDomainEffects:
         """
         presets = {
             "male_to_female": {
-                "pitch_steps": 4.0,      # Raise pitch by 4 semitones
+                "pitch_steps": 4.0,  # Raise pitch by 4 semitones
                 "time_stretch_factor": 0.95,  # Slightly faster
                 "speed_factor": 1.0,
-                "description": "Convert male voice to sound more female"
+                "description": "Convert male voice to sound more female",
             },
             "female_to_male": {
-                "pitch_steps": -5.0,     # Lower pitch by 5 semitones
+                "pitch_steps": -5.0,  # Lower pitch by 5 semitones
                 "time_stretch_factor": 1.05,  # Slightly slower
                 "speed_factor": 1.0,
-                "description": "Convert female voice to sound more male"
+                "description": "Convert female voice to sound more male",
             },
             "child_voice": {
-                "pitch_steps": 8.0,      # Raise pitch significantly
+                "pitch_steps": 8.0,  # Raise pitch significantly
                 "time_stretch_factor": 0.85,  # Faster speech
                 "speed_factor": 1.1,
-                "description": "Make voice sound more child-like"
+                "description": "Make voice sound more child-like",
             },
             "slow_speech": {
                 "pitch_steps": 0.0,
-                "time_stretch_factor": 1.3,   # Stretch time
+                "time_stretch_factor": 1.3,  # Stretch time
                 "speed_factor": 0.9,
-                "description": "Slow down speech without major pitch change"
+                "description": "Slow down speech without major pitch change",
             },
             "fast_speech": {
                 "pitch_steps": 0.0,
-                "time_stretch_factor": 0.7,   # Compress time
+                "time_stretch_factor": 0.7,  # Compress time
                 "speed_factor": 1.1,
-                "description": "Speed up speech without major pitch change"
+                "description": "Speed up speech without major pitch change",
             },
             "robot_voice": {
-                "pitch_steps": -2.0,     # Slightly lower pitch
+                "pitch_steps": -2.0,  # Slightly lower pitch
                 "time_stretch_factor": 1.0,
                 "speed_factor": 1.0,
-                "description": "Create robotic-sounding voice"
-            }
+                "description": "Create robotic-sounding voice",
+            },
         }
 
         if preset_name not in presets:
             available = list(presets.keys())
-            raise AugmentationError(f"Unknown effect preset '{preset_name}'. Available: {available}")
+            raise AugmentationError(
+                f"Unknown effect preset '{preset_name}'. Available: {available}"
+            )
 
         return presets[preset_name].copy()

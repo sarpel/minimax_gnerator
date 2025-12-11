@@ -1,0 +1,357 @@
+<!--
+    AUDIO PLAYER COMPONENT
+    ======================
+    A reusable audio player with waveform visualization.
+
+    USAGE:
+    ======
+    {% include "components/audio_player.html" %}
+
+    Then initialize with JavaScript:
+    createAudioPlayer('player-container-id', '/path/to/audio.wav');
+
+    FEATURES:
+    =========
+    - Play/pause button
+    - Waveform visualization
+    - Progress bar (clickable for seeking)
+    - Time display
+    - Volume control
+-->
+
+<template id="audio-player-template">
+    <div class="audio-player-container bg-gray-50 dark:bg-gray-700 rounded-xl p-4">
+        <!-- Controls Row -->
+        <div class="flex items-center space-x-4">
+            <!-- Play/Pause Button -->
+            <button
+                class="play-btn w-12 h-12 rounded-full bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
+                <svg class="play-icon w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                </svg>
+                <svg class="pause-icon w-6 h-6 hidden" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                </svg>
+            </button>
+
+            <!-- Waveform & Progress -->
+            <div class="flex-1">
+                <!-- Waveform Canvas -->
+                <div
+                    class="waveform-container relative h-12 bg-gray-200 dark:bg-gray-600 rounded-lg overflow-hidden cursor-pointer">
+                    <canvas class="waveform-canvas w-full h-full"></canvas>
+                    <!-- Progress Overlay -->
+                    <div class="progress-overlay absolute top-0 left-0 h-full bg-primary-500/30 transition-all duration-100"
+                        style="width: 0%"></div>
+                    <!-- Playhead -->
+                    <div class="playhead absolute top-0 w-0.5 h-full bg-primary-600" style="left: 0%"></div>
+                </div>
+
+                <!-- Time Display -->
+                <div class="flex justify-between mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    <span class="current-time">0:00</span>
+                    <span class="duration">0:00</span>
+                </div>
+            </div>
+
+            <!-- Volume Control -->
+            <div class="flex items-center space-x-2">
+                <button
+                    class="volume-btn text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                        <path
+                            d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" />
+                    </svg>
+                </button>
+                <input type="range"
+                    class="volume-slider w-16 h-1 bg-gray-300 dark:bg-gray-600 rounded appearance-none cursor-pointer"
+                    min="0" max="1" step="0.1" value="1">
+            </div>
+        </div>
+
+        <!-- File Info -->
+        <div class="file-info mt-2 text-xs text-gray-500 dark:text-gray-400 hidden">
+            <span class="filename"></span>
+            <span class="separator mx-1">•</span>
+            <span class="sample-rate"></span>
+        </div>
+
+        <!-- Hidden Audio Element -->
+        <audio class="audio-element hidden"></audio>
+    </div>
+</template>
+
+<script>
+    /**
+     * Audio Player Component
+     *
+     * Creates interactive audio players with waveform visualization.
+     * Uses the Canvas API for drawing and the Web Audio API could be added
+     * for more advanced features.
+     */
+
+    class AudioPlayer {
+        /**
+         * Create a new audio player instance.
+         *
+         * @param {string} containerId - ID of container element
+         * @param {string} audioUrl - URL of the audio file
+         * @param {Object} options - Optional configuration
+         */
+        constructor(containerId, audioUrl, options = {}) {
+            this.container = document.getElementById(containerId);
+            this.audioUrl = audioUrl;
+            this.options = {
+                waveformColor: options.waveformColor || '#6366f1',
+                progressColor: options.progressColor || '#818cf8',
+                showFileInfo: options.showFileInfo || false,
+                ...options
+            };
+
+            this.audio = null;
+            this.waveformData = null;
+            this.isPlaying = false;
+
+            this.init();
+        }
+
+        /**
+         * Initialize the player by creating DOM elements and loading audio.
+         */
+        async init() {
+            // Clone template
+            const template = document.getElementById('audio-player-template');
+            const clone = template.content.cloneNode(true);
+            this.container.innerHTML = '';
+            this.container.appendChild(clone);
+
+            // Cache DOM references
+            this.elements = {
+                playBtn: this.container.querySelector('.play-btn'),
+                playIcon: this.container.querySelector('.play-icon'),
+                pauseIcon: this.container.querySelector('.pause-icon'),
+                canvas: this.container.querySelector('.waveform-canvas'),
+                waveformContainer: this.container.querySelector('.waveform-container'),
+                progressOverlay: this.container.querySelector('.progress-overlay'),
+                playhead: this.container.querySelector('.playhead'),
+                currentTime: this.container.querySelector('.current-time'),
+                duration: this.container.querySelector('.duration'),
+                volumeSlider: this.container.querySelector('.volume-slider'),
+                audio: this.container.querySelector('.audio-element'),
+                fileInfo: this.container.querySelector('.file-info'),
+                filename: this.container.querySelector('.filename'),
+                sampleRate: this.container.querySelector('.sample-rate')
+            };
+
+            // Set up audio element
+            this.audio = this.elements.audio;
+            this.audio.src = this.audioUrl;
+            this.audio.preload = 'metadata';
+
+            // Bind event handlers
+            this.bindEvents();
+
+            // Load waveform data
+            await this.loadWaveform();
+        }
+
+        /**
+         * Bind all event handlers.
+         */
+        bindEvents() {
+            // Play/Pause
+            this.elements.playBtn.addEventListener('click', () => this.togglePlay());
+
+            // Audio events
+            this.audio.addEventListener('loadedmetadata', () => {
+                this.elements.duration.textContent = this.formatTime(this.audio.duration);
+            });
+
+            this.audio.addEventListener('timeupdate', () => {
+                this.updateProgress();
+            });
+
+            this.audio.addEventListener('ended', () => {
+                this.isPlaying = false;
+                this.updatePlayButton();
+            });
+
+            // Seek on waveform click
+            this.elements.waveformContainer.addEventListener('click', (e) => {
+                const rect = this.elements.waveformContainer.getBoundingClientRect();
+                const percent = (e.clientX - rect.left) / rect.width;
+                this.audio.currentTime = percent * this.audio.duration;
+            });
+
+            // Volume control
+            this.elements.volumeSlider.addEventListener('input', (e) => {
+                this.audio.volume = e.target.value;
+            });
+        }
+
+        /**
+         * Toggle play/pause state.
+         */
+        togglePlay() {
+            if (this.isPlaying) {
+                this.audio.pause();
+            } else {
+                this.audio.play();
+            }
+            this.isPlaying = !this.isPlaying;
+            this.updatePlayButton();
+        }
+
+        /**
+         * Update the play button icon based on state.
+         */
+        updatePlayButton() {
+            this.elements.playIcon.classList.toggle('hidden', this.isPlaying);
+            this.elements.pauseIcon.classList.toggle('hidden', !this.isPlaying);
+        }
+
+        /**
+         * Update progress display.
+         */
+        updateProgress() {
+            const percent = (this.audio.currentTime / this.audio.duration) * 100;
+            this.elements.progressOverlay.style.width = `${percent}%`;
+            this.elements.playhead.style.left = `${percent}%`;
+            this.elements.currentTime.textContent = this.formatTime(this.audio.currentTime);
+        }
+
+        /**
+         * Load waveform data from the API.
+         */
+        async loadWaveform() {
+            try {
+                // Try to get waveform from API
+                const response = await fetch(`/api/audio/waveform/${encodeURIComponent(this.audioUrl)}?num_samples=200`);
+
+                if (response.ok) {
+                    this.waveformData = await response.json();
+                    this.drawWaveform();
+
+                    // Show file info if enabled
+                    if (this.options.showFileInfo) {
+                        this.elements.fileInfo.classList.remove('hidden');
+                        this.elements.filename.textContent = this.waveformData.filename;
+                        this.elements.sampleRate.textContent = `${this.waveformData.sample_rate} Hz`;
+                    }
+                } else {
+                    // Fallback: draw simple placeholder
+                    this.drawPlaceholderWaveform();
+                }
+            } catch (e) {
+                console.warn('Could not load waveform:', e);
+                this.drawPlaceholderWaveform();
+            }
+        }
+
+        /**
+         * Draw the waveform on the canvas.
+         */
+        drawWaveform() {
+            const canvas = this.elements.canvas;
+            const ctx = canvas.getContext('2d');
+
+            // Set canvas size to match container
+            canvas.width = canvas.offsetWidth * 2; // 2x for retina
+            canvas.height = canvas.offsetHeight * 2;
+            ctx.scale(2, 2);
+
+            const width = canvas.offsetWidth;
+            const height = canvas.offsetHeight;
+            const samples = this.waveformData.samples;
+            const barWidth = width / samples.length;
+            const barGap = 1;
+
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = this.options.waveformColor;
+
+            samples.forEach((sample, i) => {
+                const barHeight = Math.max(2, sample * height * 0.9);
+                const x = i * barWidth;
+                const y = (height - barHeight) / 2;
+
+                ctx.fillRect(x, y, barWidth - barGap, barHeight);
+            });
+        }
+
+        /**
+         * Draw a placeholder waveform when API fails.
+         */
+        drawPlaceholderWaveform() {
+            const canvas = this.elements.canvas;
+            const ctx = canvas.getContext('2d');
+
+            canvas.width = canvas.offsetWidth * 2;
+            canvas.height = canvas.offsetHeight * 2;
+            ctx.scale(2, 2);
+
+            const width = canvas.offsetWidth;
+            const height = canvas.offsetHeight;
+
+            ctx.fillStyle = this.options.waveformColor;
+            ctx.globalAlpha = 0.3;
+
+            // Draw random bars as placeholder
+            for (let i = 0; i < 50; i++) {
+                const barHeight = Math.random() * height * 0.6 + height * 0.1;
+                const x = (width / 50) * i;
+                const y = (height - barHeight) / 2;
+                ctx.fillRect(x, y, width / 50 - 1, barHeight);
+            }
+
+            ctx.globalAlpha = 1;
+        }
+
+        /**
+         * Format time in seconds to MM:SS.
+         */
+        formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        /**
+         * Destroy the player and clean up.
+         */
+        destroy() {
+            if (this.audio) {
+                this.audio.pause();
+                this.audio.src = '';
+            }
+            this.container.innerHTML = '';
+        }
+    }
+
+    /**
+     * Factory function for creating players.
+     */
+    function createAudioPlayer(containerId, audioUrl, options = {}) {
+        return new AudioPlayer(containerId, audioUrl, options);
+    }
+</script>
+
+<style>
+    /* Additional styles for audio player */
+    .audio-player-container .volume-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 12px;
+        height: 12px;
+        background: #6366f1;
+        border-radius: 50%;
+        cursor: pointer;
+    }
+
+    .audio-player-container .volume-slider::-moz-range-thumb {
+        width: 12px;
+        height: 12px;
+        background: #6366f1;
+        border-radius: 50%;
+        cursor: pointer;
+        border: none;
+    }
+</style>

@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 import logging
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
+
 from jinja2 import Template
 
 # We use 'logging' to print messages to the console in a structured way.
@@ -50,13 +52,14 @@ if __name__ == "__main__":
     train_model()
 """
 
+
 async def generate_training_script(
     export_dir: str,
     output_script_path: str,
     model_name: str = "my_wakeword",
     steps: int = 10000,
     batch_size: int = 32,
-    learning_rate: float = 0.001
+    learning_rate: float = 0.001,
 ) -> None:
     """
     Generates a Python script to train an OpenWakeWord model.
@@ -74,7 +77,7 @@ async def generate_training_script(
         learning_rate: How fast the model should learn (too fast = unstable, too slow = takes forever).
     """
     export_path = Path(export_dir)
-    
+
     # We assume the standard names created by our splitter
     train_json = export_path / "train.json"
     val_json = export_path / "val.json"
@@ -86,13 +89,15 @@ async def generate_training_script(
 
     # 1. Prepare the values for the template
     # We need to use absolute paths so the script works from anywhere
-    context: Dict[str, Any] = {
+    context: dict[str, Any] = {
         "model_name": model_name,
-        "train_data_path": str(train_json.absolute()).replace("\\", "/"), # Fix for Windows paths in Python strings
+        "train_data_path": str(train_json.absolute()).replace(
+            "\\", "/"
+        ),  # Fix for Windows paths in Python strings
         "val_data_path": str(val_json.absolute()).replace("\\", "/"),
         "steps": steps,
         "batch_size": batch_size,
-        "learning_rate": learning_rate
+        "learning_rate": learning_rate,
     }
 
     # 2. Render the template

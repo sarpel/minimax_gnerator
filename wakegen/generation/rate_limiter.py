@@ -1,4 +1,4 @@
-"""Rate Limiter
+"""Rate Limiter (DEPRECATED - see wakegen.utils.async_helpers.RateLimiter)
 
 Token bucket-based rate limiter for API calls.
 Ensures providers don't exceed their rate limits.
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Optional
+
 
 class RateLimiter:
     """Token bucket rate limiter for API calls.
@@ -28,7 +28,7 @@ class RateLimiter:
     Attributes:
         max_requests: Maximum number of requests allowed in the period
         period_seconds: Time period in seconds for the rate limit
-        _tokens: Current number of tokens in the bucket
+        _tokens: Current number of tokens in the bucket (float for fractional tokens)
         _last_refill: Timestamp of last token refill
         _lock: Async lock for thread safety
     """
@@ -47,7 +47,9 @@ class RateLimiter:
 
         self.max_requests = max_requests
         self.period_seconds = period_seconds
-        self._tokens = max_requests  # Start with full bucket
+        self._tokens: float = float(
+            max_requests
+        )  # Start with full bucket (Issue 10: explicit float)
         self._last_refill = time.time()
         self._lock = asyncio.Lock()
 
@@ -66,10 +68,12 @@ class RateLimiter:
             time_since_refill = now - self._last_refill
 
             # Calculate how many tokens to add (fractional tokens based on time)
-            tokens_to_add = time_since_refill * (self.max_requests / self.period_seconds)
+            tokens_to_add = time_since_refill * (
+                self.max_requests / self.period_seconds
+            )
 
             # Refill the bucket
-            self._tokens = min(self.max_requests, self._tokens + tokens_to_add)
+            self._tokens = min(float(self.max_requests), self._tokens + tokens_to_add)
             self._last_refill = now
 
             if self._tokens >= 1:
@@ -86,7 +90,7 @@ class RateLimiter:
             await asyncio.sleep(seconds_needed)
 
             # After waiting, we should have at least 1 token
-            self._tokens = max(0, self._tokens - 1)
+            self._tokens = max(0.0, self._tokens - 1)
 
     def get_current_rate(self) -> float:
         """Get the current rate in requests per second.
@@ -96,18 +100,18 @@ class RateLimiter:
         """
         return self.max_requests / self.period_seconds
 
-    def get_available_tokens(self) -> int:
+    def get_available_tokens(self) -> float:
         """Get the number of currently available tokens.
 
         Returns:
-            Number of available tokens
+            Number of available tokens (may be fractional due to token bucket algorithm).
         """
         return self._tokens
 
     async def reset(self) -> None:
         """Reset the rate limiter to full capacity."""
         async with self._lock:
-            self._tokens = self.max_requests
+            self._tokens = float(self.max_requests)
             self._last_refill = time.time()
 
     def __repr__(self) -> str:

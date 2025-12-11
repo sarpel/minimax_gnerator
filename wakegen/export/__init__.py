@@ -13,25 +13,25 @@ Supported formats:
 - Hugging Face datasets
 """
 
-# Core exports
-from .openwakeword import export_dataset
-from .splitter import split_dataset
-from .manifest import generate_manifest
-
 # Format exports
 from .formats import (
-    ExportFormat,
-    DatasetMetadata,
-    SampleMetadata,
     BaseExporter,
+    DatasetMetadata,
+    ExportFormat,
+    HuggingFaceExporter,
     MycroftPreciseExporter,
     PicovoiceExporter,
-    TensorFlowExporter,
     PyTorchExporter,
-    HuggingFaceExporter,
+    SampleMetadata,
+    TensorFlowExporter,
     export_to_format,
     list_export_formats,
 )
+from .manifest import generate_manifest
+
+# Core exports
+from .openwakeword import export_dataset
+from .splitter import split_dataset
 
 __all__ = [
     # Core

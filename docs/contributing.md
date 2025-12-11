@@ -6,7 +6,7 @@ We welcome contributions! Whether it's fixing a bug, adding a new TTS provider, 
 
 1.  **Clone the repo**:
     ```bash
-    git clone https://github.com/yourusername/wakegen.git
+    git clone https://github.com/sarpel/wakegen.git
     cd wakegen
     ```
 

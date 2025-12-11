@@ -1,19 +1,21 @@
 from __future__ import annotations
-import os
-import asyncio
-import soundfile as sf
-from typing import List, Any, Optional, Tuple
-from pathlib import Path
 
-from wakegen.core.types import ProviderType, Gender
+import asyncio
+import os
+from typing import Any, cast
+
+import soundfile as sf
+
 from wakegen.core.exceptions import ProviderError
+from wakegen.core.types import Gender, ProviderType
+from wakegen.models.audio import Voice
 from wakegen.providers.base import BaseProvider
 from wakegen.providers.registry import register_provider
-from wakegen.models.audio import Voice
 
 # We implement the 'BaseProvider' class to create our Kokoro TTS provider.
 # Kokoro is a very lightweight (82M params) TTS model that runs fast on CPU.
 # It uses ONNX (Open Neural Network Exchange) for efficient inference.
+
 
 class KokoroTTSProvider(BaseProvider):
     """
@@ -29,7 +31,7 @@ class KokoroTTSProvider(BaseProvider):
         """
         super().__init__(config)
         # We'll store the Kokoro instance here once initialized
-        self._kokoro: Optional[Any] = None
+        self._kokoro: Any | None = None
         # Define the model filename - this will be downloaded automatically by the library
         self._model_filename = "kokoro-v0_19.onnx"
         self._voices_filename = "voices.json"
@@ -59,7 +61,7 @@ class KokoroTTSProvider(BaseProvider):
     async def _get_kokoro_instance(self) -> Any:
         """
         Get or create the Kokoro instance (Lazy Loading).
-        
+
         Lazy loading means we don't load the heavy model into memory until
         we actually need to generate speech. This saves RAM on startup.
         """
@@ -75,11 +77,11 @@ class KokoroTTSProvider(BaseProvider):
             # The library handles downloading the model files if they don't exist
             # This might take a moment on the first run
             self._kokoro = Kokoro(self._model_filename, self._voices_filename)
-            
+
             return self._kokoro
 
         except Exception as e:
-            raise ProviderError(f"Failed to initialize Kokoro model: {str(e)}") from e
+            raise ProviderError(f"Failed to initialize Kokoro model: {e!s}") from e
 
     async def generate(self, text: str, voice_id: str, output_path: str) -> None:
         """
@@ -102,14 +104,12 @@ class KokoroTTSProvider(BaseProvider):
             # We run this in a thread executor because it's a CPU-bound blocking operation
             # and we don't want to freeze the whole application while generating.
             loop = asyncio.get_running_loop()
-            
+
             # We define a helper function to run in the thread
-            def _run_inference():
-                return kokoro.create(
-                    text=text,
-                    voice=voice_id,
-                    speed=1.0,
-                    lang="en-us"
+            def _run_inference() -> tuple[Any, int]:
+                return cast(
+                    tuple[Any, int],
+                    kokoro.create(text=text, voice=voice_id, speed=1.0, lang="en-us"),
                 )
 
             # Run the inference in a separate thread
@@ -118,15 +118,15 @@ class KokoroTTSProvider(BaseProvider):
             # 4. Save the audio to a file
             # We use soundfile to write the numpy array to a WAV file
             # This is also a blocking I/O operation, so we run it in a thread
-            def _save_audio():
+            def _save_audio() -> None:
                 sf.write(output_path, samples, sample_rate)
 
             await loop.run_in_executor(None, _save_audio)
 
         except Exception as e:
-            raise ProviderError(f"Kokoro TTS generation failed: {str(e)}") from e
+            raise ProviderError(f"Kokoro TTS generation failed: {e!s}") from e
 
-    async def list_voices(self) -> List[Voice]:
+    async def list_voices(self) -> list[Voice]:
         """
         Lists available voices for Kokoro TTS.
         Returns a list of high-quality voices available in the model.
@@ -149,18 +149,21 @@ class KokoroTTSProvider(BaseProvider):
             # Convert the raw tuples into our standardized Voice objects
             voice_list = []
             for v_id, v_name, v_gender, v_lang in available_voices:
-                voice_list.append(Voice(
-                    id=v_id,
-                    name=v_name,
-                    gender=v_gender,
-                    language=v_lang,
-                    provider=self.provider_type
-                ))
+                voice_list.append(
+                    Voice(
+                        id=v_id,
+                        name=v_name,
+                        gender=v_gender,
+                        language=v_lang,
+                        provider=self.provider_type,
+                        supports_cloning=False,
+                    )
+                )
 
             return voice_list
 
         except Exception as e:
-            raise ProviderError(f"Failed to list Kokoro voices: {str(e)}") from e
+            raise ProviderError(f"Failed to list Kokoro voices: {e!s}") from e
 
     async def validate_config(self) -> None:
         """
@@ -170,13 +173,17 @@ class KokoroTTSProvider(BaseProvider):
         try:
             await self._ensure_kokoro_available()
         except Exception as e:
-            raise ProviderError(f"Kokoro TTS configuration validation failed: {str(e)}") from e
+            raise ProviderError(
+                f"Kokoro TTS configuration validation failed: {e!s}"
+            ) from e
+
 
 # Register this provider so the factory knows about it
 # This line is crucial - without it, the system won't know 'kokoro' exists!
 register_provider(ProviderType.KOKORO, KokoroTTSProvider)
 
-async def test_kokoro_provider():
+
+async def test_kokoro_provider() -> None:
     """
     Simple test function to verify the Kokoro provider works correctly.
     This can be used for manual testing or integration testing.
@@ -204,11 +211,16 @@ async def test_kokoro_provider():
         # Test 3: Generate a simple audio file
         print("Testing audio generation...")
         import tempfile
+
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
             temp_path = temp_file.name
 
         try:
-            await provider.generate("Hello, this is a test of the Kokoro TTS provider.", "af_bella", temp_path)
+            await provider.generate(
+                "Hello, this is a test of the Kokoro TTS provider.",
+                "af_bella",
+                temp_path,
+            )
             print(f"✓ Audio generation successful. File saved to: {temp_path}")
 
             # Verify the file was created and has content
@@ -230,7 +242,9 @@ async def test_kokoro_provider():
         print(f"✗ Kokoro provider test failed: {e}")
         raise
 
+
 # This allows running the test directly: python -m wakegen.providers.opensource.kokoro
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(test_kokoro_provider())

@@ -15,13 +15,17 @@ Key Features:
 """
 
 from __future__ import annotations
-import numpy as np
+
+import random
+from typing import Any
+
 import librosa
-from typing import Optional, Tuple
+import numpy as np
+import soundfile as sf
+
 from wakegen.core.exceptions import AugmentationError
 from wakegen.utils.audio import load_audio
-import soundfile as sf
-import random
+
 
 class AudioDegrader:
     """
@@ -42,13 +46,13 @@ class AudioDegrader:
     def _validate_sample_rate(self, sample_rate: int) -> None:
         """Validate sample rate is suitable for degradation processing."""
         if not (8000 <= sample_rate <= 48000):
-            raise AugmentationError(f"Sample rate {sample_rate}Hz is out of valid range (8000-48000Hz)")
+            raise AugmentationError(
+                f"Sample rate {sample_rate}Hz is out of valid range (8000-48000Hz)"
+            )
 
     def reduce_bit_depth(
-        self,
-        audio: np.ndarray,
-        target_bits: int = 16
-    ) -> np.ndarray:
+        self, audio: np.ndarray[Any, Any], target_bits: int = 16
+    ) -> np.ndarray[Any, Any]:
         """
         Reduce the bit depth of audio to simulate low-quality recordings.
 
@@ -62,8 +66,11 @@ class AudioDegrader:
         Raises:
             AugmentationError: If bit depth is invalid.
         """
-        if target_bits not in [8, 12, 16, 20, 24, 32]:
-            raise AugmentationError(f"Unsupported bit depth: {target_bits}")
+        allowed_bits = [8, 12, 16, 20, 24, 32]
+        if target_bits not in allowed_bits:
+            # Snap to nearest valid bit depth
+            target_bits = min(allowed_bits, key=lambda x: abs(x - target_bits))
+
 
         try:
             # Scale to target bit range
@@ -77,17 +84,19 @@ class AudioDegrader:
             quantized = np.clip(quantized, -max_val, max_val)
 
             # Scale back to -1.0 to 1.0 range
-            return quantized / max_val
+            from typing import cast
+
+            return cast(np.ndarray[Any, Any], quantized / max_val)
 
         except Exception as e:
-            raise AugmentationError(f"Failed to reduce bit depth: {str(e)}") from e
+            raise AugmentationError(f"Failed to reduce bit depth: {e!s}") from e
 
     def apply_bandwidth_limiting(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         low_cut: float = 300.0,
-        high_cut: float = 3400.0
-    ) -> np.ndarray:
+        high_cut: float = 3400.0,
+    ) -> np.ndarray[Any, Any]:
         """
         Apply bandwidth limiting to simulate telephone or low-quality mic.
 
@@ -112,7 +121,7 @@ class AudioDegrader:
         try:
             # Apply bandpass filter using FFT
             fft_audio = np.fft.rfft(audio)
-            freqs = np.fft.rfftfreq(len(audio), 1.0/self.sample_rate)
+            freqs = np.fft.rfftfreq(len(audio), 1.0 / self.sample_rate)
 
             # Create bandpass filter
             filter_mask = (freqs >= low_cut) & (freqs <= high_cut)
@@ -124,14 +133,14 @@ class AudioDegrader:
             return np.fft.irfft(fft_filtered)
 
         except Exception as e:
-            raise AugmentationError(f"Failed to apply bandwidth limiting: {str(e)}") from e
+            raise AugmentationError(f"Failed to apply bandwidth limiting: {e!s}") from e
 
     def add_transmission_artifacts(
         self,
-        audio: np.ndarray,
+        audio: np.ndarray[Any, Any],
         dropout_probability: float = 0.01,
-        dropout_duration_ms: float = 5.0
-    ) -> np.ndarray:
+        dropout_duration_ms: float = 5.0,
+    ) -> np.ndarray[Any, Any]:
         """
         Add transmission artifacts like packet loss and dropouts.
 
@@ -168,13 +177,13 @@ class AudioDegrader:
             return result
 
         except Exception as e:
-            raise AugmentationError(f"Failed to add transmission artifacts: {str(e)}") from e
+            raise AugmentationError(
+                f"Failed to add transmission artifacts: {e!s}"
+            ) from e
 
     def apply_mp3_artifacts(
-        self,
-        audio: np.ndarray,
-        bitrate_kbps: int = 64
-    ) -> np.ndarray:
+        self, audio: np.ndarray[Any, Any], bitrate_kbps: int = 64
+    ) -> np.ndarray[Any, Any]:
         """
         Simulate MP3 compression artifacts.
 
@@ -188,7 +197,11 @@ class AudioDegrader:
         Raises:
             AugmentationError: If bitrate is invalid.
         """
-        if bitrate_kbps not in [32, 48, 64, 96, 128, 192, 256, 320]:
+        allowed_bitrates = [32, 48, 64, 96, 128, 192, 256, 320]
+        if bitrate_kbps not in allowed_bitrates:
+            # Snap to nearest valid bitrate
+            bitrate_kbps = min(allowed_bitrates, key=lambda x: abs(x - bitrate_kbps))
+
             raise AugmentationError(f"Unsupported MP3 bitrate: {bitrate_kbps}")
 
         try:
@@ -208,16 +221,16 @@ class AudioDegrader:
             else:
                 high_cut = 18000.0
 
-            return self.apply_bandwidth_limiting(noisy_audio, low_cut=50.0, high_cut=high_cut)
+            return self.apply_bandwidth_limiting(
+                noisy_audio, low_cut=50.0, high_cut=high_cut
+            )
 
         except Exception as e:
-            raise AugmentationError(f"Failed to apply MP3 artifacts: {str(e)}") from e
+            raise AugmentationError(f"Failed to apply MP3 artifacts: {e!s}") from e
 
     def apply_random_degradation(
-        self,
-        audio: np.ndarray,
-        severity: float = 0.5
-    ) -> np.ndarray:
+        self, audio: np.ndarray[Any, Any], severity: float = 0.5
+    ) -> np.ndarray[Any, Any]:
         """
         Apply random degradation effects based on severity level.
 
@@ -262,14 +275,14 @@ class AudioDegrader:
             return degraded
 
         except Exception as e:
-            raise AugmentationError(f"Failed to apply random degradation: {str(e)}") from e
+            raise AugmentationError(f"Failed to apply random degradation: {e!s}") from e
 
     async def apply_degradation(
         self,
         input_path: str,
         output_path: str,
         degradation_type: str = "random",
-        **effect_params
+        **effect_params: Any,
     ) -> None:
         """
         Apply degradation effects to an audio file and save the result.
@@ -293,26 +306,47 @@ class AudioDegrader:
                 audio = librosa.resample(audio, orig_sr=sr, target_sr=self.sample_rate)
 
             # Apply selected degradation
-            if degradation_type == "bit_depth":
-                processed = self.reduce_bit_depth(audio, **effect_params)
-            elif degradation_type == "bandwidth":
-                processed = self.apply_bandwidth_limiting(audio, **effect_params)
-            elif degradation_type == "transmission":
-                processed = self.add_transmission_artifacts(audio, **effect_params)
-            elif degradation_type == "mp3":
-                processed = self.apply_mp3_artifacts(audio, **effect_params)
-            elif degradation_type == "random":
-                processed = self.apply_random_degradation(audio, **effect_params)
-            else:
-                raise AugmentationError(f"Unknown degradation type: {degradation_type}")
+            processed = self.process(audio, degradation_type, **effect_params)
 
             # Save result
             sf.write(output_path, processed, self.sample_rate)
 
         except Exception as e:
-            raise AugmentationError(f"Failed to apply degradation effects: {str(e)}") from e
+            raise AugmentationError(
+                f"Failed to apply degradation effects: {e!s}"
+            ) from e
 
-    def get_degradation_preset(self, preset_name: str) -> dict:
+    def process(
+        self,
+        audio: np.ndarray[Any, Any],
+        degradation_type: str = "random",
+        **effect_params: Any,
+    ) -> np.ndarray[Any, Any]:
+        """
+        Apply degradation effects to audio in memory.
+
+        Args:
+            audio: Input audio signal.
+            degradation_type: Type of degradation.
+            **effect_params: Parameters specific to the degradation type.
+
+        Returns:
+            Degraded audio.
+        """
+        if degradation_type == "bit_depth":
+            return self.reduce_bit_depth(audio, **effect_params)
+        elif degradation_type == "bandwidth":
+            return self.apply_bandwidth_limiting(audio, **effect_params)
+        elif degradation_type == "transmission":
+            return self.add_transmission_artifacts(audio, **effect_params)
+        elif degradation_type == "mp3":
+            return self.apply_mp3_artifacts(audio, **effect_params)
+        elif degradation_type == "random":
+            return self.apply_random_degradation(audio, **effect_params)
+        else:
+            raise AugmentationError(f"Unknown degradation type: {degradation_type}")
+
+    def get_degradation_preset(self, preset_name: str) -> dict[str, Any]:
         """
         Get pre-configured degradation parameters for common scenarios.
 
@@ -331,33 +365,35 @@ class AudioDegrader:
                 "degradation_type": "bandwidth",
                 "low_cut": 300.0,
                 "high_cut": 3400.0,
-                "description": "Simulate telephone bandwidth (300-3400Hz)"
+                "description": "Simulate telephone bandwidth (300-3400Hz)",
             },
             "old_recording": {
                 "degradation_type": "random",
                 "severity": 0.7,
-                "description": "Simulate old, degraded recording"
+                "description": "Simulate old, degraded recording",
             },
             "voip_call": {
                 "degradation_type": "mp3",
                 "bitrate_kbps": 48,
-                "description": "Simulate VoIP call quality (48kbps MP3)"
+                "description": "Simulate VoIP call quality (48kbps MP3)",
             },
             "low_quality_mic": {
                 "degradation_type": "bit_depth",
                 "target_bits": 12,
-                "description": "Simulate low-quality microphone (12-bit)"
+                "description": "Simulate low-quality microphone (12-bit)",
             },
             "broken_transmission": {
                 "degradation_type": "transmission",
                 "dropout_probability": 0.05,
                 "dropout_duration_ms": 20.0,
-                "description": "Simulate broken transmission with dropouts"
-            }
+                "description": "Simulate broken transmission with dropouts",
+            },
         }
 
         if preset_name not in presets:
             available = list(presets.keys())
-            raise AugmentationError(f"Unknown degradation preset '{preset_name}'. Available: {available}")
+            raise AugmentationError(
+                f"Unknown degradation preset '{preset_name}'. Available: {available}"
+            )
 
         return presets[preset_name].copy()

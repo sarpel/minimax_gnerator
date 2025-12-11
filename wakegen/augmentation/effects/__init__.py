@@ -5,16 +5,16 @@ This module provides various audio effects for time domain manipulation,
 dynamics processing, quality degradation, and environment simulation.
 """
 
-from .time_domain import TimeDomainEffects
-from .dynamics import DynamicsProcessor
 from .degradation import AudioDegrader
+from .dynamics import DynamicsProcessor
 from .telephony import (
+    DistanceConfig,
+    DistanceSimulator,
     PhoneType,
     TelephonyConfig,
     TelephonySimulator,
-    DistanceConfig,
-    DistanceSimulator,
 )
+from .time_domain import TimeDomainEffects
 
 __all__ = [
     # Core effects

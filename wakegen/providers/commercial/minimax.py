@@ -1,19 +1,21 @@
 from __future__ import annotations
-import os
+
 import asyncio
+import base64  # CQ-003 Fix: Moved from inside function to module level
 import logging
+import os
 import time  # Added import for time module
-from typing import List, Dict, Any, Optional
-from typing import TYPE_CHECKING
+from typing import Any
 
 import httpx
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
-from wakegen.core.types import ProviderType, Gender
-from wakegen.core.exceptions import ProviderError, ConfigError
+from wakegen.core.exceptions import ConfigError, ProviderError
+from wakegen.core.types import Gender, ProviderType
+from wakegen.models.audio import Voice
+from wakegen.models.config import ProviderConfig
 from wakegen.providers.base import BaseProvider
 from wakegen.providers.registry import register_provider
-from wakegen.models.audio import Voice
 
 # Set up logging for this module
 logger = logging.getLogger("wakegen.minimax")
@@ -21,117 +23,134 @@ logger = logging.getLogger("wakegen.minimax")
 # We define the MiniMax API configuration and voice settings using Pydantic models.
 # This ensures type safety and validation of all parameters.
 
+
 class MiniMaxVoiceSetting(BaseModel):
     """
     Voice settings for MiniMax TTS API.
-    These control the basic characteristics of the generated speech.
     """
+    voice_id: str = Field(..., description="Voice ID")
     speed: float = Field(
-        1.0,
-        description="Speech speed (0.5 to 2.0, where 1.0 is normal)",
+        default=1.0,
+        description="Speech speed",
         ge=0.5,
-        le=2.0
+        le=2.0,
     )
     volume: float = Field(
-        1.0,
-        description="Volume level (0.1 to 10.0, where 1.0 is normal)",
+        default=1.0,
+        alias="vol",  # API uses "vol" not "volume"
+        description="Volume level",
         ge=0.1,
-        le=10.0
+        le=10.0,
     )
-    pitch: float = Field(
-        0.0,
-        description="Pitch adjustment in semitones (-12 to +12)",
-        ge=-12.0,
-        le=12.0
+    pitch: int = Field(
+        default=0,
+        description="Pitch adjustment",
+        ge=-12,
+        le=12,
     )
+    emotion: str = Field(default="happy", description="Emotion")
+    text_normalization: bool = Field(default=True, description="Normalize text")
+
 
 class MiniMaxVoiceModify(BaseModel):
     """
     Advanced voice modification settings for MiniMax TTS API.
     These allow fine-tuning of the voice characteristics.
     """
-    pitch: Optional[float] = Field(
+
+    # ALIGNED WITH voice_setting.pitch: MiniMax API expects pitch as INTEGER
+    # Both voice_setting and voice_modify use the same API pitch field format
+    pitch: int | None = Field(
         None,
-        description="Additional pitch adjustment (semitones)"
+        description="Additional pitch adjustment in semitones (-12 to +12, INTEGER)",
     )
-    intensity: Optional[float] = Field(
-        None,
-        description="Voice intensity (emotional strength)"
+    intensity: float | None = Field(
+        None, description="Voice intensity (emotional strength)"
     )
-    timbre: Optional[float] = Field(
-        None,
-        description="Voice timbre (tone color)"
+    timbre: float | None = Field(None, description="Voice timbre (tone color)")
+    sound_effects: str | None = Field(
+        None, description="Sound effects like 'spacious_echo'"
     )
-    sound_effects: Optional[str] = Field(
-        None,
-        description="Sound effects like 'spacious_echo'"
-    )
+
 
 class MiniMaxAudioSetting(BaseModel):
     """
     Audio output settings for MiniMax TTS API.
     These control the technical characteristics of the generated audio file.
     """
+
     sample_rate: int = Field(
-        16000,
-        description="Sample rate in Hz",
-        ge=8000,
-        le=48000
+        default=16000, description="Sample rate in Hz", ge=8000, le=48000
     )
     format: str = Field(
-        "wav",
+        default="wav",
         description="Audio format (wav, mp3, flac)",
-        pattern="^(wav|mp3|flac)$"
+        pattern="^(wav|mp3|flac)$",
     )
     channel: int = Field(
-        1,
-        description="Number of audio channels (1=mono, 2=stereo)",
-        ge=1,
-        le=2
+        default=1, description="Number of audio channels (1=mono, 2=stereo)", ge=1, le=2
     )
+
 
 class MiniMaxTTSRequest(BaseModel):
     """
     Complete request model for MiniMax TTS API.
-    This represents the full payload sent to the MiniMax API endpoint.
     """
+
+    model: str = Field(default="speech-2.6-hd", description="Model version")
     text: str = Field(..., description="Text to synthesize")
-    voice_id: str = Field(..., description="Voice identifier")
-    voice_setting: MiniMaxVoiceSetting = Field(
-        default_factory=MiniMaxVoiceSetting,
-        description="Basic voice settings"
-    )
-    voice_modify: Optional[MiniMaxVoiceModify] = Field(
-        None,
-        description="Advanced voice modifications"
+    stream: bool = Field(default=False, description="Streaming mode")
+    output_format: str = Field(default="hex", description="Output format")
+    voice_setting: MiniMaxVoiceSetting = Field(..., description="Voice settings")
+    voice_modify: MiniMaxVoiceModify | None = Field(
+        default=None, description="Advanced voice modifications"
     )
     audio_setting: MiniMaxAudioSetting = Field(
-        default_factory=MiniMaxAudioSetting,
-        description="Audio output settings"
+        default_factory=lambda: MiniMaxAudioSetting(),
+        description="Audio output settings",
     )
-    language_boost: Optional[str] = Field(
-        None,
-        description="Language to boost (e.g., 'Turkish' for better Turkish pronunciation)"
+    language_boost: str | None = Field(
+        default=None,
+        description="Language to boost",
     )
+
 
 class MiniMaxTTSResponse(BaseModel):
     """
     Response model for MiniMax TTS API.
-    This represents the expected response from the MiniMax API.
     """
-    success: bool = Field(..., description="Whether the request was successful")
-    audio_data: Optional[str] = Field(
-        None,
-        description="Base64 encoded audio data (if success=True)"
+
+    base_resp: dict[str, Any] = Field(
+        ..., description="API response metadata containing status_code and status_msg"
     )
-    error: Optional[str] = Field(
-        None,
-        description="Error message (if success=False)"
+    data: dict[str, Any] | None = Field(
+        default=None,
+        description="Response data containing audio (hex_audio or audio field)",
     )
-    request_id: Optional[str] = Field(
-        None,
-        description="Request identifier for tracking"
+    extra_info: dict[str, Any] | None = Field(
+        default=None, description="Additional info like audio_file, subtitle_file"
     )
+
+    @property
+    def success(self) -> bool:
+        """Check if the API call was successful (status_code == 0)."""
+        return int(self.base_resp.get("status_code", -1)) == 0
+
+    @property
+    def audio_data(self) -> str | None:
+        """Get the base64/hex audio data from the response."""
+        if self.data:
+            # MiniMax returns audio in hex_audio or audio field
+            return self.data.get("audio") or self.data.get("hex_audio")
+        return None
+
+    @property
+    def error(self) -> str | None:
+        """Get error message if request failed."""
+        if not self.success:
+            return str(self.base_resp.get("status_msg", "Unknown MiniMax API error"))
+        return None
+
 
 class MiniMaxProvider(BaseProvider):
     """
@@ -139,24 +158,37 @@ class MiniMaxProvider(BaseProvider):
     This is a commercial TTS provider that supports Turkish voices and advanced features.
     """
 
-    def __init__(self, config: Any):
+    def __init__(self, config: ProviderConfig):
         """
         Initialize the MiniMax provider with configuration.
         """
         super().__init__(config)
 
         # Validate that we have the required API key
-        if not self.config.minimax_api_key:
+        if not self.config.get_minimax_key():
             raise ConfigError(
                 "MiniMax API key is required. "
                 "Please set MINIMAX_API_KEY in your environment."
             )
 
         # Set up HTTP client for async requests
-        self.api_key = self.config.minimax_api_key
+        # SEC-002: Use helper method to get plain text key from SecretStr
+        self.api_key = self.config.get_minimax_key()
         self.group_id = self.config.minimax_group_id
         self.base_url = "https://api.minimaxi.chat"  # Fixed: Changed from https://api.minimax.ai to official endpoint
         self.endpoint = "/v1/t2a_v2"
+
+        # PERF-004 Fix: Create persistent HTTP client with connection pooling
+        # This eliminates 50-200ms overhead from creating new clients per request
+        # ELI5: Instead of opening a new connection to the server for each request,
+        # we keep a pool of connections ready to reuse, like keeping a phone line open
+        self._client = httpx.AsyncClient(
+            timeout=30.0,
+            limits=httpx.Limits(
+                max_connections=10,  # Maximum total connections
+                max_keepalive_connections=5,  # Keep 5 connections alive for reuse
+            ),
+        )
 
         # Rate limiting configuration - using official MiniMax rate limits
         self.max_requests_per_minute = 60  # Official MiniMax API limit
@@ -164,32 +196,33 @@ class MiniMaxProvider(BaseProvider):
         self.last_reset_time = time.time()
 
         # Turkish voices configuration
-        self.turkish_voices = {
+        self.turkish_voices: dict[str, dict[str, Any]] = {
             "Turkish_CalmWoman": {
                 "gender": Gender.FEMALE,
                 "language": "tr-TR",
-                "description": "Calm female Turkish voice"
+                "description": "Calm female Turkish voice",
             },
             "Turkish_Trustworthyman": {
                 "gender": Gender.MALE,
                 "language": "tr-TR",
-                "description": "Trustworthy male Turkish voice"
-            }
+                "description": "Trustworthy male Turkish voice",
+            },
         }
 
         # English voices that support Turkish language boost
-        self.english_with_turkish_boost = {
+        self.english_with_turkish_boost: dict[str, dict[str, Any]] = {
             "en-US-Woman": {
                 "gender": Gender.FEMALE,
                 "language": "en-US",
-                "description": "English female voice with Turkish boost support"
+                "description": "English female voice with Turkish boost support",
             },
             "en-US-Man": {
                 "gender": Gender.MALE,
                 "language": "en-US",
-                "description": "English male voice with Turkish boost support"
-            }
+                "description": "English male voice with Turkish boost support",
+            },
         }
+
 
     @property
     def provider_type(self) -> ProviderType:
@@ -221,7 +254,9 @@ class MiniMaxProvider(BaseProvider):
 
         self.current_requests += 1
 
-    async def _make_api_request(self, request_data: MiniMaxTTSRequest) -> MiniMaxTTSResponse:
+    async def _make_api_request(
+        self, request_data: MiniMaxTTSRequest
+    ) -> MiniMaxTTSResponse:
         """
         Make an HTTP request to the MiniMax TTS API.
         Handles authentication, headers, and error responses.
@@ -237,7 +272,7 @@ class MiniMaxProvider(BaseProvider):
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
-                "Accept": "application/json"
+                "Accept": "application/json",
             }
 
             # Add group ID if available
@@ -245,42 +280,37 @@ class MiniMaxProvider(BaseProvider):
                 headers["X-Minimax-Group-Id"] = self.group_id
 
             # Convert request data to dict for JSON serialization
-            request_dict = request_data.model_dump(
-                exclude_none=True,
-                by_alias=True
-            )
+            request_dict = request_data.model_dump(exclude_none=True, by_alias=True)
 
             logger.debug(f"Making MiniMax API request to {url}")
 
-            # Make the async HTTP request
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    url,
-                    headers=headers,
-                    json=request_dict
-                )
+            # PERF-004 Fix: Use persistent client instead of creating new one
+            # Make the async HTTP request using our pooled client
+            response = await self._client.post(url, headers=headers, json=request_dict)
 
-                # Check for HTTP errors
-                response.raise_for_status()
+            # Check for HTTP errors
+            response.raise_for_status()
 
-                # Parse the JSON response
-                response_data = response.json()
+            # Parse the JSON response
+            response_data = response.json()
 
-                # Validate and convert to our response model
-                return MiniMaxTTSResponse(**response_data)
+            # Validate and convert to our response model
+            return MiniMaxTTSResponse(**response_data)
 
         except httpx.HTTPStatusError as e:
-            error_msg = f"MiniMax API HTTP error: {e.response.status_code} - {e.response.text}"
+            error_msg = (
+                f"MiniMax API HTTP error: {e.response.status_code} - {e.response.text}"
+            )
             logger.error(error_msg)
             raise ProviderError(error_msg) from e
 
         except httpx.RequestError as e:
-            error_msg = f"MiniMax API request failed: {str(e)}"
+            error_msg = f"MiniMax API request failed: {e!s}"
             logger.error(error_msg)
             raise ProviderError(error_msg) from e
 
         except Exception as e:
-            error_msg = f"MiniMax API unexpected error: {str(e)}"
+            error_msg = f"MiniMax API unexpected error: {e!s}"
             logger.error(error_msg)
             raise ProviderError(error_msg) from e
 
@@ -299,27 +329,48 @@ class MiniMaxProvider(BaseProvider):
         """
         try:
             # Validate that the voice is supported
-            if voice_id not in self.turkish_voices and voice_id not in self.english_with_turkish_boost:
-                available_voices = list(self.turkish_voices.keys()) + list(self.english_with_turkish_boost.keys())
+            if (
+                voice_id not in self.turkish_voices
+                and voice_id not in self.english_with_turkish_boost
+            ):
+                available_voices = list(self.turkish_voices.keys()) + list(
+                    self.english_with_turkish_boost.keys()
+                )
                 raise ConfigError(
                     f"Unsupported voice_id: {voice_id}. "
                     f"Available voices: {', '.join(available_voices)}"
                 )
 
-            # Determine if we need Turkish language boost
-            language_boost = "Turkish" if any(
-                voice_id in turkish_voices
-                for turkish_voices in [self.turkish_voices, self.english_with_turkish_boost]
-                if voice_id in turkish_voices
-            ) else None
+            # Issue M-008 Fix: Simplified language boost logic
+            # The previous condition was redundant and always True when voice was valid
+            # Now just checks if voice is in either Turkish voice dictionary
+            language_boost = (
+                "Turkish"
+                if (
+                    voice_id in self.turkish_voices
+                    or voice_id in self.english_with_turkish_boost
+                )
+                else None
+            )
 
             # Create the request with default settings
             request = MiniMaxTTSRequest(
+                model="speech-2.6-hd",
                 text=text,
-                voice_id=voice_id,
-                voice_setting=MiniMaxVoiceSetting(),  # Use defaults
-                audio_setting=MiniMaxAudioSetting(),  # Use defaults
-                language_boost=language_boost
+                language_boost=language_boost,
+                voice_setting=MiniMaxVoiceSetting(
+                    voice_id=voice_id,
+                    speed=1.0,
+                    vol=1.0,
+                    pitch=0,
+                    emotion="happy",
+                    text_normalization=True
+                ),
+                audio_setting=MiniMaxAudioSetting(
+                    sample_rate=16000, 
+                    format="wav", 
+                    channel=1
+                ),
             )
 
             # Make the API request
@@ -333,12 +384,15 @@ class MiniMaxProvider(BaseProvider):
             if not response.audio_data:
                 raise ProviderError("No audio data returned from MiniMax API")
 
+            # CQ-003 Fix: base64 is now imported at module level
             # Decode the base64 audio data and save to file
-            import base64
             audio_bytes = base64.b64decode(response.audio_data)
 
-            # Ensure the output directory exists
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            # Issue C-005 Fix: Handle empty directory path for relative paths
+            # os.path.dirname returns empty string for paths like "audio.wav"
+            output_dir = os.path.dirname(output_path)
+            if output_dir:  # Only create directory if dirname is non-empty
+                os.makedirs(output_dir, exist_ok=True)
 
             # Write the audio data to file
             with open(output_path, "wb") as f:
@@ -346,13 +400,17 @@ class MiniMaxProvider(BaseProvider):
 
             logger.info(f"Successfully generated MiniMax TTS audio: {output_path}")
 
+        except (ConfigError, ProviderError):
+            # Re-raise known errors without wrapping - preserves original error type
+            # This prevents losing useful information like "Unsupported voice_id"
+            raise
         except Exception as e:
-            # Log the error and re-raise as ProviderError
-            error_msg = f"MiniMax TTS generation failed: {str(e)}"
+            # Log the error and re-raise as ProviderError for unknown exceptions
+            error_msg = f"MiniMax TTS generation failed: {e!s}"
             logger.error(error_msg)
             raise ProviderError(error_msg) from e
 
-    async def list_voices(self) -> List[Voice]:
+    async def list_voices(self) -> list[Voice]:
         """
         Lists available voices from MiniMax TTS.
         Returns both Turkish voices and English voices with Turkish boost support.
@@ -362,29 +420,35 @@ class MiniMaxProvider(BaseProvider):
 
             # Add Turkish voices
             for voice_id, voice_info in self.turkish_voices.items():
-                voice_list.append(Voice(
-                    id=voice_id,
-                    name=voice_info["description"],
-                    gender=voice_info["gender"],
-                    language=voice_info["language"],
-                    provider=self.provider_type
-                ))
+                voice_list.append(
+                    Voice(
+                        id=voice_id,
+                        name=str(voice_info["description"]),
+                        gender=voice_info["gender"],
+                        language=str(voice_info["language"]),
+                        provider=self.provider_type,
+                        supports_cloning=False,
+                    )
+                )
 
             # Add English voices with Turkish boost
             for voice_id, voice_info in self.english_with_turkish_boost.items():
-                voice_list.append(Voice(
-                    id=voice_id,
-                    name=voice_info["description"] + " (Turkish boost)",
-                    gender=voice_info["gender"],
-                    language=voice_info["language"],
-                    provider=self.provider_type
-                ))
+                voice_list.append(
+                    Voice(
+                        id=voice_id,
+                        name=str(voice_info["description"]) + " (Turkish boost)",
+                        gender=voice_info["gender"],
+                        language=str(voice_info["language"]),
+                        provider=self.provider_type,
+                        supports_cloning=False,
+                    )
+                )
 
             logger.info(f"Listed {len(voice_list)} MiniMax voices")
             return voice_list
 
         except Exception as e:
-            error_msg = f"Failed to list MiniMax voices: {str(e)}"
+            error_msg = f"Failed to list MiniMax voices: {e!s}"
             logger.error(error_msg)
             raise ProviderError(error_msg) from e
 
@@ -401,11 +465,21 @@ class MiniMaxProvider(BaseProvider):
             # Test the API connection with a simple request
             # We'll use a minimal request to test connectivity
             test_request = MiniMaxTTSRequest(
+                model="speech-2.6-hd",
                 text="Test",
-                voice_id="Turkish_CalmWoman",
-                voice_setting=MiniMaxVoiceSetting(),
-                audio_setting=MiniMaxAudioSetting(),
-                language_boost="Turkish"
+                language_boost="Turkish",
+                voice_setting=MiniMaxVoiceSetting(
+                    voice_id="Turkish_CalmWoman",
+                    speed=1.0,
+                    vol=1.0,
+                    pitch=0,
+                    emotion="happy",
+                    text_normalization=True
+                ),
+                audio_setting=MiniMaxAudioSetting(
+                    sample_rate=16000, format="wav", channel=1
+                ),
+                voice_modify=None,
             )
 
             # Make a test request (this will also test rate limiting)
@@ -418,9 +492,32 @@ class MiniMaxProvider(BaseProvider):
             logger.info("MiniMax provider configuration validated successfully")
 
         except Exception as e:
-            error_msg = f"MiniMax configuration validation failed: {str(e)}"
+            error_msg = f"MiniMax configuration validation failed: {e!s}"
             logger.error(error_msg)
             raise ConfigError(error_msg) from e
+
+    async def cleanup(self) -> None:
+        """
+        Release resources held by the MiniMax provider.
+
+        PERF-004 Fix: Properly close the persistent HTTP client to prevent
+        resource leaks and ensure graceful shutdown.
+
+        ELI5: Think of this like cleaning up your desk at the end of the day.
+        We close our persistent connection to the server and reset our counters
+        so we're ready for a fresh start next time.
+        """
+        # Close the persistent HTTP client
+        if hasattr(self, "_client") and self._client:
+            await self._client.aclose()
+            logger.debug("Closed persistent HTTP client")
+
+        # Reset rate-limiting state to initial values
+        self.current_requests = 0
+        self.last_reset_time = time.time()
+
+        logger.debug("MiniMax provider cleanup completed")
+
 
 # Register the MiniMax provider so the factory knows about it
 register_provider(ProviderType.MINIMAX, MiniMaxProvider)

@@ -1,17 +1,17 @@
 from __future__ import annotations
+
 import logging
-from typing import Dict, Any
+from typing import Any
+
 from .model_tester import test_model
 
 # We use 'logging' to print messages to the console in a structured way.
 logger = logging.getLogger(__name__)
 
+
 async def compare_models(
-    model_a_path: str,
-    model_b_path: str,
-    test_data_path: str,
-    threshold: float = 0.5
-) -> Dict[str, Any]:
+    model_a_path: str, model_b_path: str, test_data_path: str, threshold: float = 0.5
+) -> dict[str, Any]:
     """
     Compares two trained models (A and B) on the same test dataset.
 
@@ -40,24 +40,17 @@ async def compare_models(
     metrics_b = await test_model(model_b_path, test_data_path, threshold)
 
     # 3. Compare Results
-    comparison = {
-        "model_a": {
-            "path": model_a_path,
-            "metrics": metrics_a
-        },
-        "model_b": {
-            "path": model_b_path,
-            "metrics": metrics_b
-        },
-        "diff": {
-            "accuracy": metrics_b["accuracy"] - metrics_a["accuracy"],
-            "f1_score": metrics_b["f1_score"] - metrics_a["f1_score"]
-        },
-        "winner": "tie"
+    diff_accuracy = metrics_b["accuracy"] - metrics_a["accuracy"]
+    diff_f1 = metrics_b["f1_score"] - metrics_a["f1_score"]
+
+    comparison: dict[str, object] = {
+        "model_a": {"path": model_a_path, "metrics": metrics_a},
+        "model_b": {"path": model_b_path, "metrics": metrics_b},
+        "diff": {"accuracy": diff_accuracy, "f1_score": diff_f1},
+        "winner": "tie",
     }
 
     # Determine the winner based on F1 score (usually the best single metric)
-    diff_f1 = comparison["diff"]["f1_score"]
     if diff_f1 > 0:
         comparison["winner"] = "model_b"
         logger.info("Model B is better!")

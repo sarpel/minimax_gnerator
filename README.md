@@ -17,6 +17,16 @@ A comprehensive tool to generate high-quality synthetic wake word datasets using
 
 ### Installation
 
+**One-Click Install (Recommended):**
+```bash
+# Windows
+install.bat
+
+# Linux/macOS
+chmod +x install.sh && ./install.sh
+```
+
+**Manual Installation:**
 ```bash
 # Clone and install
 git clone https://github.com/sarpel/wakegen.git
@@ -26,6 +36,7 @@ pip install -e .
 # Or install with GPU support
 pip install -e ".[gpu]"
 ```
+
 
 ### Basic Usage
 

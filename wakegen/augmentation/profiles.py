@@ -15,14 +15,27 @@ Key Features:
 """
 
 from __future__ import annotations
-from typing import Dict, Any, Optional, List
+
 from dataclasses import dataclass
-from wakegen.core.types import EnvironmentProfile, AugmentationType
-from wakegen.core.exceptions import AugmentationError
-from wakegen.augmentation.noise.profiles import NoiseProfileManager, NoiseProfile
-from wakegen.augmentation.room.simulator import RoomParameters
-from wakegen.augmentation.microphone.simulator import MicrophoneProfile
+from typing import Any
+
+from wakegen.core.types import AugmentationType, EnvironmentProfile
+
+# Re-export EnvironmentProfile for use by other modules
+__all__ = [
+    "AugmentationProfile",
+    "EnvironmentProfile",
+    "EnvironmentProfileManager",
+    "environment_profile_manager",
+    "get_profile",
+]
 import random
+
+from wakegen.augmentation.microphone.simulator import MicrophoneProfile
+from wakegen.augmentation.noise.profiles import NoiseProfile, NoiseProfileManager
+from wakegen.augmentation.room.simulator import RoomParameters
+from wakegen.core.exceptions import AugmentationError
+
 
 @dataclass
 class AugmentationProfile:
@@ -40,15 +53,17 @@ class AugmentationProfile:
         degradation_effects: Quality degradation parameters.
         augmentation_types: List of augmentation types to apply.
     """
+
     name: str
     description: str
     noise_profile: NoiseProfile
     room_params: RoomParameters
     microphone_profile: MicrophoneProfile
-    time_effects: Dict[str, Any]
-    dynamics_effects: Dict[str, Any]
-    degradation_effects: Dict[str, Any]
-    augmentation_types: List[AugmentationType]
+    time_effects: dict[str, Any]
+    dynamics_effects: dict[str, Any]
+    degradation_effects: dict[str, Any]
+    augmentation_types: list[AugmentationType]
+
 
 class EnvironmentProfileManager:
     """
@@ -57,18 +72,18 @@ class EnvironmentProfileManager:
     Provides access to pre-configured profiles and allows custom profile creation.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize with default environment profiles."""
         self.noise_manager = NoiseProfileManager()  # Initialize noise manager first
         self.profiles = self._create_default_profiles()
 
-    def _create_default_profiles(self) -> Dict[EnvironmentProfile, AugmentationProfile]:
+    def _create_default_profiles(self) -> dict[EnvironmentProfile, AugmentationProfile]:
         """
         Create default environment profiles for common scenarios.
         """
         # Get room and microphone simulators for parameter access
-        from wakegen.augmentation.room.simulator import RoomSimulator
         from wakegen.augmentation.microphone.simulator import MicrophoneSimulator
+        from wakegen.augmentation.room.simulator import RoomSimulator
 
         room_sim = RoomSimulator()
         mic_sim = MicrophoneSimulator()
@@ -77,96 +92,154 @@ class EnvironmentProfileManager:
             EnvironmentProfile.MORNING_KITCHEN: AugmentationProfile(
                 name="Morning Kitchen",
                 description="Busy morning kitchen with breakfast preparation, dishes, and appliances",
-                noise_profile=self.noise_manager.get_profile(EnvironmentProfile.MORNING_KITCHEN),
+                noise_profile=self.noise_manager.get_profile(
+                    EnvironmentProfile.MORNING_KITCHEN
+                ),
                 room_params=room_sim.get_preset_room("medium_room"),
                 microphone_profile=mic_sim.get_preset_microphone("smartphone"),
-                time_effects={"pitch_steps": 0.0, "time_stretch_factor": 1.0, "speed_factor": 1.0},
-                dynamics_effects={"effect_type": "compression", "threshold_db": -20.0, "ratio": 2.5},
+                time_effects={
+                    "pitch_steps": 0.0,
+                    "time_stretch_factor": 1.0,
+                    "speed_factor": 1.0,
+                },
+                dynamics_effects={
+                    "effect_type": "compression",
+                    "threshold_db": -20.0,
+                    "ratio": 2.5,
+                },
                 degradation_effects={"degradation_type": "random", "severity": 0.3},
                 augmentation_types=[
                     AugmentationType.BACKGROUND_NOISE,
                     AugmentationType.ROOM_SIMULATION,
                     AugmentationType.MICROPHONE_SIMULATION,
-                    AugmentationType.COMPRESSION
-                ]
+                    AugmentationType.COMPRESSION,
+                ],
             ),
             EnvironmentProfile.EVENING_LIVING_ROOM: AugmentationProfile(
                 name="Evening Living Room",
                 description="Quiet evening in living room with TV and occasional conversation",
-                noise_profile=self.noise_manager.get_profile(EnvironmentProfile.EVENING_LIVING_ROOM),
+                noise_profile=self.noise_manager.get_profile(
+                    EnvironmentProfile.EVENING_LIVING_ROOM
+                ),
                 room_params=room_sim.get_preset_room("large_room"),
                 microphone_profile=mic_sim.get_preset_microphone("lapel"),
-                time_effects={"pitch_steps": 0.0, "time_stretch_factor": 1.0, "speed_factor": 1.0},
-                dynamics_effects={"effect_type": "compression", "threshold_db": -24.0, "ratio": 2.0},
+                time_effects={
+                    "pitch_steps": 0.0,
+                    "time_stretch_factor": 1.0,
+                    "speed_factor": 1.0,
+                },
+                dynamics_effects={
+                    "effect_type": "compression",
+                    "threshold_db": -24.0,
+                    "ratio": 2.0,
+                },
                 degradation_effects={"degradation_type": "random", "severity": 0.2},
                 augmentation_types=[
                     AugmentationType.BACKGROUND_NOISE,
                     AugmentationType.ROOM_SIMULATION,
-                    AugmentationType.MICROPHONE_SIMULATION
-                ]
+                    AugmentationType.MICROPHONE_SIMULATION,
+                ],
             ),
             EnvironmentProfile.OFFICE_SPACE: AugmentationProfile(
                 name="Office Space",
                 description="Typical office environment with background activity and HVAC noise",
-                noise_profile=self.noise_manager.get_profile(EnvironmentProfile.OFFICE_SPACE),
+                noise_profile=self.noise_manager.get_profile(
+                    EnvironmentProfile.OFFICE_SPACE
+                ),
                 room_params=room_sim.get_preset_room("office"),
                 microphone_profile=mic_sim.get_preset_microphone("conference"),
-                time_effects={"pitch_steps": 0.0, "time_stretch_factor": 1.0, "speed_factor": 1.0},
+                time_effects={
+                    "pitch_steps": 0.0,
+                    "time_stretch_factor": 1.0,
+                    "speed_factor": 1.0,
+                },
                 dynamics_effects={"effect_type": "limiting", "threshold_db": -3.0},
                 degradation_effects={"degradation_type": "telephone"},
                 augmentation_types=[
                     AugmentationType.BACKGROUND_NOISE,
                     AugmentationType.ROOM_SIMULATION,
                     AugmentationType.MICROPHONE_SIMULATION,
-                    AugmentationType.COMPRESSION
-                ]
+                    AugmentationType.COMPRESSION,
+                ],
             ),
             EnvironmentProfile.CAR_INTERIOR: AugmentationProfile(
                 name="Car Interior",
                 description="Inside a moving car with road noise, engine sounds, and limited space",
-                noise_profile=self.noise_manager.get_profile(EnvironmentProfile.CAR_INTERIOR),
+                noise_profile=self.noise_manager.get_profile(
+                    EnvironmentProfile.CAR_INTERIOR
+                ),
                 room_params=room_sim.get_preset_room("small_room"),
                 microphone_profile=mic_sim.get_preset_microphone("headset"),
-                time_effects={"pitch_steps": 0.0, "time_stretch_factor": 1.0, "speed_factor": 1.0},
-                dynamics_effects={"effect_type": "compression", "threshold_db": -18.0, "ratio": 3.0},
+                time_effects={
+                    "pitch_steps": 0.0,
+                    "time_stretch_factor": 1.0,
+                    "speed_factor": 1.0,
+                },
+                dynamics_effects={
+                    "effect_type": "compression",
+                    "threshold_db": -18.0,
+                    "ratio": 3.0,
+                },
                 degradation_effects={"degradation_type": "mp3", "bitrate_kbps": 96},
                 augmentation_types=[
                     AugmentationType.BACKGROUND_NOISE,
                     AugmentationType.ROOM_SIMULATION,
                     AugmentationType.MICROPHONE_SIMULATION,
-                    AugmentationType.COMPRESSION
-                ]
+                    AugmentationType.COMPRESSION,
+                ],
             ),
             EnvironmentProfile.OUTDOOR_PARK: AugmentationProfile(
                 name="Outdoor Park",
                 description="Outdoor environment with natural sounds, wind, and distant noises",
-                noise_profile=self.noise_manager.get_profile(EnvironmentProfile.OUTDOOR_PARK),
-                room_params=room_sim.get_preset_room("large_room"),  # Open space approximation
+                noise_profile=self.noise_manager.get_profile(
+                    EnvironmentProfile.OUTDOOR_PARK
+                ),
+                room_params=room_sim.get_preset_room(
+                    "large_room"
+                ),  # Open space approximation
                 microphone_profile=mic_sim.get_preset_microphone("far_field"),
-                time_effects={"pitch_steps": 0.0, "time_stretch_factor": 1.0, "speed_factor": 1.0},
-                dynamics_effects={"effect_type": "expansion", "threshold_db": -30.0, "ratio": 2.0},
+                time_effects={
+                    "pitch_steps": 0.0,
+                    "time_stretch_factor": 1.0,
+                    "speed_factor": 1.0,
+                },
+                dynamics_effects={
+                    "effect_type": "expansion",
+                    "threshold_db": -30.0,
+                    "ratio": 2.0,
+                },
                 degradation_effects={"degradation_type": "random", "severity": 0.4},
                 augmentation_types=[
                     AugmentationType.BACKGROUND_NOISE,
                     AugmentationType.MICROPHONE_SIMULATION,
-                    AugmentationType.DEGRADATION
-                ]
+                    AugmentationType.DEGRADATION,
+                ],
             ),
             EnvironmentProfile.BEDROOM_NIGHT: AugmentationProfile(
                 name="Bedroom at Night",
                 description="Very quiet bedroom environment at night with minimal background noise",
-                noise_profile=self.noise_manager.get_profile(EnvironmentProfile.BEDROOM_NIGHT),
+                noise_profile=self.noise_manager.get_profile(
+                    EnvironmentProfile.BEDROOM_NIGHT
+                ),
                 room_params=room_sim.get_preset_room("medium_room"),
                 microphone_profile=mic_sim.get_preset_microphone("studio"),
-                time_effects={"pitch_steps": 0.0, "time_stretch_factor": 1.0, "speed_factor": 1.0},
-                dynamics_effects={"effect_type": "compression", "threshold_db": -30.0, "ratio": 1.5},
+                time_effects={
+                    "pitch_steps": 0.0,
+                    "time_stretch_factor": 1.0,
+                    "speed_factor": 1.0,
+                },
+                dynamics_effects={
+                    "effect_type": "compression",
+                    "threshold_db": -30.0,
+                    "ratio": 1.5,
+                },
                 degradation_effects={"degradation_type": "random", "severity": 0.1},
                 augmentation_types=[
                     AugmentationType.BACKGROUND_NOISE,
                     AugmentationType.ROOM_SIMULATION,
-                    AugmentationType.MICROPHONE_SIMULATION
-                ]
-            )
+                    AugmentationType.MICROPHONE_SIMULATION,
+                ],
+            ),
         }
 
     def get_profile(self, profile_id: EnvironmentProfile) -> AugmentationProfile:
@@ -187,9 +260,7 @@ class EnvironmentProfileManager:
         return self.profiles[profile_id]
 
     def get_random_variation(
-        self,
-        base_profile: AugmentationProfile,
-        variation_strength: float = 0.3
+        self, base_profile: AugmentationProfile, variation_strength: float = 0.3
     ) -> AugmentationProfile:
         """
         Create a random variation of a base profile.
@@ -214,16 +285,22 @@ class EnvironmentProfileManager:
             new_snr = random.uniform(*snr_range)
             # We'd need to modify the noise profile, but for simplicity we'll
             # just adjust the time effects as a demonstration
-            varied.time_effects["pitch_steps"] = random.uniform(-1.0, 1.0) * variation_strength
+            varied.time_effects["pitch_steps"] = (
+                random.uniform(-1.0, 1.0) * variation_strength
+            )
 
         if random.random() < variation_strength * 0.5:
             # Vary room parameters slightly
-            if hasattr(varied.room_params, 'rt60'):
-                varied.room_params.rt60 = max(0.1, varied.room_params.rt60 * random.uniform(0.8, 1.2))
+            if hasattr(varied.room_params, "rt60"):
+                varied.room_params.rt60 = max(
+                    0.1, varied.room_params.rt60 * random.uniform(0.8, 1.2)
+                )
 
         if random.random() < variation_strength * 0.6:
             # Vary microphone distortion
-            varied.microphone_profile.distortion = max(0.01, varied.microphone_profile.distortion * random.uniform(0.7, 1.3))
+            varied.microphone_profile.distortion = max(
+                0.01, varied.microphone_profile.distortion * random.uniform(0.7, 1.3)
+            )
 
         return varied
 
@@ -234,10 +311,10 @@ class EnvironmentProfileManager:
         noise_profile_id: EnvironmentProfile,
         room_preset: str,
         microphone_preset: str,
-        time_effects: Optional[Dict[str, Any]] = None,
-        dynamics_effects: Optional[Dict[str, Any]] = None,
-        degradation_effects: Optional[Dict[str, Any]] = None,
-        augmentation_types: Optional[List[AugmentationType]] = None
+        time_effects: dict[str, Any] | None = None,
+        dynamics_effects: dict[str, Any] | None = None,
+        degradation_effects: dict[str, Any] | None = None,
+        augmentation_types: list[AugmentationType] | None = None,
     ) -> EnvironmentProfile:
         """
         Create a custom environment profile.
@@ -260,8 +337,8 @@ class EnvironmentProfileManager:
             AugmentationError: If parameters are invalid.
         """
         # Get room and microphone simulators
-        from wakegen.augmentation.room.simulator import RoomSimulator
         from wakegen.augmentation.microphone.simulator import MicrophoneSimulator
+        from wakegen.augmentation.room.simulator import RoomSimulator
 
         room_sim = RoomSimulator()
         mic_sim = MicrophoneSimulator()
@@ -273,10 +350,18 @@ class EnvironmentProfileManager:
 
         # Set defaults if not provided
         if time_effects is None:
-            time_effects = {"pitch_steps": 0.0, "time_stretch_factor": 1.0, "speed_factor": 1.0}
+            time_effects = {
+                "pitch_steps": 0.0,
+                "time_stretch_factor": 1.0,
+                "speed_factor": 1.0,
+            }
 
         if dynamics_effects is None:
-            dynamics_effects = {"effect_type": "compression", "threshold_db": -20.0, "ratio": 2.0}
+            dynamics_effects = {
+                "effect_type": "compression",
+                "threshold_db": -20.0,
+                "ratio": 2.0,
+            }
 
         if degradation_effects is None:
             degradation_effects = {"degradation_type": "random", "severity": 0.2}
@@ -285,7 +370,7 @@ class EnvironmentProfileManager:
             augmentation_types = [
                 AugmentationType.BACKGROUND_NOISE,
                 AugmentationType.ROOM_SIMULATION,
-                AugmentationType.MICROPHONE_SIMULATION
+                AugmentationType.MICROPHONE_SIMULATION,
             ]
 
         # Create the profile
@@ -300,12 +385,12 @@ class EnvironmentProfileManager:
             time_effects=time_effects,
             dynamics_effects=dynamics_effects,
             degradation_effects=degradation_effects,
-            augmentation_types=augmentation_types
+            augmentation_types=augmentation_types,
         )
 
         return profile_id
 
-    def list_profiles(self) -> List[Dict[str, Any]]:
+    def list_profiles(self) -> list[dict[str, Any]]:
         """
         List all available environment profiles with their characteristics.
 
@@ -314,19 +399,27 @@ class EnvironmentProfileManager:
         """
         result = []
         for profile_id, profile in self.profiles.items():
-            result.append({
-                "id": str(profile_id),
-                "name": profile.name,
-                "description": profile.description,
-                "noise_profile": profile.noise_profile.name,
-                "room_type": "custom" if not hasattr(profile.room_params, 'preset') else "preset",
-                "microphone_type": profile.microphone_profile.name,
-                "augmentation_types": [str(at) for at in profile.augmentation_types]
-            })
+            result.append(
+                {
+                    "id": str(profile_id),
+                    "name": profile.name,
+                    "description": profile.description,
+                    "noise_profile": profile.noise_profile.name,
+                    "room_type": "custom"
+                    if not hasattr(profile.room_params, "preset")
+                    else "preset",
+                    "microphone_type": profile.microphone_profile.name,
+                    "augmentation_types": [
+                        str(at) for at in profile.augmentation_types
+                    ],
+                }
+            )
         return result
+
 
 # Global instance for easy access
 environment_profile_manager = EnvironmentProfileManager()
+
 
 def get_profile(profile_id: EnvironmentProfile) -> AugmentationProfile:
     """

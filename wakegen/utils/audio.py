@@ -1,11 +1,16 @@
+import asyncio  # CQ-002 Fix: Import asyncio for truly async I/O
 import os
-import soundfile as sf
+from typing import Any
+
 import librosa
 import numpy as np
+import soundfile as sf
+
 from wakegen.core.exceptions import AudioError
 
 # We use 'soundfile' to read and write audio files because it's fast and reliable.
 # We use 'librosa' for more complex operations like resampling (changing the speed/pitch).
+
 
 def save_audio(data: bytes, file_path: str, sample_rate: int = 24000) -> None:
     """
@@ -26,12 +31,13 @@ def save_audio(data: bytes, file_path: str, sample_rate: int = 24000) -> None:
         # Write the bytes to the file
         with open(file_path, "wb") as f:
             f.write(data)
-            
+
     except Exception as e:
         # Wrap any error in our custom AudioError
-        raise AudioError(f"Failed to save audio to {file_path}: {str(e)}") from e
+        raise AudioError(f"Failed to save audio to {file_path}: {e!s}") from e
 
-def load_audio(file_path: str) -> tuple[np.ndarray, int]:
+
+def load_audio(file_path: str) -> tuple[np.ndarray[Any, Any], int]:
     """
     Loads an audio file into a numpy array.
 
@@ -52,7 +58,8 @@ def load_audio(file_path: str) -> tuple[np.ndarray, int]:
         data, sr = librosa.load(file_path, sr=None)
         return data, int(sr)
     except Exception as e:
-        raise AudioError(f"Failed to load audio from {file_path}: {str(e)}") from e
+        raise AudioError(f"Failed to load audio from {file_path}: {e!s}") from e
+
 
 def resample_audio(file_path: str, target_sr: int = 16000) -> None:
     """
@@ -82,12 +89,20 @@ def resample_audio(file_path: str, target_sr: int = 16000) -> None:
         sf.write(file_path, y_resampled, target_sr)
 
     except Exception as e:
-        raise AudioError(f"Failed to resample audio {file_path}: {str(e)}") from e
+        raise AudioError(f"Failed to resample audio {file_path}: {e!s}") from e
+
 
 # Additional functions for quality assurance system
-async def load_audio_file(file_path: str) -> tuple[np.ndarray, int]:
+async def load_audio_file(file_path: str) -> tuple[np.ndarray[Any, Any], int]:
     """
     Async wrapper for load_audio function.
+
+    CQ-002 Fix: This function now uses asyncio.to_thread() to execute the
+    blocking librosa.load() call in a thread pool, preventing event loop blocking.
+
+    ELI5: Instead of making the entire program wait while we read a file,
+    we hand that work to a separate worker thread, so the main program can
+    keep doing other things while the file is being read.
 
     Args:
         file_path: The path to the audio file.
@@ -97,9 +112,11 @@ async def load_audio_file(file_path: str) -> tuple[np.ndarray, int]:
         - The audio data as a numpy array.
         - The sample rate of the audio.
     """
-    return load_audio(file_path)
+    # Run the blocking load_audio function in a thread pool
+    return await asyncio.to_thread(load_audio, file_path)
 
-def get_audio_duration(audio_data: np.ndarray, sample_rate: int) -> float:
+
+def get_audio_duration(audio_data: np.ndarray[Any, Any], sample_rate: int) -> float:
     """
     Calculate the duration of audio data in seconds.
 
