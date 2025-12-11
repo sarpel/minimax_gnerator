@@ -135,55 +135,54 @@ async def list_audio_files(
 async def play_audio(file_path: str) -> FileResponse:
     """
     Stream an audio file for browser playback.
-
-    Returns the audio file with proper Content-Type headers so browsers
-    can play it in an <audio> element.
-
-        PATH PARAMETERS:
-        ================
-        file_path: Path to the audio file (can include subdirectories)
-
-        RETURNS:
-        ========
-        FileResponse with audio/wav or appropriate content type
     """
-    # Resolve the path (prevents directory traversal attacks)
-    path = Path(file_path).resolve()
-
-    # SECURITY: Validate that the resolved path is within the allowed directory
-    # This prevents path traversal attacks (e.g., accessing /etc/passwd)
-    allowed_base = Path("./output").resolve()
     try:
-        # is_relative_to() checks if path is a subdirectory of allowed_base
-        # This ensures users can only access files in the output directory
-        if not path.is_relative_to(allowed_base):
-            raise HTTPException(
-                status_code=403,
-                detail="Access denied: File must be within the output directory",
-            )
-    except ValueError:
-        # is_relative_to can raise ValueError on Windows with different drives
-        raise HTTPException(status_code=403, detail="Access denied: Invalid file path")
+        # Normalize the input path
+        # If the path starts with "output/", strip it so we can re-join safely
+        # This handles both "test_samples/file.wav" and "output/test_samples/file.wav"
+        clean_path = file_path.replace("\\", "/")
+        if clean_path.startswith("output/"):
+            clean_path = clean_path[7:]  # Strip "output/"
+        
+        # Construct the full absolute path
+        # We always serve from the ./output directory
+        base_dir = Path("./output").resolve()
+        target_path = (base_dir / clean_path).resolve()
 
-    # Basic security check - ensure it's a real file
-    if not path.exists():
-        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+        # Security check: Ensure the target is still inside base_dir
+        if not str(target_path).startswith(str(base_dir)):
+            logger.warning(f"Access denied: {target_path} is outside {base_dir}")
+            raise HTTPException(status_code=403, detail="Access denied")
 
-    if not path.is_file():
-        raise HTTPException(status_code=400, detail="Path is not a file")
+        if not target_path.exists():
+            logger.warning(f"File not found: {target_path}")
+            raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
 
-    # Determine content type based on extension
-    extension = path.suffix.lower()
-    content_types = {
-        ".wav": "audio/wav",
-        ".mp3": "audio/mpeg",
-        ".ogg": "audio/ogg",
-        ".flac": "audio/flac",
-        ".m4a": "audio/mp4",
-    }
-    content_type = content_types.get(extension, "application/octet-stream")
+        if not target_path.is_file():
+            raise HTTPException(status_code=400, detail="Path is not a file")
 
-    return FileResponse(path=str(path), media_type=content_type, filename=path.name)
+        # Determine content type
+        extension = target_path.suffix.lower()
+        content_types = {
+            ".wav": "audio/wav",
+            ".mp3": "audio/mpeg",
+            ".ogg": "audio/ogg",
+            ".flac": "audio/flac",
+            ".m4a": "audio/mp4",
+        }
+        content_type = content_types.get(extension, "application/octet-stream")
+
+        return FileResponse(
+            path=str(target_path), 
+            media_type=content_type, 
+            filename=target_path.name
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error serving audio {file_path}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(

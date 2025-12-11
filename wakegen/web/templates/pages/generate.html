@@ -16,7 +16,9 @@
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <!-- Generation Form -->
-    <div class="lg:col-span-2">
+    <!-- WHY: x-data is on this parent div so that BOTH the form AND the Active Job Progress section 
+         can access the same Alpine.js component state (like activeJob, isGenerating, etc.) -->
+    <div class="lg:col-span-2" x-data="generationForm()">
         <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
             <div class="p-4 border-b border-gray-200 dark:border-gray-700">
                 <h2 class="text-lg font-semibold text-gray-900 dark:text-white">New Generation</h2>
@@ -25,7 +27,9 @@
                 </p>
             </div>
 
-            <form id="generation-form" class="p-6 space-y-6" x-data="generationForm()" @submit.prevent="submitForm($event)">
+            <!-- SYNTAX: @submit.prevent stops the default form submission (page reload) 
+                 and instead calls our custom submitForm() method -->
+            <form id="generation-form" class="p-6 space-y-6" @submit.prevent="submitForm($event)">
                 <!-- Wake Words Input -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

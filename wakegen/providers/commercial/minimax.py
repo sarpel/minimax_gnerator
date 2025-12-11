@@ -27,30 +27,29 @@ logger = logging.getLogger("wakegen.minimax")
 class MiniMaxVoiceSetting(BaseModel):
     """
     Voice settings for MiniMax TTS API.
-    These control the basic characteristics of the generated speech.
     """
-
+    voice_id: str = Field(..., description="Voice ID")
     speed: float = Field(
         default=1.0,
-        description="Speech speed (0.5 to 2.0, where 1.0 is normal)",
+        description="Speech speed",
         ge=0.5,
         le=2.0,
     )
     volume: float = Field(
         default=1.0,
-        description="Volume level (0.1 to 10.0, where 1.0 is normal)",
+        alias="vol",  # API uses "vol" not "volume"
+        description="Volume level",
         ge=0.1,
         le=10.0,
     )
-    # CRITICAL: MiniMax API expects pitch as INTEGER, not float!
-    # The API error "Mismatch type int64 with value number" occurs when
-    # sending 0.0 instead of 0. Valid range: -12 to +12 semitones.
     pitch: int = Field(
         default=0,
-        description="Pitch adjustment in semitones (-12 to +12)",
+        description="Pitch adjustment",
         ge=-12,
         le=12,
     )
+    emotion: str = Field(default="happy", description="Emotion")
+    text_normalization: bool = Field(default=True, description="Normalize text")
 
 
 class MiniMaxVoiceModify(BaseModel):
@@ -96,15 +95,13 @@ class MiniMaxAudioSetting(BaseModel):
 class MiniMaxTTSRequest(BaseModel):
     """
     Complete request model for MiniMax TTS API.
-    This represents the full payload sent to the MiniMax API endpoint.
     """
 
+    model: str = Field(default="speech-2.6-hd", description="Model version")
     text: str = Field(..., description="Text to synthesize")
-    voice_id: str = Field(..., description="Voice identifier")
-    voice_setting: MiniMaxVoiceSetting = Field(
-        default_factory=lambda: MiniMaxVoiceSetting(),
-        description="Basic voice settings",
-    )
+    stream: bool = Field(default=False, description="Streaming mode")
+    output_format: str = Field(default="hex", description="Output format")
+    voice_setting: MiniMaxVoiceSetting = Field(..., description="Voice settings")
     voice_modify: MiniMaxVoiceModify | None = Field(
         default=None, description="Advanced voice modifications"
     )
@@ -114,21 +111,13 @@ class MiniMaxTTSRequest(BaseModel):
     )
     language_boost: str | None = Field(
         default=None,
-        description="Language to boost (e.g., 'Turkish' for better Turkish pronunciation)",
+        description="Language to boost",
     )
 
 
 class MiniMaxTTSResponse(BaseModel):
     """
     Response model for MiniMax TTS API.
-
-    This represents the actual response structure from the MiniMax API.
-    The API returns:
-    - base_resp: Contains status_code (0 = success) and status_msg
-    - data: Contains the audio data when successful
-
-    Note: The API does NOT return a top-level 'success' field, so we compute it
-    from base_resp.status_code.
     """
 
     base_resp: dict[str, Any] = Field(
@@ -235,6 +224,7 @@ class MiniMaxProvider(BaseProvider):
         }
 
 
+    @property
     def provider_type(self) -> ProviderType:
         """
         Returns the type of this provider.
@@ -365,15 +355,22 @@ class MiniMaxProvider(BaseProvider):
 
             # Create the request with default settings
             request = MiniMaxTTSRequest(
+                model="speech-2.6-hd",
                 text=text,
-                voice_id=voice_id,
-                voice_setting=MiniMaxVoiceSetting(
-                    speed=1.0, volume=1.0, pitch=0
-                ),  # pitch is INTEGER per MiniMax API
-                audio_setting=MiniMaxAudioSetting(
-                    sample_rate=16000, format="wav", channel=1
-                ),  # Use defaults explicitly
                 language_boost=language_boost,
+                voice_setting=MiniMaxVoiceSetting(
+                    voice_id=voice_id,
+                    speed=1.0,
+                    vol=1.0,
+                    pitch=0,
+                    emotion="happy",
+                    text_normalization=True
+                ),
+                audio_setting=MiniMaxAudioSetting(
+                    sample_rate=16000, 
+                    format="wav", 
+                    channel=1
+                ),
             )
 
             # Make the API request
@@ -468,16 +465,21 @@ class MiniMaxProvider(BaseProvider):
             # Test the API connection with a simple request
             # We'll use a minimal request to test connectivity
             test_request = MiniMaxTTSRequest(
+                model="speech-2.6-hd",
                 text="Test",
-                voice_id="Turkish_CalmWoman",
+                language_boost="Turkish",
                 voice_setting=MiniMaxVoiceSetting(
-                    speed=1.0, volume=1.0, pitch=0
-                ),  # pitch is INTEGER
+                    voice_id="Turkish_CalmWoman",
+                    speed=1.0,
+                    vol=1.0,
+                    pitch=0,
+                    emotion="happy",
+                    text_normalization=True
+                ),
                 audio_setting=MiniMaxAudioSetting(
                     sample_rate=16000, format="wav", channel=1
                 ),
                 voice_modify=None,
-                language_boost="Turkish",
             )
 
             # Make a test request (this will also test rate limiting)

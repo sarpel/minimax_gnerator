@@ -453,14 +453,16 @@ async def test_provider(
         await provider.generate(request.text, voice_id, str(file_path))
 
         # Return a URL that the audio router can handle
-        # The audio router expects a file path encoded in the URL
-        # We'll use the absolute path to be safe, or relative to cwd
-        abs_path = file_path.resolve()
+        # We use the relative path converted to POSIX (forward slashes)
+        # This is cleaner and avoids Windows drive letter/backslash issues in URLs
+        rel_path = file_path.as_posix()
 
         # URL encode the path for the API call
+        # safe='/' ensures slashes are NOT escaped, keeping the path structure
+        # e.g. output/test_samples/file.wav instead of output%2Ftest_samples%2Ffile.wav
         from urllib.parse import quote
 
-        encoded_path = quote(str(abs_path))
+        encoded_path = quote(rel_path, safe='/')
         audio_url = f"/api/audio/play/{encoded_path}"
 
         return TestGenerationResponse(

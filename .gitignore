@@ -9,7 +9,7 @@ __pycache__/
 .wakegen_cache/
 # C extensions
 *.so
-
+minimax_docs/
 # Distribution / packaging
 .Python
 build/
