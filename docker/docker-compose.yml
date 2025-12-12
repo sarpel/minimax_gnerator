@@ -1,0 +1,248 @@
+# =============================================================================
+# WakeGen TTS Docker Stack - Main Configuration
+# =============================================================================
+# This docker-compose file contains all TTS providers as individual containers.
+# Each provider runs on its own port (5000-5009) with dedicated output volumes.
+#
+# USAGE:
+#   Start all providers:     docker compose --profile full up -d
+#   Start specific provider: docker compose --profile piper up -d
+#   Start with GPU support:  docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile full up -d
+#
+# PORT ALLOCATION:
+#   5000 - Edge TTS (cloud proxy)
+#   5001 - Piper TTS (local ONNX)
+#   5002 - Coqui XTTS (voice cloning)
+#   5003 - Bark TTS (expressive)
+#   5004 - ChatTTS (conversational)
+#   5005 - Kokoro TTS (lightweight)
+#   5006 - Mimic3 (privacy-focused)
+#   5007 - F5-TTS (high quality)
+#   5008 - StyleTTS2 (expressive)
+#   5009 - Orpheus TTS (LLM-based)
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # CLOUD-BASED PROVIDERS
+  # ===========================================================================
+  # These are lightweight Python containers that proxy requests to cloud APIs.
+  # They don't require GPU and are very fast to start.
+
+  edge-tts:
+    # CONCEPT: Edge TTS is Microsoft's free cloud TTS service.
+    # This container provides a REST API wrapper around the edge-tts library.
+    build:
+      context: ./edge-tts
+      dockerfile: Dockerfile
+    container_name: wakegen-edge-tts
+    ports:
+      - "5000:8000" # HOST:CONTAINER - Access via http://localhost:5000
+    volumes:
+      - ./outputs/edge-tts:/app/outputs # Generated audio files saved here
+    environment:
+      - PYTHONUNBUFFERED=1 # Show Python logs in real-time
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - full # Included when running all providers
+      - cloud # Included in cloud-only profile
+      - edge-tts # Individual provider profile
+
+  # ===========================================================================
+  # LOCAL OPEN-SOURCE PROVIDERS
+  # ===========================================================================
+  # These run TTS models locally. Some work well on CPU, others need GPU.
+
+  piper:
+    # CONCEPT: Piper is a fast, lightweight TTS that runs great on CPU.
+    # Uses Wyoming protocol (Home Assistant compatible) with built-in HTTP API.
+    image: rhasspy/wyoming-piper:latest
+    container_name: wakegen-piper
+    ports:
+      - "5001:10200" # Wyoming protocol port
+    volumes:
+      - piper-data:/data # Downloaded voice models cached here
+      - ./outputs/piper:/output # Generated audio saves here
+    command: --voice en_US-lessac-medium --data-dir /data --download-dir /data
+    restart: unless-stopped
+    profiles:
+      - full
+      - local
+      - piper
+
+  coqui-xtts:
+    # CONCEPT: Coqui XTTS is a zero-shot voice cloning model.
+    # Provide a reference audio file and it clones that voice.
+    # GPU recommended for reasonable speed (~4GB VRAM minimum).
+    image: ghcr.io/coqui-ai/xtts-streaming-server:latest
+    container_name: wakegen-coqui-xtts
+    ports:
+      - "5002:80" # HTTP REST API
+    volumes:
+      - xtts-models:/root/.local/share/tts # Model cache (~2GB)
+      - ./outputs/coqui-xtts:/app/output
+    environment:
+      - COQUI_TOS_AGREED=1 # Required: Accept Coqui license terms
+    restart: unless-stopped
+    profiles:
+      - full
+      - local
+      - coqui-xtts
+
+  bark:
+    # CONCEPT: Bark is Suno's expressive TTS that can generate emotions,
+    # laughter, music, and non-verbal sounds. Very resource-intensive.
+    # GPU strongly recommended (6-12GB VRAM for small model).
+    build:
+      context: ./bark
+      dockerfile: Dockerfile
+    container_name: wakegen-bark
+    ports:
+      - "5003:8000" # FastAPI HTTP endpoint
+    volumes:
+      - bark-models:/root/.cache/suno # Model cache (~10GB)
+      - ./outputs/bark:/app/outputs
+    environment:
+      - SUNO_USE_SMALL_MODELS=1 # Use smaller models by default (less VRAM)
+    restart: unless-stopped
+    profiles:
+      - full
+      - local
+      - bark
+
+  chattts:
+    # CONCEPT: ChatTTS is optimized for conversational/dialogue speech.
+    # Good for natural-sounding wake words and assistant responses.
+    image: 2noise/chattts:latest
+    container_name: wakegen-chattts
+    ports:
+      - "5004:9966" # Default ChatTTS WebUI port
+    volumes:
+      - chattts-models:/root/.cache # Model cache
+      - ./outputs/chattts:/app/outputs
+    restart: unless-stopped
+    profiles:
+      - full
+      - local
+      - chattts
+
+  kokoro:
+    # CONCEPT: Kokoro is an extremely lightweight (82M params) ONNX TTS.
+    # Runs fast even on CPU. OpenAI-compatible API endpoint.
+    image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
+    container_name: wakegen-kokoro
+    ports:
+      - "5005:8880" # OpenAI-compatible /v1/audio/speech endpoint
+    volumes:
+      - kokoro-models:/app/models
+      - ./outputs/kokoro:/app/outputs
+    restart: unless-stopped
+    profiles:
+      - full
+      - local
+      - kokoro
+
+  mimic3:
+    # CONCEPT: Mimic3 is Mycroft's privacy-focused, fully offline TTS.
+    # Designed for embedded systems (RPi), works great on CPU.
+    image: mycroftai/mimic3:latest
+    container_name: wakegen-mimic3
+    ports:
+      - "5006:59125" # Mimic3 HTTP API port
+    volumes:
+      - mimic3-voices:/home/mimic3/.local/share/mycroft/mimic3/voices
+      - ./outputs/mimic3:/output
+    restart: unless-stopped
+    profiles:
+      - full
+      - local
+      - mimic3
+
+  f5-tts:
+    # CONCEPT: F5-TTS is a high-quality diffusion-based TTS with voice cloning.
+    # Produces very natural speech. GPU recommended for speed.
+    image: ghcr.io/swivid/f5-tts:main
+    container_name: wakegen-f5-tts
+    ports:
+      - "5007:7860" # Gradio web interface port
+    volumes:
+      - f5-models:/root/.cache/huggingface # Model cache (~2GB)
+      - ./outputs/f5-tts:/app/outputs
+    restart: unless-stopped
+    profiles:
+      - full
+      - local
+      - f5-tts
+
+  styletts2:
+    # CONCEPT: StyleTTS2 produces human-level quality expressive speech.
+    # Supports different speaking styles (happy, sad, neutral, etc.)
+    image: ghcr.io/saladtechnologies/styletts2-api:latest
+    container_name: wakegen-styletts2
+    ports:
+      - "5008:8000" # FastAPI HTTP endpoint
+    volumes:
+      - styletts2-models:/app/Models
+      - ./outputs/styletts2:/app/outputs
+    restart: unless-stopped
+    profiles:
+      - full
+      - local
+      - styletts2
+
+  orpheus:
+    # CONCEPT: Orpheus TTS uses LLMs (Llama backbone) for speech synthesis.
+    # Produces emotional, expressive speech. Multiple model sizes available.
+    image: ghcr.io/lex-au/orpheus-fastapi:latest
+    container_name: wakegen-orpheus
+    ports:
+      - "5009:5005" # OpenAI-compatible API endpoint
+    volumes:
+      - orpheus-models:/app/models
+      - ./outputs/orpheus:/app/outputs
+    environment:
+      - MODEL_SIZE=small # Options: small, medium, large
+    restart: unless-stopped
+    profiles:
+      - full
+      - local
+      - orpheus
+
+# =============================================================================
+# NAMED VOLUMES
+# =============================================================================
+# These persist downloaded models between container restarts.
+# Models can be several GB, so caching them saves bandwidth and startup time.
+
+volumes:
+  piper-data:
+    name: wakegen-piper-data
+  xtts-models:
+    name: wakegen-xtts-models
+  bark-models:
+    name: wakegen-bark-models
+  chattts-models:
+    name: wakegen-chattts-models
+  kokoro-models:
+    name: wakegen-kokoro-models
+  mimic3-voices:
+    name: wakegen-mimic3-voices
+  f5-models:
+    name: wakegen-f5-models
+  styletts2-models:
+    name: wakegen-styletts2-models
+  orpheus-models:
+    name: wakegen-orpheus-models
+
+# =============================================================================
+# NETWORKS (Optional - uncomment if you need inter-container communication)
+# =============================================================================
+# networks:
+#   wakegen-tts:
+#     name: wakegen-tts-network
+#     driver: bridge
