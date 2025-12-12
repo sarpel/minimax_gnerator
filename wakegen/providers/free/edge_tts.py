@@ -49,7 +49,7 @@ class EdgeTTSProvider(BaseProvider):
 
         Args:
             text: The text to synthesize.
-            voice_id: The voice ID (e.g., "en-US-AriaNeural").
+            voice_id: The voice ID (e.g., "tr-TR-EmelNeural").
             output_path: Path to save the generated audio file.
 
         Raises:
@@ -65,7 +65,7 @@ class EdgeTTSProvider(BaseProvider):
             if not voice_id or voice_id.strip() == "":
                 raise ProviderError(
                     "Edge TTS voice_id cannot be empty. "
-                    "Please provide a valid voice ID like 'en-US-AriaNeural' or 'tr-TR-AhmetNeural'."
+                    "Please provide a valid voice ID like 'tr-TR-EmelNeural' or 'tr-TR-AhmetNeural'."
                 )
 
             # Check text is not empty
@@ -96,7 +96,7 @@ class EdgeTTSProvider(BaseProvider):
                 raise ProviderError(
                     f"Edge TTS generation failed: No audio was received. "
                     f"This usually means the voice_id '{voice_id}' is invalid. "
-                    f"Try using a valid voice like 'en-US-AriaNeural' or 'tr-TR-AhmetNeural'."
+                    f"Try using a valid voice like 'tr-TR-EmelNeural' or 'tr-TR-AhmetNeural'."
                 ) from e
             raise ProviderError(f"Edge TTS generation failed: {error_msg}") from e
 

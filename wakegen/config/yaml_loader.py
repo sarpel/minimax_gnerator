@@ -633,8 +633,8 @@ generation:
 providers:
   - type: edge_tts               # Microsoft Edge TTS (free, online)
     voices:
-      - en-US-JennyNeural
-      - en-US-GuyNeural
+      - tr-TR-EmelNeural
+      - tr-TR-AhmetNeural
     weight: 0.4
 
   - type: kokoro                 # Kokoro TTS (local, fast)
