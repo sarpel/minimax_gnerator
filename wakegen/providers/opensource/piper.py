@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
-import tempfile
+import wave
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from wakegen.core.exceptions import ProviderError
@@ -12,25 +14,42 @@ from wakegen.models.audio import Voice
 from wakegen.providers.base import BaseProvider
 from wakegen.providers.registry import register_provider
 
-# We implement the 'BaseProvider' class to create our Piper TTS provider.
-# Piper is a CPU-friendly, fast inference TTS engine with Turkish language support.
+# Logger for debugging Piper operations
+logger = logging.getLogger(__name__)
+
+# ============================================================================
+# PIPER TTS PROVIDER
+# ============================================================================
+# Piper is a fast, local, CPU-friendly TTS engine.
+# It requires downloading ONNX model files from Hugging Face.
+#
+# IMPORTANT: PiperVoice.load() requires an ACTUAL FILE PATH to the .onnx model,
+# NOT a voice ID string! The voice ID must first be resolved to a downloaded
+# model file path.
+# ============================================================================
+
+# Default model storage directory
+PIPER_MODELS_DIR = Path.home() / ".piper_models"
 
 
 class PiperTTSProvider(BaseProvider):
     """
     Provider implementation for Piper TTS (Open Source).
+
     Piper is a fast, local TTS system that works well on CPU and supports Turkish.
+    Models are automatically downloaded from Hugging Face on first use.
+
+    Reference: https://github.com/OHF-Voice/piper1-gpl
     """
 
     def __init__(self, config: Any):
         """
         Initialize the Piper TTS provider.
-        Piper doesn't require API keys, so we just need basic configuration.
+        Piper doesn't require API keys - just downloads voice models on demand.
         """
         super().__init__(config)
-        # Issue 16 fix: No longer using unbounded dict cache
-        # Voice caching is now handled by @lru_cache decorator on _load_voice_model
-        self._piper_executable: str | None = None
+        # Ensure models directory exists
+        PIPER_MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
     @property
     def provider_type(self) -> ProviderType:
@@ -38,271 +57,272 @@ class PiperTTSProvider(BaseProvider):
 
     async def _ensure_piper_available(self) -> None:
         """
-        Check if Piper is available and download the executable if needed.
-        This handles the setup automatically.
+        Check if Piper library is installed.
+
+        Raises:
+            ProviderError: If piper-tts is not installed
         """
         try:
-            # Try to import piper to ensure it's installed
-            # NOTE: The package is 'piper-tts' but the import is 'piper'
+            # The package is 'piper-tts' but the import is 'piper'
             import piper  # noqa: F401
         except ImportError:
             raise ProviderError(
                 "Piper TTS library is not installed. Please install with: pip install piper-tts"
             )
 
-        # Check if we can find the piper executable
-        # Issue 6 fix: Using async subprocess instead of blocking subprocess.run
+    def _get_model_path(self, voice_id: str) -> Path:
+        """
+        Get the local path for a voice model.
+
+        CONCEPT: Voice IDs like 'en_US-lessac-medium' are converted to file paths
+        like '~/.piper_models/en_US-lessac-medium.onnx'
+
+        Args:
+            voice_id: The voice ID (e.g., "en_US-lessac-medium")
+
+        Returns:
+            Path to the .onnx model file
+        """
+        return PIPER_MODELS_DIR / f"{voice_id}.onnx"
+
+    def _get_config_path(self, voice_id: str) -> Path:
+        """
+        Get the local path for a voice config file.
+
+        Args:
+            voice_id: The voice ID
+
+        Returns:
+            Path to the .onnx.json config file
+        """
+        return PIPER_MODELS_DIR / f"{voice_id}.onnx.json"
+
+    async def _download_model(self, voice_id: str) -> Path:
+        """
+        Download a Piper voice model from Hugging Face if not already cached.
+
+        CONCEPT: Piper models are hosted on HuggingFace under 'rhasspy/piper-voices'.
+        Each voice has two files:
+          - {voice_id}.onnx      (the neural network model)
+          - {voice_id}.onnx.json (configuration file)
+
+        Args:
+            voice_id: The voice ID (e.g., "en_US-lessac-medium")
+
+        Returns:
+            Path to the downloaded .onnx model file
+
+        Raises:
+            ProviderError: If download fails
+        """
+        model_path = self._get_model_path(voice_id)
+        config_path = self._get_config_path(voice_id)
+
+        # If both files exist, skip download
+        if model_path.exists() and config_path.exists():
+            logger.debug(f"Piper model already cached: {voice_id}")
+            return model_path
+
+        logger.info(f"Downloading Piper voice model: {voice_id}")
+
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "piper",
-                "--help",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            # Use huggingface_hub for downloading (it's a dependency of piper-tts)
+            from huggingface_hub import hf_hub_download
+
+            # Parse voice_id to construct HuggingFace path
+            # Format: {language}_{country}-{name}-{quality}
+            # Example: en_US-lessac-medium -> en/en_US/lessac/medium/
+            parts = voice_id.split("-")
+            if len(parts) < 2:
+                raise ProviderError(
+                    f"Invalid voice ID format: {voice_id}. "
+                    f"Expected format: 'language_COUNTRY-name-quality' (e.g., 'en_US-lessac-medium')"
+                )
+
+            lang_country = parts[0]  # e.g., "en_US"
+            lang = lang_country.split("_")[0]  # e.g., "en"
+            name = parts[1] if len(parts) > 1 else "unknown"
+            quality = parts[2] if len(parts) > 2 else "medium"
+
+            # Construct the subfolder path for HuggingFace
+            # e.g., "en/en_US/lessac/medium/"
+            subfolder = f"{lang}/{lang_country}/{name}/{quality}"
+
+            # Download the .onnx model file
+            onnx_filename = f"{lang_country}-{name}-{quality}.onnx"
+            downloaded_model = hf_hub_download(
+                repo_id="rhasspy/piper-voices",
+                filename=onnx_filename,
+                subfolder=subfolder,
+                local_dir=PIPER_MODELS_DIR,
+                local_dir_use_symlinks=False,
             )
-            try:
-                await asyncio.wait_for(proc.communicate(), timeout=5.0)
-                if proc.returncode != 0:
-                    # Try to download Piper if not available
-                    self._download_piper_executable()
-            except asyncio.TimeoutError:
-                proc.kill()
-                await proc.wait()
-                self._download_piper_executable()
-        except FileNotFoundError:
-            self._download_piper_executable()
 
-    def _download_piper_executable(self) -> None:
-        """
-        Download the Piper executable if it's not available.
-        This is a fallback method to ensure Piper works.
-        """
-        try:
-            from piper.download import ensure_voice_exists
+            # Download the .onnx.json config file
+            json_filename = f"{lang_country}-{name}-{quality}.onnx.json"
+            downloaded_config = hf_hub_download(
+                repo_id="rhasspy/piper-voices",
+                filename=json_filename,
+                subfolder=subfolder,
+                local_dir=PIPER_MODELS_DIR,
+                local_dir_use_symlinks=False,
+            )
 
-            # Use the official download method if available
-            ensure_voice_exists("en_US-lessac-medium")
+            # Move files to standard locations (flatten the directory structure)
+            # huggingface_hub downloads to: {local_dir}/{subfolder}/{filename}
+            # We want: {local_dir}/{voice_id}.onnx
+            src_model = Path(downloaded_model)
+            src_config = Path(downloaded_config)
+
+            if src_model != model_path:
+                src_model.rename(model_path)
+            if src_config != config_path:
+                src_config.rename(config_path)
+
+            logger.info(f"Successfully downloaded Piper model: {voice_id}")
+            return model_path
+
         except ImportError:
-            # Fall back to raising a clear error
             raise ProviderError(
-                "Piper TTS is not installed correctly. "
-                "Install with: pip install piper-tts"
-            ) from None
+                "huggingface_hub is required for downloading Piper models. "
+                "Install with: pip install huggingface_hub"
+            )
         except Exception as e:
-            raise ProviderError(f"Failed to ensure Piper is available: {e!s}") from e
+            raise ProviderError(
+                f"Failed to download Piper voice model '{voice_id}': {e!s}"
+            ) from e
 
     async def generate(self, text: str, voice_id: str, output_path: str) -> None:
         """
         Generates audio using Piper TTS.
 
+        HOW IT WORKS:
+        1. Ensure Piper library is installed
+        2. Download the voice model from HuggingFace if not cached
+        3. Load the model using PiperVoice.load(model_path)
+        4. Synthesize audio using voice.synthesize_wav()
+
         Args:
             text: The text to speak (e.g., "Hey Katya").
-            voice_id: The ID of the voice to use (e.g., "tr_TR-dfki-medium").
+            voice_id: The ID of the voice to use (e.g., "en_US-lessac-medium").
             output_path: The full path where the audio file should be saved.
+
+        Raises:
+            ProviderError: If generation fails
         """
         try:
-            # Ensure Piper is available
+            # Step 1: Ensure Piper is installed
             await self._ensure_piper_available()
 
-            # First, try the subprocess-based approach (more reliable)
-            try:
-                await self._generate_with_subprocess(text, voice_id, output_path)
-                return
-            except ProviderError as subprocess_error:
-                # If subprocess fails, try the Python API as fallback
-                try:
-                    await self._generate_with_python_api(text, voice_id, output_path)
-                    return
-                except ProviderError as python_api_error:
-                    # If both methods fail, raise the subprocess error as it's more likely to be the primary issue
-                    raise ProviderError(
-                        f"Piper TTS generation failed with both methods. Subprocess error: {subprocess_error!s}, Python API error: {python_api_error!s}"
-                    )
+            # Step 2: Download model if needed
+            model_path = await self._download_model(voice_id)
 
+            # Step 3: Generate audio using Python API
+            await self._generate_with_python_api(text, str(model_path), output_path)
+
+        except ProviderError:
+            # Re-raise ProviderErrors as-is
+            raise
         except Exception as e:
             raise ProviderError(f"Piper TTS generation failed: {e!s}") from e
 
-    async def _generate_with_subprocess(
-        self, text: str, voice_id: str, output_path: str
-    ) -> None:
-        """
-        Generate audio using Piper CLI directly (primary method).
-
-        Args:
-            text: The text to speak
-            voice_id: The voice model ID
-            output_path: Where to save the audio file
-        """
-        try:
-            # Build the Piper CLI command - exactly as requested
-            cmd = ["piper", "--model", voice_id, "--output_file", output_path]
-
-            # Run Piper CLI as a subprocess
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-
-            # Send the text to Piper via stdin and get the result
-            stdout, stderr = await process.communicate(input=text.encode())
-
-            # Check if Piper succeeded - exactly as requested
-            if process.returncode != 0:
-                error_msg = stderr.decode() if stderr else "Unknown error"
-                raise ProviderError(f"Piper failed: {error_msg}")
-
-        except FileNotFoundError:
-            raise ProviderError(
-                "Piper executable not found. Please ensure Piper is installed correctly."
-            )
-        except Exception as e:
-            raise ProviderError(f"Piper subprocess generation failed: {e!s}") from e
-
     async def _generate_with_python_api(
-        self, text: str, voice_id: str, output_path: str
+        self, text: str, model_path: str, output_path: str
     ) -> None:
         """
-        Generate audio using Piper Python API (fallback method).
+        Generate audio using Piper Python API.
+
+        IMPORTANT: The official Piper API usage is:
+            voice = PiperVoice.load("/path/to/model.onnx")
+            with wave.open("output.wav", "wb") as wav_file:
+                voice.synthesize_wav("Hello!", wav_file)
 
         Args:
             text: The text to speak
-            voice_id: The voice model ID
+            model_path: Full path to the .onnx model file
             output_path: Where to save the audio file
         """
         try:
-            # Import Piper modules (correct import is 'piper', not 'piper_tts')
+            from piper import PiperVoice
 
-            # Get or download the voice model
-            voice = await self._get_piper_voice(voice_id)
+            # Load the voice model from the ONNX file
+            # NOTE: This expects a FILE PATH, not a voice ID!
+            voice = PiperVoice.load(model_path)
 
-            # Create a temporary file for the audio
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
-                temp_path = temp_audio.name
+            # Synthesize using the correct API: synthesize_wav with wave.open
+            # This is the official way per the documentation
+            with wave.open(output_path, "wb") as wav_file:
+                voice.synthesize_wav(text, wav_file)
 
-            try:
-                # Synthesize the audio using Piper's API
-                wav_data = voice.synthesize(text)
-
-                # Write WAV data to temp file
-                with open(temp_path, "wb") as f:
-                    f.write(wav_data)
-
-                # Move the temporary file to the final location
-                os.replace(temp_path, output_path)
-
-            except Exception as synth_error:
-                # Clean up temp file if synthesis failed
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
-                raise ProviderError(
-                    f"Piper TTS synthesis failed: {synth_error!s}"
-                ) from synth_error
+            logger.debug(f"Piper generated audio: {output_path}")
 
         except Exception as e:
             raise ProviderError(f"Piper Python API generation failed: {e!s}") from e
 
-    async def _get_piper_voice(self, voice_id: str) -> Any:
-        """
-        Get or download a Piper voice model.
-
-        Args:
-            voice_id: The voice ID (e.g., "tr_TR-dfki-medium")
-
-        Returns:
-            The PiperVoice object ready for synthesis
-
-        Note:
-            Issue 16: Voice models are cached using @lru_cache (maxsize=5)
-            to prevent unlimited memory growth. Least recently used models
-            are automatically evicted when cache is full.
-        """
-        # Delegate to cached loader
-        return self._load_voice_model(voice_id)
-
-    @staticmethod
-    @lru_cache(maxsize=5)
-    def _load_voice_model(voice_id: str) -> Any:
-        """
-        Load and cache a Piper voice model (LRU cache with max 5 models).
-
-        This is a static method so @lru_cache works properly.
-        The cache will automatically evict least recently used models.
-        """
-        try:
-            from piper.voice import PiperVoice
-
-            # Create the voice object (this will download if needed)
-            voice = PiperVoice.load(voice_id)
-            return voice
-
-        except Exception as e:
-            raise ProviderError(f"Failed to load Piper voice {voice_id}: {e!s}") from e
-
     async def list_voices(self) -> list[Voice]:
         """
         Lists available voices from Piper TTS.
-        Returns a list of voices with Turkish support highlighted.
+
+        CONCEPT: Piper has 100+ voices available on HuggingFace.
+        We list popular ones here, especially those supporting Turkish.
+        Full list: https://github.com/OHF-Voice/piper1-gpl/blob/main/docs/VOICES.md
         """
         try:
-            # These are known Piper voices that support Turkish
-            # Piper doesn't have a built-in voice listing API, so we provide known voices
-            turkish_voices = [
+            # Popular Piper voices across languages
+            # Format: voice_id maps to HuggingFace path structure
+            voices_data = [
+                # Turkish voices
                 {
                     "id": "tr_TR-dfki-medium",
                     "name": "Turkish Female (DFKI Medium)",
                     "gender": "female",
                     "language": "tr-TR",
-                    "provider": self.provider_type,
+                },
+                # English voices (popular)
+                {
+                    "id": "en_US-lessac-medium",
+                    "name": "English US Male (Lessac Medium)",
+                    "gender": "male",
+                    "language": "en-US",
                 },
                 {
-                    "id": "tr_TR-dfki-x_low",
-                    "name": "Turkish Female (DFKI X-Low)",
+                    "id": "en_US-amy-medium",
+                    "name": "English US Female (Amy Medium)",
                     "gender": "female",
-                    "language": "tr-TR",
-                    "provider": self.provider_type,
+                    "language": "en-US",
                 },
                 {
-                    "id": "tr_TR-dfki-x_high",
-                    "name": "Turkish Female (DFKI X-High)",
+                    "id": "en_GB-alba-medium",
+                    "name": "English GB Female (Alba Medium)",
                     "gender": "female",
-                    "language": "tr-TR",
-                    "provider": self.provider_type,
+                    "language": "en-GB",
                 },
+                # German voices
                 {
-                    "id": "tr_TR-dfki-low",
-                    "name": "Turkish Female (DFKI Low)",
-                    "gender": "female",
-                    "language": "tr-TR",
-                    "provider": self.provider_type,
+                    "id": "de_DE-thorsten-medium",
+                    "name": "German Male (Thorsten Medium)",
+                    "gender": "male",
+                    "language": "de-DE",
                 },
+                # French voices
                 {
-                    "id": "tr_TR-dfki-high",
-                    "name": "Turkish Female (DFKI High)",
+                    "id": "fr_FR-siwis-medium",
+                    "name": "French Female (Siwis Medium)",
                     "gender": "female",
-                    "language": "tr-TR",
-                    "provider": self.provider_type,
+                    "language": "fr-FR",
                 },
-                # Additional Turkish voice models added for enhanced support
+                # Spanish voices
                 {
-                    "id": "tr_TR-dfki-fast",
-                    "name": "Turkish Female (DFKI Fast)",
-                    "gender": "female",
-                    "language": "tr-TR",
-                    "provider": self.provider_type,
-                },
-                {
-                    "id": "tr_TR-dfki-slow",
-                    "name": "Turkish Female (DFKI Slow)",
-                    "gender": "female",
-                    "language": "tr-TR",
-                    "provider": self.provider_type,
+                    "id": "es_ES-sharvard-medium",
+                    "name": "Spanish Male (Sharvard Medium)",
+                    "gender": "male",
+                    "language": "es-ES",
                 },
             ]
 
             # Convert to our Voice model
             voice_list = []
-            for v in turkish_voices:
+            for v in voices_data:
                 gender = Gender.FEMALE if v["gender"] == "female" else Gender.MALE
                 voice_list.append(
                     Voice(
@@ -322,15 +342,10 @@ class PiperTTSProvider(BaseProvider):
 
     async def validate_config(self) -> None:
         """
-        Piper TTS doesn't require API keys, so validation is always successful.
-        We just check that the library is available.
+        Validate Piper TTS configuration.
+        Piper doesn't require API keys, just check the library is installed.
         """
-        try:
-            await self._ensure_piper_available()
-        except Exception as e:
-            raise ProviderError(
-                f"Piper TTS configuration validation failed: {e!s}"
-            ) from e
+        await self._ensure_piper_available()
 
 
 # Register this provider so the factory knows about it
