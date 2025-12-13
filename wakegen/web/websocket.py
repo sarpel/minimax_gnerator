@@ -41,7 +41,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
 
 # Import job management from generation router
 from wakegen.web.routers.generation import JobStatus, get_job
@@ -259,9 +259,39 @@ class ConnectionManager:
         return sum(len(conns) for conns in self.active_connections.values())
 
 
-# Global connection manager instance
-# This is shared across all WebSocket endpoints
-manager = ConnectionManager()
+# =============================================================================
+# AR-002: DEPENDENCY INJECTION PATTERN
+# =============================================================================
+# Instead of a global singleton, we use a lazy-initialized instance
+# that can be injected via FastAPI's Depends() system.
+#
+# WHY DI?
+# =======
+# 1. Testability: Easy to mock in tests by overriding the dependency
+# 2. Lifecycle control: Can tie manager to app lifespan
+# 3. Explicit: Dependencies are visible in function signatures
+
+# Module-level instance holder (lazy initialization)
+_connection_manager: ConnectionManager | None = None
+
+
+def get_connection_manager() -> ConnectionManager:
+    """
+    Dependency injection function for ConnectionManager.
+
+    AR-002: This replaces the global singleton pattern.
+
+    Can be used in two ways:
+    1. Direct call: manager = get_connection_manager()
+    2. DI injection: def endpoint(manager: ConnectionManager = Depends(get_connection_manager))
+
+    Returns:
+        ConnectionManager: The singleton instance
+    """
+    global _connection_manager
+    if _connection_manager is None:
+        _connection_manager = ConnectionManager()
+    return _connection_manager
 
 
 # =============================================================================
@@ -305,6 +335,9 @@ async def websocket_progress(websocket: WebSocket, job_id: str) -> None:
     # ELI5: We need to know which computer is connecting so we can limit
     # how many connections each computer can make (prevents abuse)
     client_ip = websocket.client.host if websocket.client else "unknown"
+
+    # AR-002: Get connection manager via DI getter
+    manager = get_connection_manager()
 
     # Accept the connection and register it (with rate limiting)
     await manager.connect(websocket, job_id, client_ip)
@@ -402,6 +435,7 @@ async def websocket_progress(websocket: WebSocket, job_id: str) -> None:
 
     finally:
         # Always clean up the connection
+        # AR-002: manager is already defined above from get_connection_manager()
         manager.disconnect(websocket, job_id)
 
 
@@ -423,7 +457,8 @@ async def websocket_stats(websocket: WebSocket) -> None:
             await websocket.send_json(
                 {
                     "type": "stats",
-                    "active_connections": manager.get_connection_count(),
+                    # AR-002: Use DI getter for connection count
+                    "active_connections": get_connection_manager().get_connection_count(),
                     "timestamp": datetime.now().isoformat(),
                 }
             )
@@ -449,13 +484,6 @@ async def notify_job_progress(job_id: str, progress_data: dict[str, Any]) -> Non
     """
     progress_data["type"] = "progress"
     progress_data["job_id"] = job_id
+    # AR-002: Use DI getter instead of global
+    manager = get_connection_manager()
     await manager.send_progress(job_id, progress_data)
-
-
-def get_connection_manager() -> ConnectionManager:
-    """
-    Get the global connection manager.
-
-    Use this to access the manager from other modules.
-    """
-    return manager

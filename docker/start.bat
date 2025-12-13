@@ -64,7 +64,6 @@ if %ERRORLEVEL% equ 0 (
     echo   Mimic3:      http://localhost:5006
     echo   F5-TTS:      http://localhost:5007
     echo   StyleTTS2:   http://localhost:5008
-    echo   Orpheus:     http://localhost:5009
     echo.
     echo Run 'docker compose ps' to see container status
 ) else (

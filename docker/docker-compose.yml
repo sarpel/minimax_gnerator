@@ -195,23 +195,33 @@ services:
       - local
       - styletts2
 
-  orpheus:
-    # CONCEPT: Orpheus TTS uses LLMs (Llama backbone) for speech synthesis.
-    # Produces emotional, expressive speech. Multiple model sizes available.
-    image: ghcr.io/lex-au/orpheus-fastapi:latest
-    container_name: wakegen-orpheus
-    ports:
-      - "5009:5005" # OpenAI-compatible API endpoint
-    volumes:
-      - orpheus-models:/app/models
-      - ./outputs/orpheus:/app/outputs
-    environment:
-      - MODEL_SIZE=small # Options: small, medium, large
-    restart: unless-stopped
-    profiles:
-      - full
-      - local
-      - orpheus
+  # ===========================================================================
+  # ORPHEUS TTS - TEMPORARILY DISABLED
+  # ===========================================================================
+  # TODO: The image 'ghcr.io/lex-au/orpheus-fastapi:latest' does not exist.
+  # ALTERNATIVES:
+  #   1. Use 'yolanother/docker-orpheus' (requires HuggingFace token)
+  #   2. Clone https://github.com/Lex-au/Orpheus-FastAPI and build locally
+  #   3. Run Orpheus natively via Python without Docker
+  # Uncomment and update the image when a working solution is chosen.
+  # ===========================================================================
+  # orpheus:
+  #   # CONCEPT: Orpheus TTS uses LLMs (Llama backbone) for speech synthesis.
+  #   # Produces emotional, expressive speech. Multiple model sizes available.
+  #   image: ghcr.io/lex-au/orpheus-fastapi:latest
+  #   container_name: wakegen-orpheus
+  #   ports:
+  #     - "5009:5005" # OpenAI-compatible API endpoint
+  #   volumes:
+  #     - orpheus-models:/app/models
+  #     - ./outputs/orpheus:/app/outputs
+  #   environment:
+  #     - MODEL_SIZE=small # Options: small, medium, large
+  #   restart: unless-stopped
+  #   profiles:
+  #     - full
+  #     - local
+  #     - orpheus
 
 # =============================================================================
 # NAMED VOLUMES
