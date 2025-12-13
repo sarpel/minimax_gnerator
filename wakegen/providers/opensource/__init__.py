@@ -5,7 +5,7 @@
 
 from .bark import BarkProvider
 from .chattts import ChatTTSProvider
-from .coqui_xtts import CoquiXTTSProvider
+from .coqui_docker import CoquiDockerProvider
 from .f5_tts import F5TTSProvider
 from .kokoro import KokoroTTSProvider
 from .mimic3 import Mimic3Provider
@@ -19,7 +19,7 @@ from .styletts2 import StyleTTS2Provider
 __all__ = [
     "BarkProvider",
     "ChatTTSProvider",
-    "CoquiXTTSProvider",
+    "CoquiDockerProvider",
     "F5TTSProvider",
     "KokoroTTSProvider",
     "Mimic3Provider",

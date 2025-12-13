@@ -25,7 +25,8 @@ from typing import Any
 from wakegen.core.exceptions import ConfigError, GenerationError
 from wakegen.core.protocols import TTSProvider
 from wakegen.core.types import ProviderType
-from wakegen.generation.batch_processor import BatchConfig, BatchProcessor
+from wakegen.config.batch import BatchConfig
+from wakegen.generation.batch_processor import BatchProcessor
 from wakegen.generation.checkpoint import CheckpointConfig, CheckpointManager
 from wakegen.generation.progress import ProgressConfig, ProgressTracker
 from wakegen.generation.variation_engine import VariationEngine, VariationParameters
@@ -96,6 +97,8 @@ class GenerationOrchestrator:
             rate_limits=getattr(
                 self.config, "rate_limits", {"commercial": (10, 60), "free": (5, 60)}
             ),
+            sample_rate=getattr(self.config, "sample_rate", 16000),
+            caching_enabled=getattr(self.config, "caching_enabled", True),
         )
         self.batch_processor = BatchProcessor(batch_config)
         self.batch_processor.set_progress_tracker(self.progress_tracker)
@@ -124,7 +127,11 @@ class GenerationOrchestrator:
             GenerationError: If generation fails
         """
         try:
-            # Validate inputs
+            # Check if resuming from checkpoint
+            if resume_from_checkpoint:
+                return await self._resume_generation(resume_from_checkpoint, output_dir)
+
+            # Validate inputs for new generation
             if not wake_words:
                 raise GenerationError("At least one wake word must be provided")
 
@@ -133,10 +140,6 @@ class GenerationOrchestrator:
 
             output_path = Path(output_dir)
             output_path.mkdir(parents=True, exist_ok=True)
-
-            # Check if resuming from checkpoint
-            if resume_from_checkpoint:
-                return await self._resume_generation(resume_from_checkpoint, output_dir)
 
             # Create new generation session
             return await self._start_new_generation(
@@ -174,7 +177,9 @@ class GenerationOrchestrator:
         if voice_ids is None:
             # Use default voices from config
             voice_ids = self.config.default_voice_ids or [
-                "tr-TR-PinarNeural",
+                # BUGFIX: tr-TR-PinarNeural doesn't exist in Edge TTS
+                # Valid Turkish voices: tr-TR-EmelNeural (Female), tr-TR-AhmetNeural (Male)
+                "tr-TR-EmelNeural",
                 "tr-TR-AhmetNeural",
             ]
 
@@ -245,6 +250,9 @@ class GenerationOrchestrator:
         else:
             await self.progress_tracker.initialize_batch(len(params_list))
 
+        # Create lookup map for parameters
+        task_params_map = dict(zip(task_ids, params_list))
+
         # Process batch
         if self.batch_processor is None:
             raise GenerationError("Batch processor not initialized")
@@ -268,11 +276,14 @@ class GenerationOrchestrator:
                 )
             else:
                 # Save error state
+                # FIX: Pass parameters so they persist for retry
+                params = task_params_map.get(task_id)
                 await self.checkpoint_manager.save_task_state(
                     checkpoint_id=self._current_checkpoint_id,
                     task_id=task_id,
                     status="failed",
                     error=error,
+                    parameters=params,
                 )
 
         # Mark checkpoint as completed
@@ -333,6 +344,9 @@ class GenerationOrchestrator:
         if self.batch_processor is None:
             raise GenerationError("Batch processor not initialized")
 
+        # Create lookup map for parameters (task_id is first element of tuple in pending_tasks)
+        task_params_map = {t[0]: t[1] for t in pending_tasks}
+
         # Process pending tasks
         results = []
         async for task_id, result, error in self.batch_processor.process_batch(
@@ -352,11 +366,14 @@ class GenerationOrchestrator:
                 )
             else:
                 # Save error state
+                # FIX: Pass parameters so they persist for retry
+                params = task_params_map.get(task_id)
                 await self.checkpoint_manager.save_task_state(
                     checkpoint_id=self._current_checkpoint_id,
                     task_id=task_id,
                     status="failed",
                     error=error,
+                    parameters=params,
                 )
 
         # Mark checkpoint as completed
@@ -379,6 +396,24 @@ class GenerationOrchestrator:
 
         # Create provider config from the main config
         provider_config = ProviderConfig()
+
+        # Check if specific provider type is requested in config
+        if self.config.provider_type:
+            try:
+                p_type = ProviderType(self.config.provider_type)
+                return get_provider(p_type, provider_config)
+            except Exception as e:
+                logger.warning(
+                    f"Requested provider ({self.config.provider_type}) unavailable: {e!s}"
+                )
+                # If specifically requested provider fails, should we fail hard?
+                # For now, let's fall through to default logic but maybe we should raise.
+                # If the user explicitly asked for 'piper', falling back to 'edge_tts' silently might be bad.
+                # However, existing logic seems to be about "best effort".
+                # Let's fail hard if specific provider requested.
+                raise GenerationError(
+                    f"Requested provider '{self.config.provider_type}' is unavailable: {e!s}"
+                ) from e
 
         # Try to get commercial provider first (MiniMax is the primary commercial provider)
         if self.config.use_commercial_providers:
@@ -532,7 +567,9 @@ class GenerationOrchestrator:
             VariationParameters configured for Turkish
         """
         if voice_ids is None:
-            voice_ids = ["tr-TR-PinarNeural", "tr-TR-AhmetNeural", "tr-TR-EmelNeural"]
+            # BUGFIX: tr-TR-PinarNeural doesn't exist in Edge TTS
+            # Only 2 Turkish voices available: EmelNeural (Female), AhmetNeural (Male)
+            voice_ids = ["tr-TR-EmelNeural", "tr-TR-AhmetNeural"]
 
         if self.variation_engine is None:
             raise GenerationError(
@@ -621,7 +658,9 @@ class GenerationOrchestrator:
         # Determine voice IDs to use
         if voice_ids is None:
             voice_ids = self.config.default_voice_ids or [
-                "tr-TR-PinarNeural",
+                # BUGFIX: tr-TR-PinarNeural doesn't exist in Edge TTS
+                # Valid Turkish voices: tr-TR-EmelNeural (Female), tr-TR-AhmetNeural (Male)
+                "tr-TR-EmelNeural",
                 "tr-TR-AhmetNeural",
             ]
 

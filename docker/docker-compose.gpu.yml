@@ -1,0 +1,103 @@
+# =============================================================================
+# WakeGen TTS Docker Stack - GPU Override Configuration
+# =============================================================================
+# This file adds NVIDIA GPU support to containers that benefit from it.
+#
+# USAGE (combine with main compose file):
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile full up -d
+#
+# REQUIREMENTS:
+#   - NVIDIA GPU with CUDA support
+#   - NVIDIA Container Toolkit installed:
+#     https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+#   - Docker configured for GPU access
+#
+# VRAM REQUIREMENTS (approximate):
+#   - Coqui XTTS: 4GB+ (voice cloning)
+#   - Bark: 6-12GB (expressive, use small model for less)
+#   - ChatTTS: 4GB+ (conversational)
+#   - Kokoro: 2GB (lightweight)
+#   - F5-TTS: 6GB+ (high quality)
+#   - StyleTTS2: 4GB+ (expressive)
+#   - Orpheus: 4-12GB (depends on model size)
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # GPU-ENABLED OVERRIDES
+  # ===========================================================================
+  # These override the base container settings to enable NVIDIA GPU access.
+
+  coqui-xtts:
+    # CONCEPT: The CUDA version of XTTS runs much faster with GPU.
+    # Voice cloning that takes 30s on CPU can take 2s on GPU.
+    image: ghcr.io/coqui-ai/xtts-streaming-server:latest-cuda121
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+
+  bark:
+    # CONCEPT: Bark is extremely slow on CPU (~60s per generation).
+    # With GPU, it can generate speech in ~5s.
+    environment:
+      - SUNO_USE_SMALL_MODELS=0 # Can use full models with GPU
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+
+  chattts:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+
+  kokoro:
+    # CONCEPT: Kokoro has a separate GPU image with CUDA support.
+    image: ghcr.io/remsky/kokoro-fastapi-gpu:latest
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+
+  f5-tts:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+
+  styletts2:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+
+  orpheus:
+    environment:
+      - MODEL_SIZE=medium # Can use larger models with GPU
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]

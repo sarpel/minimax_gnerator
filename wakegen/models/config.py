@@ -126,3 +126,9 @@ class GenerationConfig(BaseSettings):
     use_commercial_providers: bool = Field(
         default=False, description="Whether to use commercial providers"
     )
+    provider_type: str | None = Field(
+        default=None, description="Specific provider type to use (e.g., edge_tts, piper)"
+    )
+    caching_enabled: bool = Field(
+        default=True, description="Whether to enable caching of generated audio"
+    )

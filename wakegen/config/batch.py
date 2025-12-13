@@ -9,7 +9,7 @@ different cookbooks, we create one master recipe card that everyone can use.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -45,16 +45,16 @@ class BatchConfig:
     timeout_seconds: int = 300
     """Timeout for individual generation tasks"""
 
-    rate_limits: dict[str, tuple[int, int]] | None = None
+    rate_limits: dict[str, tuple[int, int]] = field(
+        default_factory=lambda: {"commercial": (10, 60), "free": (5, 60)}
+    )
     """Rate limits per provider type (provider_type -> (max_requests, period_seconds))"""
 
+    sample_rate: int = 16000
+    """Target sample rate for generated audio in Hz (default: 16000)"""
+
+    caching_enabled: bool = True
+    """Whether to enable caching of generated audio (default: True)"""
+
     def __post_init__(self) -> None:
-        """Initialize default rate limits if not provided."""
-        if self.rate_limits is None:
-            self.rate_limits = {
-                "commercial": (
-                    10,
-                    60,
-                ),  # 10 requests per minute for commercial providers
-                "free": (5, 60),  # 5 requests per minute for free providers
-            }
+        pass

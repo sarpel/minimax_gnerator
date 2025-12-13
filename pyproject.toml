@@ -11,7 +11,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "Kilo Code", email = "kilo@example.com"}
+    {name = "Sarpel GÜRAY", email = "sarpel15@gmail.com"}
 ]
 keywords = ["wake-word", "tts", "dataset", "audio", "generation"]
 
@@ -46,17 +46,18 @@ dependencies = [
     "scikit-learn>=1.3.0",      # For stratified dataset splitting
     "jinja2>=3.1.0",            # For generating training scripts from templates
     "tenacity>=8.0.0",          # For retry logic in batch processing
+    "pybreaker>=1.2.0",         # AR-004: Circuit breaker pattern for provider resilience
     "aiosqlite>=0.19.0",        # For async SQLite operations in checkpoint system
     
     # ===== Deep Learning Core =====
     "torch>=2.0.0",             # PyTorch - required for most GPU-based TTS providers
     "torchaudio>=2.0.0",        # Audio processing with PyTorch
     "onnxruntime>=1.16.0",      # ONNX runtime for efficient CPU model inference
+    "huggingface_hub>=0.20.0",  # For downloading Piper voice models from HuggingFace
     
     # ===== TTS Providers (Windows 11 Compatible) =====
-    "edge-tts>=6.1.0",          # Microsoft Edge TTS (free, cloud-based, no GPU)
+    "edge-tts>=7.2.4",          # Microsoft Edge TTS (free, cloud-based, no GPU) - v7.2.4+ fixes API changes
     "piper-tts>=1.2.0",         # Piper TTS - fast CPU inference, uses onnxruntime
-    "coqui-tts>=0.24.0,<0.25.0", # Coqui XTTS - Pin <0.25.0 to avoid numpy>=2 conflict
     "kokoro-onnx<=0.3.1",       # Kokoro TTS - Version 0.4.9+ requires numpy>=2.0.2 which breaks compatibility
     "f5-tts>=1.1.10",           # F5 TTS - voice cloning, uses torch/torchaudio
 ]
@@ -99,3 +100,4 @@ python_files = ["test_*.py"]
 python_version = "3.10"
 strict = true
 ignore_missing_imports = true
+exclude = ["docker"]

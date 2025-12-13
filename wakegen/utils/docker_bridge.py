@@ -81,6 +81,7 @@ class DockerBridge:
                 "run",
                 "-d",
                 "--rm",
+                "--gpus", "all",
                 "--name",
                 container_name,
                 "-p",

@@ -67,6 +67,7 @@ class ProgressTracker:
 
         # Task tracking
         self._task_statuses: dict[str, str] = {}
+        self._task_details: dict[str, str] = {}
         self._task_times: dict[str, float] = {}
         self._overall_progress = 0.0
         self._total_tasks = 0
@@ -117,6 +118,8 @@ class ProgressTracker:
         """
         # Record status and time
         self._task_statuses[task_id] = status
+        if details:
+            self._task_details[task_id] = details
 
         if status not in ["pending", "processing"]:
             # Task completed, record duration
@@ -207,13 +210,16 @@ class ProgressTracker:
 
             # Get duration
             duration = self._task_times.get(task_id, 0.0)
+            
+            # Get details
+            task_details = self._task_details.get(task_id, "")
 
             # Add row to table
             self._task_table.add_row(
                 task_id[:12],  # Shorten task ID
                 f"[{status_color}]{status_icon} {status}[/{status_color}]",
                 f"{duration:.1f}s",
-                str(details) if details else "",
+                str(task_details),
             )
 
         # Combine all elements

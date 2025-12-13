@@ -423,6 +423,24 @@ async def test_provider(
             status_code=503, detail=f"Provider {provider_id} is not available"
         )
 
+    # ==========================================================================
+    # DEFAULT VOICES FOR TESTING
+    # ==========================================================================
+    # Some providers return voices in alphabetical order, which may not be
+    # the best choice for testing. For example, Edge TTS returns 'af-ZA-AdriNeural'
+    # (Afrikaans - South Africa) first, which may be unavailable or unreliable.
+    # We define a mapping of provider IDs to known-good default voices.
+    DEFAULT_TEST_VOICES: dict[str, str] = {
+        "edge_tts": "tr-TR-EmelNeural",  # Reliable English female voice
+        "minimax": "Turkish_CalmWoman",  # MiniMax Turkish voice
+        "piper": "en_US-lessac-medium",  # Piper English voice
+        "kokoro": "af_bella",  # Kokoro American Female - Bella
+        "bark": "v2/en_speaker_0",  # Bark English speaker
+        "chattts": "default",  # ChatTTS default
+        "coqui_xtts": "Ana Florence",  # Coqui XTTS
+        "mimic3": "en_UK/apope_low",  # Mimic3 English
+    }
+
     try:
         # Get provider and generate
         provider_config = get_provider_config()
@@ -431,13 +449,19 @@ async def test_provider(
         # Determine voice to use
         voice_id = request.voice_id
         if not voice_id:
-            # Auto-select first voice
-            voices = await provider.list_voices()
-            if not voices:
-                return TestGenerationResponse(
-                    success=False, message="No voices available for this provider"
-                )
-            voice_id = voices[0].id
+            # Check if we have a known-good default voice for this provider
+            # WHY: Some providers return voices alphabetically, and the first
+            # voice (e.g., 'af-ZA-AdriNeural' for Edge TTS) may not work well.
+            if provider_id.lower() in DEFAULT_TEST_VOICES:
+                voice_id = DEFAULT_TEST_VOICES[provider_id.lower()]
+            else:
+                # Fall back to first voice from list
+                voices = await provider.list_voices()
+                if not voices:
+                    return TestGenerationResponse(
+                        success=False, message="No voices available for this provider"
+                    )
+                voice_id = voices[0].id
 
         # Generate to a test directory
         import time
@@ -462,7 +486,7 @@ async def test_provider(
         # e.g. output/test_samples/file.wav instead of output%2Ftest_samples%2Ffile.wav
         from urllib.parse import quote
 
-        encoded_path = quote(rel_path, safe='/')
+        encoded_path = quote(rel_path, safe="/")
         audio_url = f"/api/audio/play/{encoded_path}"
 
         return TestGenerationResponse(

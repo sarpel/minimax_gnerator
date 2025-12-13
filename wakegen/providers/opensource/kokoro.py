@@ -32,9 +32,14 @@ class KokoroTTSProvider(BaseProvider):
         super().__init__(config)
         # We'll store the Kokoro instance here once initialized
         self._kokoro: Any | None = None
-        # Define the model filename - this will be downloaded automatically by the library
-        self._model_filename = "kokoro-v0_19.onnx"
-        self._voices_filename = "voices.json"
+        
+        # Use a dedicated cache directory for model files
+        from pathlib import Path
+        cache_dir = Path.home() / ".wakegen_cache" / "kokoro"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        self._model_path = cache_dir / "kokoro-v0_19.onnx"
+        self._voices_path = cache_dir / "voices.json"
 
     @property
     def provider_type(self) -> ProviderType:
@@ -58,6 +63,35 @@ class KokoroTTSProvider(BaseProvider):
                 "Please install with: pip install kokoro-onnx soundfile"
             )
 
+    async def _download_file_if_missing(self, url: str, path: Any) -> None:
+        """
+        Download a file if it doesn't exist.
+        """
+        import os
+        from pathlib import Path
+        import httpx
+        from rich.console import Console
+        
+        file_path = Path(path)
+        if file_path.exists() and file_path.stat().st_size > 0:
+            return
+
+        console = Console()
+        console.print(f"[cyan]Downloading Kokoro model file: {file_path.name}...[/cyan]")
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, follow_redirects=True)
+                resp.raise_for_status()
+                with open(file_path, "wb") as f:
+                    f.write(resp.content)
+            console.print(f"[green]Downloaded {file_path.name}[/green]")
+        except Exception as e:
+            # Cleanup partial file
+            if file_path.exists():
+                file_path.unlink()
+            raise ProviderError(f"Failed to download {file_path.name}: {e}")
+
     async def _get_kokoro_instance(self) -> Any:
         """
         Get or create the Kokoro instance (Lazy Loading).
@@ -73,10 +107,18 @@ class KokoroTTSProvider(BaseProvider):
             # Import inside the method to avoid errors if library is missing at top level
             from kokoro_onnx import Kokoro
 
-            # Initialize the model
-            # The library handles downloading the model files if they don't exist
-            # This might take a moment on the first run
-            self._kokoro = Kokoro(self._model_filename, self._voices_filename)
+            # Ensure model files exist
+            await self._download_file_if_missing(
+                "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files/kokoro-v0_19.onnx",
+                self._model_path
+            )
+            await self._download_file_if_missing(
+                "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files/voices.json",
+                self._voices_path
+            )
+
+            # Initialize the model using absolute paths
+            self._kokoro = Kokoro(str(self._model_path), str(self._voices_path))
 
             return self._kokoro
 

@@ -148,9 +148,32 @@ async def get_env_info() -> SystemEnv:
     import platform
     import sys
 
-    # Filter for relevant env vars (don't show everything for security)
-    relevant_keys = ["CUDA_VISIBLE_DEVICES", "WAKEGEN_ENV", "PYTHONPATH"]
-    env_vars = {k: os.environ.get(k, "") for k in relevant_keys if k in os.environ}
+    # List of relevant environment variable keys to check
+    # For security, we only report if they're SET, not their actual values
+    relevant_keys = [
+        # CUDA/GPU
+        "CUDA_VISIBLE_DEVICES",
+        # WakeGen specific
+        "WAKEGEN_ENV",
+        # API keys (check presence only - value will be "SET" or empty)
+        "OPENAI_API_KEY",
+        "ELEVENLABS_API_KEY",
+        "MINIMAX_API_KEY",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "HF_TOKEN",
+        "HUGGINGFACE_TOKEN",
+    ]
+
+    # For API keys, only report if set (not actual value for security)
+    api_key_prefixes = ("_API_KEY", "_TOKEN", "CREDENTIALS")
+    env_vars = {}
+    for key in relevant_keys:
+        if key in os.environ:
+            # For sensitive keys, just report "SET" instead of actual value
+            if any(key.endswith(suffix) for suffix in api_key_prefixes):
+                env_vars[key] = "SET"
+            else:
+                env_vars[key] = os.environ.get(key, "")
 
     return SystemEnv(
         python_version=sys.version.split()[0],

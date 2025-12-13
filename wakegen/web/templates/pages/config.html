@@ -122,10 +122,18 @@
                         <div class="flex items-center justify-between mb-2">
                             <select x-model="provider.type"
                                 class="px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-sm">
-                                <option value="edge_tts">Edge TTS</option>
+                                <!-- All available TTS providers from ProviderType enum -->
+                                <option value="edge_tts">Edge TTS (Free)</option>
+                                <option value="minimax">MiniMax (Commercial)</option>
                                 <option value="piper">Piper</option>
-                                <option value="coqui_tts">Coqui TTS</option>
+                                <option value="coqui_xtts">Coqui XTTS</option>
                                 <option value="kokoro">Kokoro</option>
+                                <option value="mimic3">Mimic3</option>
+                                <option value="f5_tts">F5-TTS</option>
+                                <option value="styletts2">StyleTTS 2</option>
+                                <option value="orpheus">Orpheus</option>
+                                <option value="bark">Bark</option>
+                                <option value="chattts">ChatTTS</option>
                             </select>
                             <button @click="removeProvider(index)"
                                 class="text-red-500 hover:text-red-700 text-sm">Remove</button>

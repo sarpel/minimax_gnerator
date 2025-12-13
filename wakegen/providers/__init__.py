@@ -6,7 +6,7 @@ from wakegen.providers.free.edge_tts import EdgeTTSProvider
 
 # Import opensource providers
 from wakegen.providers.opensource import (
-    CoquiXTTSProvider,
+    CoquiDockerProvider,
     KokoroTTSProvider,
     Mimic3Provider,
     PiperTTSProvider,
@@ -41,7 +41,7 @@ __all__ = [
     # Provider classes
     "EdgeTTSProvider",
     "PiperTTSProvider",
-    "CoquiXTTSProvider",
+    "CoquiDockerProvider",
     "KokoroTTSProvider",
     "Mimic3Provider",
 ]

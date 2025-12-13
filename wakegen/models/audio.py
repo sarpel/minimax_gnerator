@@ -15,11 +15,11 @@ class Voice(BaseModel):
 
     id: str = Field(
         ...,
-        description="The unique identifier for the voice (e.g., 'en-US-AriaNeural')",
+        description="The unique identifier for the voice (e.g., 'tr-TR-EmelNeural')",
     )
     name: str = Field(..., description="The human-readable name of the voice")
     gender: Gender = Field(..., description="The gender of the voice")
-    language: str = Field(..., description="The language code (e.g., 'en-US')")
+    language: str = Field(..., description="The language code (e.g., 'tr-TR')")
     provider: ProviderType = Field(
         ..., description="The provider this voice belongs to"
     )

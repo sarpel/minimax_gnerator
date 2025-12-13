@@ -28,6 +28,7 @@ from tenacity import (
 )
 
 from wakegen.config.batch import BatchConfig
+from wakegen.core.circuit_breaker import call_with_breaker
 from wakegen.core.exceptions import GenerationError, ProviderError
 from wakegen.core.protocols import TTSProvider
 from wakegen.core.types import ProviderType
@@ -35,6 +36,9 @@ from wakegen.generation.progress import ProgressTracker
 from wakegen.generation.rate_limiter import RateLimiter
 from wakegen.models.audio import AudioSample
 from wakegen.models.generation import GenerationParameters, GenerationResult
+
+# AR-004: Import pybreaker error for handling circuit breaker trips
+import pybreaker
 
 logger = logging.getLogger(__name__)
 
@@ -99,11 +103,20 @@ class BatchProcessor:
         Raises:
             GenerationError: If task fails after all retry attempts
         """
-        provider_type = (
-            "commercial"
-            if hasattr(provider, "_is_commercial") and provider._is_commercial
-            else "free"
-        )
+        # Determine rate limiter key
+        # Priority: Specific provider type -> "commercial"/"free" category -> "free" default
+        limiter_key = "free"
+        if provider.provider_type.value in self.rate_limiters:
+            limiter_key = provider.provider_type.value
+        elif (
+            getattr(provider, "is_commercial", False)
+            or provider.provider_type.value == "minimax"
+        ):
+            limiter_key = "commercial"
+
+        # Ensure key exists, fallback to free if not found (unless free is missing too)
+        if limiter_key not in self.rate_limiters and "free" in self.rate_limiters:
+            limiter_key = "free"
 
         @retry(
             stop=stop_after_attempt(self.config.retry_attempts),
@@ -112,8 +125,9 @@ class BatchProcessor:
             reraise=True,
         )
         async def _generate_with_retry() -> GenerationResult:
-            # Apply rate limiting
-            await self.rate_limiters[provider_type].wait_for_token()
+            # Apply rate limiting if available
+            if limiter_key in self.rate_limiters:
+                await self.rate_limiters[limiter_key].wait_for_token()
 
             # Update progress
             if self.progress_tracker:
@@ -124,14 +138,78 @@ class BatchProcessor:
                 # provider.generate(text, voice_id, output_path) instead of generate_audio(params)
                 output_path = self._generate_output_path(params)
 
-                # Generate audio with timeout
-                await asyncio.wait_for(
-                    provider.generate(params.text, params.voice_id, output_path),
-                    timeout=self.config.timeout_seconds,
-                )
+                # Caching: Check if already exists
+                from wakegen.utils.caching import GenerationCache
+
+                # Fix: Pass enabled flag from config to cache
+                cache = GenerationCache(enabled=self.config.caching_enabled)
+                cached_path = None
+
+                if self.config.caching_enabled:
+                    cached_path = cache.get(
+                        params.text, params.voice_id, provider.provider_type.value
+                    )
+
+                if cached_path:
+                    # Cache hit: Copy to output_path
+                    import shutil
+
+                    # Run file copy in thread to avoid blocking loop
+                    await asyncio.to_thread(shutil.copy2, cached_path, output_path)
+                    # Use provided provider type for result creation
+                else:
+                    # Cache miss: Generate audio with timeout
+                    # AR-004: Wrap with circuit breaker for resilience
+                    # ELI5: If MiniMax fails 5 times, stop calling it for 60 seconds
+                    try:
+                        # BUGFIX: Pass speed and pitch from GenerationParameters
+                        # This enables voice variation across samples
+                        await asyncio.wait_for(
+                            call_with_breaker(
+                                provider.provider_type.value,
+                                provider.generate,
+                                params.text,
+                                params.voice_id,
+                                output_path,
+                                speed=params.speed,
+                                pitch=params.pitch,
+                            ),
+                            timeout=self.config.timeout_seconds,
+                        )
+                    except pybreaker.CircuitBreakerError:
+                        # Circuit is open - service is unavailable
+                        logger.warning(
+                            f"Circuit breaker OPEN for {provider.provider_type.value}, "
+                            f"skipping generation for task {task_id}"
+                        )
+                        raise ProviderError(
+                            f"Provider {provider.provider_type.value} is temporarily unavailable "
+                            f"(circuit breaker open)"
+                        )
+
+                    # Resample if needed
+                    if self.config.sample_rate:
+                        from wakegen.utils.audio import resample_audio
+
+                        # Run resampling in thread
+                        await asyncio.to_thread(
+                            resample_audio, output_path, self.config.sample_rate
+                        )
+
+                    # Update cache
+                    if self.config.caching_enabled:
+                        cache.put(
+                            params.text,
+                            params.voice_id,
+                            provider.provider_type.value,
+                            output_path,
+                            copy=True,
+                        )
 
                 # Create GenerationResult from the generated audio
-                result = self._create_generation_result(params, output_path)
+                result = self._create_generation_result(
+                    params, output_path, provider.provider_type
+                )
 
                 # Update progress on success
                 if self.progress_tracker:
@@ -186,13 +264,17 @@ class BatchProcessor:
         return os.path.join(audio_dir, filename)
 
     def _create_generation_result(
-        self, params: GenerationParameters, output_path: str
+        self,
+        params: GenerationParameters,
+        output_path: str,
+        provider_type: ProviderType,
     ) -> GenerationResult:
         """Create a GenerationResult from generated audio.
 
         Args:
             params: Original generation parameters
             output_path: Path to the generated audio file
+            provider_type: The provider type used for generation
 
         Returns:
             GenerationResult with audio metadata
@@ -213,7 +295,7 @@ class BatchProcessor:
             file_path=output_path,
             text=params.text,
             voice_id=params.voice_id,
-            provider=provider.provider_type,  # Use actual provider type
+            provider=provider_type,  # Use actual provider type
             duration_seconds=duration,
         )
 

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-import base64  # CQ-003 Fix: Moved from inside function to module level
 import logging
 import os
-import time  # Added import for time module
+import time
 from typing import Any
 
 import httpx
@@ -28,6 +27,7 @@ class MiniMaxVoiceSetting(BaseModel):
     """
     Voice settings for MiniMax TTS API.
     """
+
     voice_id: str = Field(..., description="Voice ID")
     speed: float = Field(
         default=1.0,
@@ -44,12 +44,16 @@ class MiniMaxVoiceSetting(BaseModel):
     )
     pitch: int = Field(
         default=0,
-        description="Pitch adjustment",
+        description="Pitch adjustment (semitones)",
         ge=-12,
         le=12,
     )
-    emotion: str = Field(default="happy", description="Emotion")
+    emotion: str = Field(
+        default="happy",
+        description="Emotion: happy, sad, angry, fearful, disgusted, surprised, calm, fluent, whisper",
+    )
     text_normalization: bool = Field(default=True, description="Normalize text")
+    latex_read: bool = Field(default=False, description="Enable LaTeX formula reading")
 
 
 class MiniMaxVoiceModify(BaseModel):
@@ -58,37 +62,62 @@ class MiniMaxVoiceModify(BaseModel):
     These allow fine-tuning of the voice characteristics.
     """
 
-    # ALIGNED WITH voice_setting.pitch: MiniMax API expects pitch as INTEGER
-    # Both voice_setting and voice_modify use the same API pitch field format
     pitch: int | None = Field(
-        None,
-        description="Additional pitch adjustment in semitones (-12 to +12, INTEGER)",
+        default=None,
+        description="Deepen/Brighten voice (-100 to +100)",
+        ge=-100,
+        le=100,
     )
-    intensity: float | None = Field(
-        None, description="Voice intensity (emotional strength)"
+    intensity: int | None = Field(
+        default=None,
+        description="Stronger/Softer voice (-100 to +100)",
+        ge=-100,
+        le=100,
     )
-    timbre: float | None = Field(None, description="Voice timbre (tone color)")
+    timbre: int | None = Field(
+        default=None,
+        description="Nasal/Crisp voice (-100 to +100)",
+        ge=-100,
+        le=100,
+    )
     sound_effects: str | None = Field(
-        None, description="Sound effects like 'spacious_echo'"
+        default=None,
+        description="Sound effects: spacious_echo, auditorium_echo, lofi_telephone, robotic",
     )
 
 
 class MiniMaxAudioSetting(BaseModel):
     """
     Audio output settings for MiniMax TTS API.
-    These control the technical characteristics of the generated audio file.
     """
 
     sample_rate: int = Field(
         default=16000, description="Sample rate in Hz", ge=8000, le=48000
     )
+    bitrate: int | None = Field(
+        default=None,
+        description="Audio bitrate (32000, 64000, 128000, 256000). Only for mp3.",
+    )
     format: str = Field(
-        default="wav",
-        description="Audio format (wav, mp3, flac)",
-        pattern="^(wav|mp3|flac)$",
+        default="mp3",
+        description="Audio format (wav, mp3, flac, pcm)",
+        pattern="^(wav|mp3|flac|pcm)$",
     )
     channel: int = Field(
         default=1, description="Number of audio channels (1=mono, 2=stereo)", ge=1, le=2
+    )
+    force_cbr: bool = Field(
+        default=False, description="Force Constant Bitrate (CBR) for streaming mp3"
+    )
+
+
+class PronunciationDict(BaseModel):
+    """
+    Pronunciation dictionary configuration.
+    """
+
+    tone: list[str] | None = Field(
+        default=None, description="Pronunciation rules list, e.g. ['omg/oh my god']"
     )
 
 
@@ -109,10 +138,14 @@ class MiniMaxTTSRequest(BaseModel):
         default_factory=lambda: MiniMaxAudioSetting(),
         description="Audio output settings",
     )
-    language_boost: str | None = Field(
-        default=None,
-        description="Language to boost",
+    pronunciation_dict: PronunciationDict | None = Field(
+        default=None, description="Pronunciation dictionary"
     )
+    language_boost: str | None = Field(
+        default="auto",
+        description="Language to boost (e.g. Turkish, auto)",
+    )
+    subtitle_enable: bool = Field(default=False, description="Enable subtitles")
 
 
 class MiniMaxTTSResponse(BaseModel):
@@ -175,13 +208,12 @@ class MiniMaxProvider(BaseProvider):
         # SEC-002: Use helper method to get plain text key from SecretStr
         self.api_key = self.config.get_minimax_key()
         self.group_id = self.config.minimax_group_id
-        self.base_url = "https://api.minimaxi.chat"  # Fixed: Changed from https://api.minimax.ai to official endpoint
+        # Updated to new official endpoint from documentation
+        self.base_url = "https://api.minimax.io"
         self.endpoint = "/v1/t2a_v2"
 
         # PERF-004 Fix: Create persistent HTTP client with connection pooling
         # This eliminates 50-200ms overhead from creating new clients per request
-        # ELI5: Instead of opening a new connection to the server for each request,
-        # we keep a pool of connections ready to reuse, like keeping a phone line open
         self._client = httpx.AsyncClient(
             timeout=30.0,
             limits=httpx.Limits(
@@ -222,7 +254,6 @@ class MiniMaxProvider(BaseProvider):
                 "description": "English male voice with Turkish boost support",
             },
         }
-
 
     @property
     def provider_type(self) -> ProviderType:
@@ -342,7 +373,6 @@ class MiniMaxProvider(BaseProvider):
                 )
 
             # Issue M-008 Fix: Simplified language boost logic
-            # The previous condition was redundant and always True when voice was valid
             # Now just checks if voice is in either Turkish voice dictionary
             language_boost = (
                 "Turkish"
@@ -364,12 +394,10 @@ class MiniMaxProvider(BaseProvider):
                     vol=1.0,
                     pitch=0,
                     emotion="happy",
-                    text_normalization=True
+                    text_normalization=True,
                 ),
                 audio_setting=MiniMaxAudioSetting(
-                    sample_rate=16000, 
-                    format="wav", 
-                    channel=1
+                    sample_rate=16000, format="wav", channel=1
                 ),
             )
 
@@ -384,12 +412,14 @@ class MiniMaxProvider(BaseProvider):
             if not response.audio_data:
                 raise ProviderError("No audio data returned from MiniMax API")
 
-            # CQ-003 Fix: base64 is now imported at module level
-            # Decode the base64 audio data and save to file
-            audio_bytes = base64.b64decode(response.audio_data)
+            # Decode the hex-encoded audio data and save to file
+            # NOTE: MiniMax API returns audio data in hexadecimal format (output_format="hex")
+            # NOT base64! This is documented at:
+            # https://platform.minimax.io/docs/api-reference/speech-t2a-websocket
+            # Example from docs: audio_value = bytes.fromhex(parsed_json['data']['audio'])
+            audio_bytes = bytes.fromhex(response.audio_data)
 
             # Issue C-005 Fix: Handle empty directory path for relative paths
-            # os.path.dirname returns empty string for paths like "audio.wav"
             output_dir = os.path.dirname(output_path)
             if output_dir:  # Only create directory if dirname is non-empty
                 os.makedirs(output_dir, exist_ok=True)
@@ -402,7 +432,6 @@ class MiniMaxProvider(BaseProvider):
 
         except (ConfigError, ProviderError):
             # Re-raise known errors without wrapping - preserves original error type
-            # This prevents losing useful information like "Unsupported voice_id"
             raise
         except Exception as e:
             # Log the error and re-raise as ProviderError for unknown exceptions
@@ -474,10 +503,10 @@ class MiniMaxProvider(BaseProvider):
                     vol=1.0,
                     pitch=0,
                     emotion="happy",
-                    text_normalization=True
+                    text_normalization=True,
                 ),
                 audio_setting=MiniMaxAudioSetting(
-                    sample_rate=16000, format="wav", channel=1
+                    sample_rate=16000, format="mp3", channel=1
                 ),
                 voice_modify=None,
             )
@@ -502,10 +531,6 @@ class MiniMaxProvider(BaseProvider):
 
         PERF-004 Fix: Properly close the persistent HTTP client to prevent
         resource leaks and ensure graceful shutdown.
-
-        ELI5: Think of this like cleaning up your desk at the end of the day.
-        We close our persistent connection to the server and reset our counters
-        so we're ready for a fresh start next time.
         """
         # Close the persistent HTTP client
         if hasattr(self, "_client") and self._client:
