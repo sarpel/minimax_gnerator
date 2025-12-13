@@ -43,14 +43,25 @@ class EdgeTTSProvider(BaseProvider):
         """Return the provider type identifier."""
         return ProviderType.EDGE_TTS
 
-    async def generate(self, text: str, voice_id: str, output_path: str) -> None:
+    async def generate(
+        self,
+        text: str,
+        voice_id: str,
+        output_path: str,
+        *,
+        speed: float | None = None,
+        pitch: float | None = None,
+        **kwargs: object,  # Accept additional kwargs for compatibility
+    ) -> None:
         """
-        Generates audio using Edge TTS.
+        Generates audio using Edge TTS with optional speed and pitch variation.
 
         Args:
             text: The text to synthesize.
             voice_id: The voice ID (e.g., "tr-TR-EmelNeural").
             output_path: Path to save the generated audio file.
+            speed: Optional speed multiplier (0.5-2.0, where 1.0 is normal).
+            pitch: Optional pitch multiplier (0.5-2.0, where 1.0 is normal).
 
         Raises:
             ProviderError: If generation fails.
@@ -75,8 +86,29 @@ class EdgeTTSProvider(BaseProvider):
             # Lazy import for consistency with other providers
             import edge_tts
 
-            # Create the Communicate object with text and voice
-            communicate = edge_tts.Communicate(text, voice_id)
+            # =====================================================================
+            # CONVERT SPEED/PITCH TO EDGE-TTS FORMAT
+            # =====================================================================
+            # Edge TTS expects rate as percentage string like "+20%" or "-10%"
+            # and pitch in Hz like "+0Hz" or "-20Hz"
+            # Our speed/pitch come as floats (0.8-1.2 range, 1.0 = normal)
+            # IMPORTANT: Edge TTS doesn't accept None - we must omit the param entirely
+            communicate_kwargs: dict[str, str] = {}
+
+            if speed is not None and speed != 1.0:
+                # Convert 0.8 -> "-20%", 1.2 -> "+20%"
+                rate_percent = int((speed - 1.0) * 100)
+                communicate_kwargs["rate"] = f"{rate_percent:+d}%"
+
+            if pitch is not None and pitch != 1.0:
+                # Convert pitch multiplier to Hz offset
+                # 1.0 = 0Hz, 0.9 = -20Hz, 1.1 = +20Hz (approximate)
+                pitch_hz = int((pitch - 1.0) * 200)
+                communicate_kwargs["pitch"] = f"{pitch_hz:+d}Hz"
+
+            # Create the Communicate object with text, voice, and optional rate/pitch
+            # SYNTAX: **kwargs unpacking - only includes rate/pitch if they were set
+            communicate = edge_tts.Communicate(text, voice_id, **communicate_kwargs)
 
             # Save the audio to the specified path
             await communicate.save(output_path)

@@ -1,0 +1,27 @@
+project:
+  name: my-wake-word-project
+  version: 1.0.0
+  description: Wake word dataset for smart assistant
+generation:
+  wake_words:
+    - hey katya
+  count: 100
+  sample_rate: 16000
+  audio_format: wav
+  output_dir: ./output
+providers:
+  - type: edge_tts
+    weight: 0.2
+  - type: piper
+    weight: 0.4
+  - type: coqui_tts
+    weight: 0.2
+  - type: kokoro
+    weight: 0.2
+export:
+  format: openwakeword
+  split_ratio:
+    - 0.8
+    - 0.1
+    - 0.1
+  include_manifest: true

@@ -327,6 +327,8 @@
             async applyAugmentation() {
                 try {
                     // Build augmentation profile from current settings
+                    // BUGFIX: Backend expects 'device' object with enabled + devices array,
+                    // not a flat 'devices' array
                     const response = await fetch('/api/augmentation/apply', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -337,15 +339,31 @@
                                 name: this.activePreset,
                                 description: `${this.activePreset} augmentation profile`,
                                 noise: this.settings.noise,
-                                reverb: this.settings.reverb,
-                                pitch: this.settings.pitch,
-                                devices: this.selectedDevices
+                                reverb: {
+                                    enabled: this.settings.reverb.enabled,
+                                    room_size: this.settings.reverb.room,  // Map 'room' to 'room_size'
+                                    decay: parseFloat(this.settings.reverb.decay),
+                                    wet_dry_mix: 0.3  // Default
+                                },
+                                pitch: {
+                                    enabled: this.settings.pitch.enabled,
+                                    pitch_semitones: parseFloat(this.settings.pitch.range),
+                                    speed_percent: parseFloat(this.settings.pitch.speed)
+                                },
+                                device: {
+                                    enabled: this.selectedDevices.length > 0,
+                                    devices: this.selectedDevices
+                                }
                             },
                             copies_per_file: 2
                         })
                     });
 
-                    if (!response.ok) throw new Error('Failed to start augmentation');
+                    if (!response.ok) {
+                        // BUGFIX: Get actual error message from backend
+                        const err = await response.json();
+                        throw new Error(err.detail || 'Failed to start augmentation');
+                    }
 
                     const result = await response.json();
                     alert(`Augmentation Started! Job ID: ${result.job_id}\nCheck console/logs for progress.`);

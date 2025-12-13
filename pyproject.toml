@@ -11,7 +11,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "Kilo Code", email = "kilo@example.com"}
+    {name = "Sarpel GÜRAY", email = "sarpel15@gmail.com"}
 ]
 keywords = ["wake-word", "tts", "dataset", "audio", "generation"]
 

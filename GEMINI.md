@@ -34,7 +34,13 @@ The application is installed as a CLI tool named `wakegen`.
 *   **Wizard:** `wakegen wizard` (Interactive mode)
 *   **List Voices:** `wakegen list-voices --provider edge_tts`
 
-### 3. Testing & Quality
+### 3. Web UI
+*   **Start:** Run `start.bat` (Windows) to launch the web server
+*   **URL:** http://127.0.0.1:8005
+*   **Port:** The web UI runs on **port 8005** (configured in `start.bat`)
+*   Pages: Dashboard, Providers, Generate, Augmentation, Export, Quality, Config, System
+
+### 4. Testing & Quality
 *   **Test Runner:** `pytest` (Configured in `pyproject.toml`)
     *   Run all tests: `pytest`
     *   With coverage: `pytest --cov=wakegen`

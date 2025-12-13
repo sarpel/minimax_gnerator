@@ -259,17 +259,20 @@
                 this.isExporting = true;
 
                 try {
+                    // BUGFIX: Use this.config.* instead of this.* for correct variable access
                     const response = await fetch('/api/export/start', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
-                            input_dir: this.inputDir,
-                            output_dir: this.outputDir,
-                            format: this.format,
-                            split: this.split,
-                            copy_files: true // Force copy for safety
+                            input_dir: this.config.inputDir,
+                            output_dir: this.config.outputDir,
+                            format: this.config.format,
+                            split: this.config.split,
+                            copy_files: this.config.copyFiles,
+                            generate_manifest: this.config.generateManifest,
+                            stratify: this.config.stratify
                         })
                     });
 

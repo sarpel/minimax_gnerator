@@ -162,6 +162,8 @@ class BatchProcessor:
                     # AR-004: Wrap with circuit breaker for resilience
                     # ELI5: If MiniMax fails 5 times, stop calling it for 60 seconds
                     try:
+                        # BUGFIX: Pass speed and pitch from GenerationParameters
+                        # This enables voice variation across samples
                         await asyncio.wait_for(
                             call_with_breaker(
                                 provider.provider_type.value,
@@ -169,6 +171,8 @@ class BatchProcessor:
                                 params.text,
                                 params.voice_id,
                                 output_path,
+                                speed=params.speed,
+                                pitch=params.pitch,
                             ),
                             timeout=self.config.timeout_seconds,
                         )

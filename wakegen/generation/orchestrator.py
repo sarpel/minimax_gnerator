@@ -177,7 +177,9 @@ class GenerationOrchestrator:
         if voice_ids is None:
             # Use default voices from config
             voice_ids = self.config.default_voice_ids or [
-                "tr-TR-PinarNeural",
+                # BUGFIX: tr-TR-PinarNeural doesn't exist in Edge TTS
+                # Valid Turkish voices: tr-TR-EmelNeural (Female), tr-TR-AhmetNeural (Male)
+                "tr-TR-EmelNeural",
                 "tr-TR-AhmetNeural",
             ]
 
@@ -281,7 +283,7 @@ class GenerationOrchestrator:
                     task_id=task_id,
                     status="failed",
                     error=error,
-                    parameters=params
+                    parameters=params,
                 )
 
         # Mark checkpoint as completed
@@ -371,7 +373,7 @@ class GenerationOrchestrator:
                     task_id=task_id,
                     status="failed",
                     error=error,
-                    parameters=params
+                    parameters=params,
                 )
 
         # Mark checkpoint as completed
@@ -565,7 +567,9 @@ class GenerationOrchestrator:
             VariationParameters configured for Turkish
         """
         if voice_ids is None:
-            voice_ids = ["tr-TR-PinarNeural", "tr-TR-AhmetNeural", "tr-TR-EmelNeural"]
+            # BUGFIX: tr-TR-PinarNeural doesn't exist in Edge TTS
+            # Only 2 Turkish voices available: EmelNeural (Female), AhmetNeural (Male)
+            voice_ids = ["tr-TR-EmelNeural", "tr-TR-AhmetNeural"]
 
         if self.variation_engine is None:
             raise GenerationError(
@@ -654,7 +658,9 @@ class GenerationOrchestrator:
         # Determine voice IDs to use
         if voice_ids is None:
             voice_ids = self.config.default_voice_ids or [
-                "tr-TR-PinarNeural",
+                # BUGFIX: tr-TR-PinarNeural doesn't exist in Edge TTS
+                # Valid Turkish voices: tr-TR-EmelNeural (Female), tr-TR-AhmetNeural (Male)
+                "tr-TR-EmelNeural",
                 "tr-TR-AhmetNeural",
             ]
 

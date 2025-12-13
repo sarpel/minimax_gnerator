@@ -211,45 +211,113 @@
 <script>
     function systemStatus() {
         return {
+            // Default values shown while loading
             system: {
-                pythonVersion: '3.11.0'
+                pythonVersion: 'Loading...'
             },
 
             gpu: {
-                available: true,
-                name: 'NVIDIA RTX 3080',
-                totalMemory: '10 GB',
-                usedMemory: '2.4 GB',
-                memoryPercent: 24,
-                utilization: 15,
-                cudaVersion: '12.1'
+                available: false,
+                name: 'Checking...',
+                totalMemory: '-',
+                usedMemory: '-',
+                memoryPercent: 0,
+                utilization: 0,
+                cudaVersion: '-'
             },
 
             cache: {
-                size: '156 MB',
-                entries: 423
+                size: 'Loading...',
+                entries: 0
             },
 
             providers: {
-                available: 3,
-                total: 11
+                available: 0,
+                total: 0
             },
 
-            environment: [
-                { name: 'OPENAI_API_KEY', set: true },
-                { name: 'ELEVENLABS_API_KEY', set: false },
-                { name: 'MINIMAX_API_KEY', set: true },
-                { name: 'GOOGLE_APPLICATION_CREDENTIALS', set: false }
-            ],
+            environment: [],
 
             async init() {
-                // Try to load real GPU status from API
+                // Fetch all system data in parallel
+                await Promise.all([
+                    this.fetchGPU(),
+                    this.fetchCache(),
+                    this.fetchProviders(),
+                    this.fetchEnv()
+                ]);
+            },
+
+            async fetchGPU() {
                 try {
-                    const response = await fetch('/api/health');
-                    const health = await response.json();
-                    // Update with real data when API provides it
+                    const response = await fetch('/api/system/gpu/summary');
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.gpu.available = data.available;
+                        if (data.available) {
+                            this.gpu.name = data.name || 'Unknown GPU';
+                            this.gpu.totalMemory = data.memory_total ? `${data.memory_total} GB` : '-';
+                            this.gpu.usedMemory = data.memory_allocated ? `${data.memory_allocated} GB` : '-';
+                            this.gpu.memoryPercent = data.utilization || 0;
+                            this.gpu.utilization = data.utilization || 0;
+                            // CUDA version not in API, could be added later
+                            this.gpu.cudaVersion = 'N/A';
+                        }
+                    }
                 } catch (e) {
-                    console.log('Using demo data');
+                    console.error('Error fetching GPU status:', e);
+                }
+            },
+
+            async fetchCache() {
+                try {
+                    const response = await fetch('/api/system/cache/summary');
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.cache.size = data.size_human || '0 B';
+                        this.cache.entries = data.file_count || 0;
+                    }
+                } catch (e) {
+                    console.error('Error fetching cache status:', e);
+                }
+            },
+
+            async fetchProviders() {
+                try {
+                    const response = await fetch('/api/providers');
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.providers.total = data.length;
+                        this.providers.available = data.filter(p => p.is_available).length;
+                    }
+                } catch (e) {
+                    console.error('Error fetching providers:', e);
+                }
+            },
+
+            async fetchEnv() {
+                try {
+                    const response = await fetch('/api/system/env');
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.system.pythonVersion = data.python_version || 'Unknown';
+
+                        // Convert variables to environment display format
+                        // Also check for common API keys
+                        const commonKeys = ['OPENAI_API_KEY', 'ELEVENLABS_API_KEY', 'MINIMAX_API_KEY',
+                            'GOOGLE_APPLICATION_CREDENTIALS', 'HF_TOKEN'];
+                        this.environment = commonKeys.map(name => ({
+                            name: name,
+                            set: !!(data.variables && data.variables[name])
+                        }));
+                    }
+                } catch (e) {
+                    console.error('Error fetching env:', e);
+                    // Fallback to common keys with unknown status
+                    this.environment = [
+                        { name: 'OPENAI_API_KEY', set: false },
+                        { name: 'MINIMAX_API_KEY', set: false }
+                    ];
                 }
             },
 
@@ -261,7 +329,14 @@
                 if (type === 'all' && !confirm('Clear all cached audio? This cannot be undone.')) {
                     return;
                 }
-                alert(`Cache ${type === 'all' ? 'cleared' : 'cleaned'}! (Connect to API for real cache management)`);
+                try {
+                    const response = await fetch('/api/system/cache/clear', { method: 'POST' });
+                    const result = await response.json();
+                    alert(result.message || 'Cache operation completed');
+                    await this.fetchCache(); // Refresh cache stats
+                } catch (e) {
+                    alert('Error clearing cache: ' + e.message);
+                }
             }
         };
     }
