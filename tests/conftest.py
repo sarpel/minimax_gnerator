@@ -32,14 +32,13 @@ def mock_provider_registry():
     # or patch the underlying registry dictionary if possible.
     # For now, let's patch the most common usage points.
     with patch("wakegen.web.routers.providers.get_provider") as mock_get_1, \
-         patch("wakegen.web.routers.generation.get_provider") as mock_get_2, \
          patch("wakegen.generation.orchestrator.get_provider") as mock_get_3, \
          patch("wakegen.providers.registry.get_provider") as mock_get_orig:
 
         mock_get = mock_get_orig # Use the original one as the primary mock configuration source
 
         # Configure all mocks to behave the same
-        for m in [mock_get_1, mock_get_2, mock_get_3, mock_get_orig]:
+        for m in [mock_get_1, mock_get_3, mock_get_orig]:
              m.side_effect = mock_get.side_effect
 
         # Create a mock provider instance

@@ -259,17 +259,95 @@ class PiperTTSProvider(BaseProvider):
         except Exception as e:
             raise ProviderError(f"Piper Python API generation failed: {e!s}") from e
 
+    async def _fetch_voice_manifest(self) -> dict[str, Any]:
+        """
+        Fetch the official Piper voices manifest from Hugging Face.
+        
+        Returns:
+            Dictionary mapping voice IDs to metadata
+        """
+        import json
+        import time
+        import httpx
+
+        manifest_path = PIPER_MODELS_DIR / "voices.json"
+        
+        # Check cache (valid for 24 hours)
+        if manifest_path.exists():
+            try:
+                mtime = manifest_path.stat().st_mtime
+                if time.time() - mtime < 86400:  # 24 hours
+                    with open(manifest_path, "r", encoding="utf-8") as f:
+                        return json.load(f)
+            except Exception as e:
+                logger.warning(f"Failed to read cached Piper manifest: {e}")
+
+        # Fetch fresh manifest
+        url = "https://huggingface.co/rhasspy/piper-voices/resolve/main/voices.json"
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, timeout=10.0)
+                response.raise_for_status()
+                data = response.json()
+                
+                # Cache it
+                with open(manifest_path, "w", encoding="utf-8") as f:
+                    json.dump(data, f)
+                
+                return data
+        except Exception as e:
+            logger.warning(f"Failed to fetch Piper manifest: {e}")
+            if manifest_path.exists():
+                # Fallback to stale cache if available
+                try:
+                    with open(manifest_path, "r", encoding="utf-8") as f:
+                        return json.load(f)
+                except Exception:
+                    pass
+            return {}
+
     async def list_voices(self) -> list[Voice]:
         """
         Lists available voices from Piper TTS.
-
-        CONCEPT: Piper has 100+ voices available on HuggingFace.
-        We list popular ones here, especially those supporting Turkish.
-        Full list: https://github.com/OHF-Voice/piper1-gpl/blob/main/docs/VOICES.md
+        
+        Dynamically fetches the list from Hugging Face, falling back to a 
+        popular subset if offline.
         """
         try:
-            # Popular Piper voices across languages
-            # Format: voice_id maps to HuggingFace path structure
+            # Try to get dynamic list
+            manifest = await self._fetch_voice_manifest()
+            
+            if manifest:
+                voice_list = []
+                for voice_key, info in manifest.items():
+                    # Parse language and region from voice key (e.g. en_US-lessac-medium)
+                    # Piper manifest keys match the voice IDs we use
+                    language = info.get("language", {}).get("code", "unknown")
+                    name = info.get("name", voice_key)
+                    # Infer gender from name if not explicit? Manifest usually has it.
+                    # Actually manifest structure is:
+                    # "en_US-lessac-medium": { "key": "...", "name": "...", "language": { "code": "en_US", ... }, ... }
+                    # It doesn't always specify gender explicitly in top level.
+                    # We can default to NEUTRAL or try to guess.
+                    # For now, let's just use NEUTRAL unless we find a specific field.
+                    
+                    voice_list.append(
+                        Voice(
+                            id=voice_key,
+                            name=f"{name} ({info.get('quality', 'unknown')})",
+                            gender=Gender.NEUTRAL, # Metadata often missing gender
+                            language=language,
+                            provider=self.provider_type,
+                            supports_cloning=False,
+                        )
+                    )
+                
+                # Sort by language then name
+                voice_list.sort(key=lambda v: (v.language, v.name))
+                return voice_list
+
+            # Fallback to hardcoded list if manifest fetch failed
+            logger.info("Using fallback hardcoded Piper voice list")
             voices_data = [
                 # Turkish voices
                 {

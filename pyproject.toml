@@ -57,7 +57,6 @@ dependencies = [
     # ===== TTS Providers (Windows 11 Compatible) =====
     "edge-tts>=7.2.4",          # Microsoft Edge TTS (free, cloud-based, no GPU) - v7.2.4+ fixes API changes
     "piper-tts>=1.2.0",         # Piper TTS - fast CPU inference, uses onnxruntime
-    "coqui-tts>=0.24.0,<0.25.0", # Coqui XTTS - Pin <0.25.0 to avoid numpy>=2 conflict
     "kokoro-onnx<=0.3.1",       # Kokoro TTS - Version 0.4.9+ requires numpy>=2.0.2 which breaks compatibility
     "f5-tts>=1.1.10",           # F5 TTS - voice cloning, uses torch/torchaudio
 ]
@@ -100,3 +99,4 @@ python_files = ["test_*.py"]
 python_version = "3.10"
 strict = true
 ignore_missing_imports = true
+exclude = ["docker"]

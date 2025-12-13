@@ -238,12 +238,12 @@ _PROVIDER_REQUIREMENTS: dict[ProviderType, dict[str, Any]] = {
         "install_hint": "pip install piper-tts",
     },
     ProviderType.COQUI_XTTS: {
-        "required": ["TTS"],
-        "optional": ["torch"],
+        "required": [],  # Native TTS package removed, uses Docker
+        "optional": [],
         "api_key_env": None,
-        "gpu_required": True,  # Works on CPU but very slow
-        "description": "Coqui XTTS - voice cloning, high quality",
-        "install_hint": "pip install TTS",
+        "gpu_required": False,  # GPU is used inside container if available
+        "description": "Coqui XTTS - voice cloning (runs in Docker)",
+        "install_hint": "Ensure Docker is installed and running",
     },
     ProviderType.KOKORO: {
         "required": ["kokoro_onnx"],

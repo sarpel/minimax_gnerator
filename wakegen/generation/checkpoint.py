@@ -128,6 +128,9 @@ class CheckpointManager:
 
         Issue 14: Explicit cleanup method for graceful shutdown.
         """
+        # Ensure pending tasks are saved before closing
+        await self.flush_batch()
+        
         if self._db is not None:
             await self._db.close()
             self._db = None
@@ -425,32 +428,44 @@ class CheckpointManager:
         row = await cursor.fetchone()
         if not row:
             raise GenerationError(f"Checkpoint {checkpoint_id} not found")
+            
+        # Count failed tasks
+        failed_cursor = await db.execute(
+            """
+            SELECT COUNT(*) FROM tasks 
+            WHERE checkpoint_id = ? AND status = 'failed'
+            """,
+            (checkpoint_id,),
+        )
+        failed_row = await failed_cursor.fetchone()
+        failed_tasks = failed_row[0] if failed_row else 0
 
         return {
             "status": row[0],
             "progress": row[1],
             "total_tasks": row[2],
             "completed_tasks": row[3],
+            "failed_tasks": failed_tasks,
             "config": json.loads(row[4]),
         }
 
     async def get_pending_tasks(
         self, checkpoint_id: str
     ) -> list[tuple[str, GenerationParameters]]:
-        """Get all pending tasks for a checkpoint.
+        """Get all pending and failed tasks for a checkpoint.
 
         Args:
             checkpoint_id: Checkpoint identifier
 
         Returns:
-            List of (task_id, parameters) tuples for pending tasks
+            List of (task_id, parameters) tuples for tasks to be processed
         """
         db = await self._get_connection()
         cursor = await db.execute(
             """
             SELECT task_id, parameters_json
             FROM tasks
-            WHERE checkpoint_id = ? AND status IN ('pending', 'processing')
+            WHERE checkpoint_id = ? AND status IN ('pending', 'processing', 'failed')
         """,
             (checkpoint_id,),
         )
@@ -523,6 +538,9 @@ class CheckpointManager:
         Args:
             checkpoint_id: Checkpoint identifier
         """
+        # Ensure all tasks are saved first
+        await self.flush_batch()
+
         db = await self._get_connection()
         current_time = int(time.time())
 

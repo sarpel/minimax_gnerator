@@ -1,7 +1,7 @@
 import os
 import tempfile
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+import shutil
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 import logging
 
@@ -11,11 +11,6 @@ logger = logging.getLogger("coqui-xtts-sidecar")
 app = FastAPI(title="Coqui XTTS Sidecar")
 
 model = None
-
-class GenerateRequest(BaseModel):
-    text: str
-    voice_id: str  # Path to reference audio
-    language: str = "en"
 
 @app.on_event("startup")
 async def load_model():
@@ -41,22 +36,34 @@ async def health_check():
     return {"status": "ok", "model_loaded": model is not None}
 
 @app.post("/generate")
-async def generate(request: GenerateRequest):
+async def generate(
+    text: str = Form(...),
+    language: str = Form("en"),
+    reference_audio: UploadFile = File(...)
+):
     global model
     if not model:
         raise HTTPException(status_code=503, detail="Model not loaded")
         
+    temp_ref_path = None
+    output_path = None
+    
     try:
-        if not os.path.exists(request.voice_id):
-             raise HTTPException(status_code=400, detail=f"Reference audio not found: {request.voice_id}")
+        # Save uploaded reference audio
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            temp_ref_path = f.name
+        
+        with open(temp_ref_path, "wb") as f:
+            shutil.copyfileobj(reference_audio.file, f)
 
+        # Prepare output path
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             output_path = f.name
             
         model.tts_to_file(
-            text=request.text,
-            speaker_wav=request.voice_id,
-            language=request.language,
+            text=text,
+            speaker_wav=temp_ref_path,
+            language=language,
             file_path=output_path
         )
         
@@ -65,3 +72,9 @@ async def generate(request: GenerateRequest):
     except Exception as e:
         logger.error(f"Generation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Cleanup temp ref
+        if temp_ref_path and os.path.exists(temp_ref_path):
+            os.unlink(temp_ref_path)
+        # Note: output_path is cleaned up by FileResponse background task usually, 
+        # or we rely on temp dir cleanup. For now this is fine.

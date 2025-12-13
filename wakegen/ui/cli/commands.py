@@ -6,7 +6,7 @@ from typing import Any
 import click
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import track
+from rich.progress import track, Progress
 from rich.table import Table
 
 # Import providers to ensure they are registered
@@ -454,10 +454,13 @@ async def run_generation(
     languages: list[str] | None = None,
 ) -> None:
     """
-    Core generation logic.
+    Core generation logic using GenerationOrchestrator.
     """
+    from wakegen.models.config import GenerationConfig
+    from wakegen.generation.orchestrator import GenerationOrchestrator
+
     try:
-        # 1. Setup Provider
+        # 1. Setup Provider & Resolve Voice (Reuse existing CLI logic for smart selection)
         p_type = ProviderType(provider_name.lower())
         provider_config = get_provider_config()
         provider = get_provider(p_type, provider_config)
@@ -505,55 +508,39 @@ async def run_generation(
             f"Using voice: [cyan]{selected_voice.name}[/cyan] ({selected_voice.id})"
         )
 
-        # 3. Generate Samples
-        gen_config = get_generation_config()  # Load defaults
-        # Override with arguments
-        gen_config.output_dir = output_dir
+        # 3. Configure Orchestrator
+        gen_config = GenerationConfig(
+            output_dir=output_dir,
+            provider_type=p_type.value,
+            sample_rate=16000, # Default to 16kHz standard
+            # Ensure progress bar is shown
+            show_task_details=True,
+            console_width=80
+        )
 
-        os.makedirs(output_dir, exist_ok=True)
-
-        # Simple cache simulation for now (in real app, use the Cache class)
-        from wakegen.utils.caching import GenerationCache
-
-        cache = GenerationCache()
-
-        cache_hits = 0
-        for i in track(range(count), description="Generating samples..."):
-            filename = (
-                f"{text.replace(' ', '_').lower()}_{i + 1}.{gen_config.audio_format}"
+        # 4. Run Generation
+        console.print(f"[bold]Generating {count} samples...[/bold]")
+        
+        async with GenerationOrchestrator(gen_config) as orchestrator:
+            results = await orchestrator.generate(
+                wake_words=[text],
+                count=count,
+                output_dir=output_dir,
+                voice_ids=[selected_voice.id]
             )
-            file_path = os.path.join(output_dir, filename)
 
-            # Check cache first
-            cached_path = cache.get(text, selected_voice.id, p_type.value)
-            if cached_path:
-                # Copy from cache to target location
-                import shutil
-
-                shutil.copy2(cached_path, file_path)
-                cache_hits += 1
-            else:
-                # Generate the audio
-                await provider.generate(text, selected_voice.id, file_path)
-                # Add to cache
-                cache.put(text, selected_voice.id, p_type.value, file_path, copy=True)
-
-            # Resample if needed (Edge TTS usually outputs 24kHz, we might want 16kHz)
-            if gen_config.sample_rate:
-                resample_audio(file_path, gen_config.sample_rate)
-
-        # Save cache metadata
-        cache.save_metadata()
-
-        # Report results
-        if cache_hits > 0:
+        # 5. Report Results
+        success_count = len(results)
+        if success_count > 0:
             console.print(
-                f"[bold green]Successfully generated {count} samples![/bold green] [dim]({cache_hits} from cache)[/dim]"
+                f"[bold green]Successfully generated {success_count} samples![/bold green]"
             )
+            if success_count < count:
+                console.print(
+                    f"[yellow]Note: Generated {success_count} unique variations (requested {count}).[/yellow]"
+                )
         else:
-            console.print(
-                f"[bold green]Successfully generated {count} samples![/bold green]"
-            )
+            console.print("[bold red]Generation failed to produce any samples.[/bold red]")
 
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e!s}")
@@ -591,8 +578,9 @@ def augment(
         return
 
     try:
+        from wakegen.core.types import EnvironmentProfile
         # Load profile
-        aug_profile = get_profile(profile)
+        aug_profile = get_profile(EnvironmentProfile(profile))
         pipeline = AugmentationPipeline(aug_profile)
         
         # Get all wav files
@@ -662,7 +650,8 @@ def validate(data_dir: str) -> None:
                     progress.advance(task)
             
             # Calculate stats
-            stats = calculate_dataset_statistics(results)
+            # calculate_dataset_statistics expects a directory path, not a list of results
+            stats = await calculate_dataset_statistics(data_dir)
             
             # Display report
             console.print("\n[bold]Validation Results:[/bold]")
@@ -671,9 +660,9 @@ def validate(data_dir: str) -> None:
             console.print(f"Invalid Files: [red]{len(files) - valid_count}[/red]")
             console.print(f"Pass Rate: {valid_count / len(files) * 100:.1f}%")
             
-            if stats.get("issues"):
+            if hasattr(stats, "issues") and stats.issues:
                 console.print("\n[bold yellow]Common Issues:[/bold yellow]")
-                for issue, count in stats["issues"].items():
+                for issue, count in stats.issues.items():
                     console.print(f"  - {issue}: {count}")
 
         asyncio.run(run_validation())
@@ -690,11 +679,14 @@ def validate(data_dir: str) -> None:
 @click.option(
     "--output-path", required=True, help="Path to save the exported manifest/files"
 )
-def export(data_dir: str, format: str, output_path: str) -> None:
+@click.option(
+    "--wake-word", required=True, help="The wake word label (e.g., 'hey_computer')"
+)
+def export(data_dir: str, format: str, output_path: str, wake_word: str) -> None:
     """
     Exports the dataset to a specific format for training.
     """
-    from wakegen.export import export_dataset
+    from wakegen.export import export_to_format
     from wakegen.core.types import AudioFormat
     import asyncio
 
@@ -702,10 +694,11 @@ def export(data_dir: str, format: str, output_path: str) -> None:
         console.print(f"Exporting dataset from {data_dir} to {output_path} ({format})...")
         
         async def run_export():
-            await export_dataset(
+            await export_to_format(
+                format_type=format,
                 source_dir=data_dir,
                 output_dir=output_path,
-                format=format,
+                wake_word=wake_word,
                 split_ratios=(0.8, 0.1, 0.1) # Default 80/10/10 split
             )
             
@@ -1943,7 +1936,7 @@ def gpu_status(as_json: bool) -> None:
 
     # Provider recommendations
     console.print("\n[bold]Provider GPU Support:[/bold]")
-    console.print("  [green]✓[/green] coqui_xtts - GPU recommended (large model)")
+    console.print("  [green]✓[/green] coqui_xtts - Runs in Docker (GPU support depends on container config)")
     console.print("  [green]✓[/green] kokoro - CPU-friendly (82M params)")
     console.print("  [green]✓[/green] piper - CPU-friendly (lightweight)")
     console.print("  [green]✓[/green] mimic3 - CPU-friendly (lightweight)")
